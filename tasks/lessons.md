@@ -19,6 +19,18 @@ Patterns captured to avoid repeating mistakes. Review at session start.
   `node_modules/next/dist/docs/` before writing any framework code.** Offload that doc
   reading to subagents/workflows to keep the main context clean.
 
+## Next.js App Router — "use client" module exports
+- **A `"use client"` module's exports reach the server as client *references*, not values.**
+  Exporting `const PATH = "/submit-requirement"` from a client component and importing it
+  into a Server Component gave a stub function, which interpolated into the page as
+  `http://host` + `function(){throw Error("Attempted to call PATH() from the server…")}`.
+  `tsc` and `eslint` were both clean — only looking at the rendered page caught it.
+  Put shared constants in a plain module (or define them in the server file).
+
+## PowerShell (the user's shell is Windows PowerShell 5.1)
+- **`&&` is a parser error there.** Don't hand over bash-style `cmd && cmd` chains. Use
+  `cmd; if ($?) { cmd }`. (Handed over a broken push chain on 2026-07-28.)
+
 ## Workflow scripts
 - Workflow scripts are plain JS: do **not** put literal backticks inside backtick-delimited
   template-literal prompts (closes the string early). Use single quotes for inline code.

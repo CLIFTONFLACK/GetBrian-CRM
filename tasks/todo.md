@@ -517,3 +517,29 @@ NOT done (out of scope, flagged)
   unchanged.
 - Screenshots weren't possible - the Browser pane isn't displayed in this session, so the
   page never composites frames. Verified structurally through the DOM instead.
+
+## 2026-07-28 - Use classes app-wide, Intake public link, Admin collapse
+
+- [x] `src/lib/use-classes.ts` is now the single source of truth for the nine trading
+      concepts (plus `src/lib/text-match.ts` for the whole-word matcher). The requirement
+      form, the /matches filter and the scorer all read it instead of holding copies.
+- [x] Companies: "Sector tags" free text -> the use-class picker. Legacy tags the picker
+      can't express ("brewery", "landlord") are shown in a note and carried through a
+      hidden `sector_tags_extra` field, so a save can't destroy them.
+- [x] Listings: "Property type" + "Use class" free-text fields -> one picker.
+      `property_type` stores the concept list the matcher reads; `use_class` is derived.
+      Checked the parser against every distinct property_type in the live book - all
+      round-trip. Rows with only a bare planning class carry it through
+      (`use_class_carried`) so an unrelated edit can't cost them their 0.6 match credit.
+- [x] Listing form's "+ New company" / "+ New contact" now open the full record forms.
+- [x] Intake page shows the public form's absolute URL with copy + open, resolved
+      server-side from the request host.
+- [x] Admin: Team panel starts collapsed like the rest; "Add agent" only shows when open.
+
+Verified: tsc clean, eslint clean, next build green, exercised against a prod build.
+Deployed - prod is serving chunk hashes matching the local build of 1e44e9e.
+
+Gotcha worth remembering (now in lessons.md): exporting a constant from a `"use client"`
+module and importing it into a Server Component yields a client *reference*, not the
+value. It stringified into the page as a thrown-error stub; tsc and eslint were both
+clean, only the rendered page showed it.

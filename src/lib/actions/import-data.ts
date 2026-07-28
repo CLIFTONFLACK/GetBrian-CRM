@@ -8,9 +8,16 @@ import { deriveCounty } from "@/lib/locations";
 import { addressQuery, geocodeAddress } from "@/lib/maps/geocode";
 import { Constants } from "@/lib/database.types";
 import { parseCsv, type ImportEntity } from "@/lib/csv";
+import {
+  formatUseClasses,
+  parseUseClasses,
+  partitionSectorTags,
+  planningClassFor,
+} from "@/lib/use-classes";
 import type { FormState } from "@/lib/actions/types";
 
 const ENTITIES: ImportEntity[] = ["companies", "contacts", "requirements", "listings"];
+const LISTING_TYPES = ["cdg", "intel"];
 const TABLE: Record<ImportEntity, string> = {
   companies: "companies",
   contacts: "contacts",
@@ -115,7 +122,12 @@ export async function importEntityCsv(
           ...base,
           name,
           type: oneOf(get("type"), typeSlugs, "other"),
-          sector_tags: list(get("sector_tags")),
+          // Recognised words become use-class slugs so they show in the picker;
+          // anything else ("brewery") is kept verbatim as a free tag.
+          sector_tags: (() => {
+            const { slugs, extra } = partitionSectorTags(list(get("sector_tags")));
+            return [...new Set([...slugs, ...extra])];
+          })(),
           website: get("website") || null,
           phone: get("phone") || null,
           address_line: get("address_line") || null,
@@ -170,7 +182,20 @@ export async function importEntityCsv(
           target_postcode_districts: list(get("target_postcode_districts")).map((s) =>
             s.toUpperCase(),
           ),
+          target_neighbourhoods: list(get("target_neighbourhoods")),
+          target_london_zones: list(get("target_london_zones")),
+          // Cells carry ordinary words ("Bar;Nightclub"), not slugs.
+          use_classes: parseUseClasses(get("use_classes")),
+          tenure_prefs: list(get("tenure_prefs")).filter((t) =>
+            (Constants.public.Enums.tenure_type as readonly string[]).includes(t),
+          ),
+          min_sqft: numOrNull(get("min_sqft")),
+          max_sqft: numOrNull(get("max_sqft")),
+          min_covers: numOrNull(get("min_covers")),
+          max_covers: numOrNull(get("max_covers")),
           max_rent: numOrNull(get("max_rent")),
+          max_premium: numOrNull(get("max_premium")),
+          max_guide_price: numOrNull(get("max_guide_price")),
           notes: get("notes") || null,
         });
       } else {
@@ -179,24 +204,35 @@ export async function importEntityCsv(
         if (!contactId)
           throw new Error("contact_email is required and must match an existing contact");
         const dt = get("disposal_type");
+        const lt = get("listing_type");
+        // Same derivation as the listing form: the concepts drive both columns.
+        // `use_class` is still read as a fallback so an older template that
+        // carried "Sui Generis" in that column still lands somewhere sensible.
+        const useClasses = parseUseClasses(get("use_classes"), get("use_class"));
         records.push({
           ...base,
           source: "import",
           title: get("title"),
           contact_id: contactId,
+          listing_type: LISTING_TYPES.includes(lt) ? lt : "cdg",
           status: get("status") || null,
           disposal_type: ["freehold", "new_lease", "lease_assignment", "sublease", "unknown"].includes(dt)
             ? dt
             : "unknown",
+          address_line: get("address_line") || null,
+          area: get("area") || null,
           city: get("city") || null,
           postcode: get("postcode") || null,
           county:
             get("county") ||
             deriveCounty({ postcode: get("postcode"), city: get("city") }),
-          use_class: get("use_class") || null,
+          property_type: useClasses.length > 0 ? formatUseClasses(useClasses) : null,
+          use_class: useClasses.length > 0 ? planningClassFor(useClasses) : get("use_class") || null,
           size_sqft: numOrNull(get("size_sqft")),
+          covers_internal: numOrNull(get("covers_internal")),
           rent_pa: numOrNull(get("rent_pa")),
           premium: numOrNull(get("premium")),
+          guide_price: numOrNull(get("guide_price")),
           description: get("description") || null,
         });
       }

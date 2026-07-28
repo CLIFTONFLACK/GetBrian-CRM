@@ -11,13 +11,20 @@ export function SiloTabs({
   value,
   hrefFor,
   counts,
+  allValue = null,
 }: {
   value?: string;
   hrefFor: (value: string | null) => string;
   counts: { all: number; cdg: number; intel: number };
+  /**
+   * What "All" posts as. Null (the default) drops the param — right where the
+   * unfiltered view is the default. /listings defaults to CDG instead, so it
+   * passes an explicit "all" that has to survive in the URL.
+   */
+  allValue?: string | null;
 }) {
   const tabs: { value: string | null; label: string; count: number }[] = [
-    { value: null, label: "All", count: counts.all },
+    { value: allValue, label: "All", count: counts.all },
     { value: "cdg", label: "CDG listings", count: counts.cdg },
     { value: "intel", label: "Market Intel", count: counts.intel },
   ];

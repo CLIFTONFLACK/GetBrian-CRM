@@ -76,6 +76,7 @@ function EntityImporter({ entity }: { entity: ImportEntity }) {
           </Button>
         </div>
       </form>
+      <p className="text-xs leading-5 text-muted-foreground">{tpl.hint}</p>
       {fileName ? (
         <p className="text-xs text-muted-foreground">Selected: {fileName}</p>
       ) : null}

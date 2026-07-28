@@ -72,10 +72,19 @@ export function toCsv(headers: string[], rows: string[][]): string {
   return [headers, ...rows].map((r) => r.map(esc).join(",")).join("\r\n");
 }
 
-/** Column headers + one example row per importable entity. */
+/**
+ * Use-class cells accept ordinary words, not slugs — "Bar;Nightclub", "Hot food
+ * takeaway", even "Bar / Restaurant" in one cell. The importer runs them through
+ * the same parser the forms use, so nobody has to know that Nightclub is stored
+ * as `sui_generis_nightclub`.
+ */
+const USE_CLASS_HINT =
+  "Pub, Bar, Nightclub, Hot food takeaway, Café, Gym, Leisure, Restaurant, Other";
+
+/** Column headers, one example row, and a note on the fiddly columns. */
 export const IMPORT_TEMPLATES: Record<
   ImportEntity,
-  { label: string; headers: string[]; example: string[] }
+  { label: string; headers: string[]; example: string[]; hint: string }
 > = {
   companies: {
     label: "Companies",
@@ -96,7 +105,7 @@ export const IMPORT_TEMPLATES: Record<
     example: [
       "Riverside Taverns Ltd",
       "operator",
-      "pub;bar",
+      "Pub;Bar",
       "https://example.co.uk",
       "+44 20 7123 4567",
       "12 Riverside Walk",
@@ -105,6 +114,7 @@ export const IMPORT_TEMPLATES: Record<
       "",
       "Key operator",
     ],
+    hint: `sector_tags: ${USE_CLASS_HINT}. Anything else is kept as a free tag. county is derived from postcode/town when blank.`,
   },
   contacts: {
     label: "Contacts",
@@ -139,6 +149,7 @@ export const IMPORT_TEMPLATES: Record<
       "true",
       "Met at expo",
     ],
+    hint: "company_name links (or creates) the contact's company. role must match a slug from Admin → Edit contact roles, else it falls back to Other.",
   },
   requirements: {
     label: "Requirements",
@@ -148,56 +159,91 @@ export const IMPORT_TEMPLATES: Record<
       "title",
       "contact_email",
       "status",
+      "target_london_zones",
+      "target_neighbourhoods",
       "target_towns",
-      "target_regions",
       "target_counties",
+      "target_regions",
       "target_postcode_districts",
+      "use_classes",
+      "tenure_prefs",
+      "min_sqft",
+      "max_sqft",
+      "min_covers",
+      "max_covers",
       "max_rent",
+      "max_premium",
+      "max_guide_price",
       "notes",
     ],
     example: [
       "Wet-led bar, Central London",
       "james@example.co.uk",
       "active",
-      "London;Manchester",
-      "Greater London",
+      "Zone 1;Zone 2",
+      "Soho;Shoreditch",
+      "London",
       "Surrey;Kent",
+      "Greater London",
       "W1;W2",
+      "Bar;Pub",
+      "leasehold",
+      "1200",
+      "3000",
+      "40",
+      "120",
       "110000",
+      "50000",
+      "",
       "Needs late licence",
     ],
+    hint: `contact_email is required and must match an existing contact — import Contacts first. use_classes: ${USE_CLASS_HINT}. tenure_prefs: freehold, leasehold. target_london_zones: Zone 1 … Zone 9.`,
   },
   listings: {
     label: "Listings",
     // contact_email is REQUIRED — must match an existing contact (every listing
     // must have a contact). Company is optional and not set via CSV.
+    //
+    // `use_classes` replaced the old free-text `use_class` column: the importer
+    // derives both stored fields from it, exactly as the listing form does.
     headers: [
       "title",
       "contact_email",
+      "listing_type",
       "status",
       "disposal_type",
+      "address_line",
+      "area",
       "city",
       "county",
       "postcode",
-      "use_class",
+      "use_classes",
       "size_sqft",
+      "covers_internal",
       "rent_pa",
       "premium",
+      "guide_price",
       "description",
     ],
     example: [
       "Corner bar, Soho",
       "james@example.co.uk",
+      "cdg",
       "Available",
       "new_lease",
+      "42 Dean Street",
+      "Soho",
       "London",
       "Greater London",
       "W1D 4SB",
-      "Sui Generis",
+      "Bar;Nightclub",
       "1850",
+      "90",
       "95000",
       "120000",
+      "",
       "Prime corner unit",
     ],
+    hint: `contact_email is required and must match an existing contact — import Contacts first. use_classes: ${USE_CLASS_HINT} (the planning class is derived from it). listing_type: cdg or intel. disposal_type: freehold, new_lease, lease_assignment, sublease.`,
   },
 };

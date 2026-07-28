@@ -112,9 +112,15 @@ export default async function ListingsPage({
     (county === "Home Counties"
       ? rowCounty != null && HOME_COUNTIES.includes(rowCounty)
       : (rowCounty ?? "—") === county);
+  // The book opens on CDG's own instructions — that's the stock an agent works
+  // day to day, and scraped Market Intel used to bulk it out by default. "All"
+  // therefore needs an explicit value that survives in the URL.
+  const activeSilo = silo ?? "cdg";
   // `rows` stays unscoped by silo so the tab counts reflect all three options;
   // `siloRows` is what the heatmap/tiles/table below actually render.
-  const siloRows = rows.filter((r) => !silo || (r.listing_type ?? "cdg") === silo);
+  const siloRows = rows.filter(
+    (r) => activeSilo === "all" || (r.listing_type ?? "cdg") === activeSilo,
+  );
   const siloCounts = {
     all: rows.length,
     cdg: rows.filter((r) => (r.listing_type ?? "cdg") === "cdg").length,
@@ -144,7 +150,7 @@ export default async function ListingsPage({
     );
   }
 
-  const params = { q, sort, dir, status, disposal_type, town, county, silo };
+  const params = { q, sort, dir, status, disposal_type, town, county, silo: activeSilo };
 
   const townOptions = [...new Set(siloRows.map((r) => r.city).filter(Boolean))]
     .sort()
@@ -248,9 +254,10 @@ export default async function ListingsPage({
       />
 
       <SiloTabs
-        value={silo}
+        value={activeSilo}
         counts={siloCounts}
         hrefFor={(v) => filterHref(params, { silo: v })}
+        allValue="all"
       />
 
       <FilterBar
@@ -259,7 +266,7 @@ export default async function ListingsPage({
         dir={dir}
         placeholder="Search by title or town…"
         basePath="/listings"
-        hasActiveFilters={Boolean(status || disposal_type || town || county || silo)}
+        hasActiveFilters={Boolean(status || disposal_type || town || county) || activeSilo !== "cdg"}
       >
         <FilterSelect name="town" label="Town" value={town} options={townOptions} />
         <FilterSelect name="county" label="County" value={county} options={countyOptions} />
@@ -333,12 +340,12 @@ export default async function ListingsPage({
         <EmptyState
           icon={Store}
           title={
-            q || status || town || county || disposal_type || silo
+            q || status || town || county || disposal_type || activeSilo !== "cdg"
               ? "No matches"
               : "No listings yet"
           }
           description={
-            q || status || town || county || disposal_type || silo
+            q || status || town || county || disposal_type || activeSilo !== "cdg"
               ? "Try a different search or filter."
               : "Click “New listing” to add your first premises."
           }

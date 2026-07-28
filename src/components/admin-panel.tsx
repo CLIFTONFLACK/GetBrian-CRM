@@ -96,8 +96,12 @@ export function AdminPanel({
   );
 }
 
-/** Team roster (collapsible) with an "Add agent" button in its top-right corner
- * that reveals the create-agent form inline. */
+/**
+ * Team roster (collapsible) with an "Add agent" button in its top-right corner
+ * that reveals the create-agent form inline. Starts closed like every other
+ * Admin panel, and the button only appears once the panel is open — otherwise
+ * it's an action floating beside a section you can't see.
+ */
 function TeamPanel({
   members,
   currentUserId,
@@ -105,7 +109,7 @@ function TeamPanel({
   members: Member[];
   currentUserId: string;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
 
   return (
@@ -133,17 +137,16 @@ function TeamPanel({
             </p>
           </div>
         </button>
-        <Button
-          size="sm"
-          className="shrink-0"
-          onClick={() => {
-            setOpen(true);
-            setShowAdd((s) => !s);
-          }}
-        >
-          <Plus className="h-4 w-4" />
-          Add agent
-        </Button>
+        {open ? (
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={() => setShowAdd((s) => !s)}
+          >
+            <Plus className="h-4 w-4" />
+            Add agent
+          </Button>
+        ) : null}
       </div>
       {open ? (
         <CardContent className="pt-0">

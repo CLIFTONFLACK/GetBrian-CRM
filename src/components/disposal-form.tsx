@@ -17,9 +17,11 @@ import { LocationSelect } from "@/components/location-select";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { UseClassCheckboxes } from "@/components/use-class-checkboxes";
 import type { FormState } from "@/lib/actions/types";
 import type { Tables } from "@/lib/database.types";
 import type { AgentOption } from "@/lib/supabase/agency";
+import { parseUseClasses } from "@/lib/use-classes";
 import { cn } from "@/lib/utils";
 
 type Option = readonly [string, string];
@@ -66,6 +68,7 @@ export function DisposalForm({
   companies = [],
   contacts = [],
   companyTypes,
+  contactRoles = [],
   defaultCompanyId,
   defaultContactId,
 }: {
@@ -77,6 +80,8 @@ export function DisposalForm({
   contacts?: PickOption[];
   /** Editable company_types list — feeds the "+ New company" quick-create modal. */
   companyTypes?: { slug: string; label: string }[];
+  /** Editable contact_roles list — feeds the "+ New contact" quick-create modal. */
+  contactRoles?: { slug: string; label: string }[];
   defaultCompanyId?: string;
   defaultContactId?: string;
 }) {
@@ -176,23 +181,18 @@ export function DisposalForm({
       </Section>
 
       <Section title="Premises">
+        <UseClassCheckboxes
+          name="use_classes"
+          legend="Use class"
+          selected={parseUseClasses(d?.property_type, d?.use_class)}
+          hint="What the premises trades as. The planning class (Class E / Sui Generis) is derived from this — and it's what requirements are matched against."
+        />
+        {/* A scraped row can carry a planning class with no concept to tick —
+            keep it rather than clearing it on an unrelated edit. */}
+        {d?.use_class ? (
+          <input type="hidden" name="use_class_carried" value={d.use_class} />
+        ) : null}
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Property type" htmlFor="property_type">
-            <Input
-              id="property_type"
-              name="property_type"
-              placeholder="e.g. Restaurant, Bar"
-              defaultValue={d?.property_type ?? ""}
-            />
-          </Field>
-          <Field label="Use class" htmlFor="use_class">
-            <Input
-              id="use_class"
-              name="use_class"
-              placeholder="e.g. Class E, Sui Generis"
-              defaultValue={d?.use_class ?? ""}
-            />
-          </Field>
           <Field label="Size (sq ft)" htmlFor="size_sqft">
             <Input id="size_sqft" name="size_sqft" type="number" inputMode="numeric" defaultValue={d?.size_sqft ?? ""} />
           </Field>
@@ -264,6 +264,7 @@ export function DisposalForm({
             options={companies}
             defaultValue={d?.company_id ?? defaultCompanyId ?? ""}
             types={companyTypes}
+            full={{ agents }}
             hint="Landlord / vendor / marketing company — optional"
           />
           <ContactCreatableSelect
@@ -273,6 +274,7 @@ export function DisposalForm({
             placeholder="Select a contact…"
             options={contacts}
             defaultValue={d?.contact_id ?? defaultContactId ?? ""}
+            full={{ agents, roles: contactRoles }}
             hint="Point of contact for this listing — required"
           />
         </div>

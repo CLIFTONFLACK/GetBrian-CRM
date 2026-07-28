@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { LocationFlexSlider } from "@/components/location-flex-slider";
 import { setMatchStatus } from "@/lib/actions/matches";
 import { isListingMatchable, listingTypeBadge, matchScoreBadge } from "@/lib/badges";
+import { USE_CLASS_OPTIONS } from "@/lib/use-classes";
 import type { Database } from "@/lib/database.types";
 import { DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
 import { getCompanyTypes } from "@/lib/company-types";
@@ -50,20 +51,10 @@ const SCORE_ACCENT: Record<string, { border: string; chip: string }> = {
   },
 };
 
-/** Mirrors the requirement form's use classes — the planning-class slugs it
- *  retired (Class E, A3–A5) were migrated away in 0034, so filtering on them
- *  would only ever return nothing. */
-const USE_CLASS_OPTIONS = [
-  { value: "pub", label: "Pub" },
-  { value: "bar", label: "Bar" },
-  { value: "sui_generis_nightclub", label: "Nightclub" },
-  { value: "sui_generis_hot_food", label: "Hot food takeaway" },
-  { value: "cafe", label: "Café" },
-  { value: "gym", label: "Gym" },
-  { value: "leisure", label: "Leisure" },
-  { value: "restaurant", label: "Restaurant" },
-  { value: "other", label: "Other" },
-];
+/** The filter list is the picker list — the planning-class slugs it retired
+ *  (Class E, A3–A5) were migrated away in 0034, so filtering on them would only
+ *  ever return nothing. */
+const USE_CLASS_FILTERS = USE_CLASS_OPTIONS.map(([value, label]) => ({ value, label }));
 
 export default async function MatchesPage({
   searchParams,
@@ -273,7 +264,7 @@ export default async function MatchesPage({
           name="use_class"
           label="Use class"
           value={use_class}
-          options={USE_CLASS_OPTIONS}
+          options={USE_CLASS_FILTERS}
         />
       </FilterBar>
 

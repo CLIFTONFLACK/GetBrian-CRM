@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { createDisposal } from "@/lib/actions/disposals";
 import { getCompanyTypes } from "@/lib/company-types";
+import { getContactRoles } from "@/lib/contact-roles";
 import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
 import { getCompanyOptions, getContactOptions } from "@/lib/supabase/pickers";
 import { createClient } from "@/lib/supabase/server";
@@ -27,6 +28,8 @@ export default async function NewListingPage({
       ])
     : [[], [], []];
   const companyTypes = await getCompanyTypes();
+  // Both feed the full "+ New …" forms inside the listing form's modals.
+  const contactRoles = await getContactRoles();
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -42,6 +45,7 @@ export default async function NewListingPage({
             companies={companies}
             contacts={contacts}
             companyTypes={companyTypes}
+            contactRoles={contactRoles}
             defaultCompanyId={defaultCompanyId}
           />
         </CardContent>

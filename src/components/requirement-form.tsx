@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { TargetLocationsField } from "@/components/target-locations-field";
+import { UseClassCheckboxes } from "@/components/use-class-checkboxes";
 import { Textarea } from "@/components/ui/textarea";
 import type { FormState } from "@/lib/actions/types";
 import type { Tables } from "@/lib/database.types";
@@ -23,22 +24,6 @@ import { cn } from "@/lib/utils";
 
 type Option = readonly [string, string];
 
-/**
- * Trading concepts, not planning classes — agents brief in "Pub", not "Class E".
- * `sui_generis_*` slugs are kept for the two concepts that already had one, so
- * existing briefs keep their selection.
- */
-const USE_CLASSES: Option[] = [
-  ["pub", "Pub"],
-  ["bar", "Bar"],
-  ["sui_generis_nightclub", "Nightclub"],
-  ["sui_generis_hot_food", "Hot food takeaway"],
-  ["cafe", "Café"],
-  ["gym", "Gym"],
-  ["leisure", "Leisure"],
-  ["restaurant", "Restaurant"],
-  ["other", "Other"],
-];
 /** Leasehold now covers assignments and new lettings alike. */
 const TENURES: Option[] = [
   ["freehold", "Freehold"],
@@ -143,10 +128,9 @@ export function RequirementForm({
         title="Property"
         description="The kind of premises they're after. Matched against each listing's type, size and covers."
       >
-        <CheckboxGroup
+        <UseClassCheckboxes
           legend="Use classes"
           name="use_classes"
-          options={USE_CLASSES}
           selected={r?.use_classes ?? []}
         />
         <div className="grid gap-5 sm:grid-cols-2">

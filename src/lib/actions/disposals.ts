@@ -7,6 +7,11 @@ import { currentAgencyId } from "@/lib/supabase/agency";
 import { createClient } from "@/lib/supabase/server";
 import { deriveCounty } from "@/lib/locations";
 import { geocodeForSave } from "@/lib/maps/geocode";
+import {
+  planningClassFor,
+  sortUseClasses,
+  formatUseClasses,
+} from "@/lib/use-classes";
 import { refreshMatchesForListing, refreshMatchesForListings } from "@/lib/actions/matches";
 import type { TablesInsert } from "@/lib/database.types";
 import type { FormState } from "@/lib/actions/types";
@@ -41,6 +46,9 @@ const CANONICAL_LISTING_STATUSES = [
 function disposalFieldsFromForm(fd: FormData): Omit<TablesInsert<"disposals">, "agency_id"> {
   const disposalType = str(fd, "disposal_type");
   const fitOut = str(fd, "fit_out_state");
+  const useClasses = sortUseClasses(
+    fd.getAll("use_classes").map(String).filter(Boolean),
+  );
   const listingType = str(fd, "listing_type");
   const features = str(fd, "key_features")
     .split(",")
@@ -62,8 +70,21 @@ function disposalFieldsFromForm(fd: FormData): Omit<TablesInsert<"disposals">, "
     county:
       textOrNull(fd, "county") ??
       deriveCounty({ postcode: str(fd, "postcode"), city: str(fd, "city") }),
-    property_type: textOrNull(fd, "property_type"),
-    use_class: textOrNull(fd, "use_class"),
+    // The form asks once, in trading terms. `property_type` keeps the concept
+    // list the matcher reads ("Bar / Restaurant") and `use_class` is derived —
+    // the planning class is a function of the trade, so asking for both was
+    // asking the same question twice. Scraped free text still parses back into
+    // the picker (see parseUseClasses).
+    //
+    // Some scraped rows carry a bare planning class and no concept ("Class E",
+    // no property_type). There's nothing to tick for those, so the form carries
+    // the original through: saving one untouched must not cost it the
+    // planning-only credit it earns in the matcher.
+    property_type: useClasses.length > 0 ? formatUseClasses(useClasses) : null,
+    use_class:
+      useClasses.length > 0
+        ? planningClassFor(useClasses)
+        : textOrNull(fd, "use_class_carried"),
     size_sqft: numOrNull(fd, "size_sqft"),
     size_sqm: numOrNull(fd, "size_sqm"),
     covers_internal: numOrNull(fd, "covers_internal"),

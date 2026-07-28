@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { Inbox, Mail, Phone } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
 import { FilterTiles } from "@/components/filter-tiles";
 import { PageHeader } from "@/components/page-header";
+import { PublicFormLink } from "@/components/public-form-link";
 import { Card, CardContent } from "@/components/ui/card";
 import { ReviewActions } from "./review-actions";
 import { filterHref } from "@/lib/sort";
@@ -12,6 +14,11 @@ import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Intake" };
+
+// Not imported from the client component: every export of a "use client"
+// module reaches the server as a client *reference*, not its value, so a
+// constant read here would stringify as a stub function.
+const PUBLIC_FORM_PATH = "/submit-requirement";
 
 const STATUSES = [
   { value: "pending", label: "Pending" },
@@ -175,6 +182,13 @@ export default async function IntakePage({
   const supabase = await createClient();
   const agencyId = await currentAgencyId(supabase);
 
+  // Absolute, shareable URL for the public form — built from the request so it
+  // is right on localhost, a preview alias and production alike.
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  const publicFormUrl = host ? `${proto}://${host}${PUBLIC_FORM_PATH}` : PUBLIC_FORM_PATH;
+
   const { data } = await supabase
     .from("intake_submissions")
     .select(
@@ -201,6 +215,8 @@ export default async function IntakePage({
         title="Requirement intake"
         description="Requirements submitted through the public form. Nothing reaches the CRM until it's approved here."
       />
+
+      <PublicFormLink url={publicFormUrl} />
 
       <FilterTiles
         tiles={tiles}

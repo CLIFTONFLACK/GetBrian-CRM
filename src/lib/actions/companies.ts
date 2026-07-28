@@ -12,11 +12,18 @@ import type { FormState } from "@/lib/actions/types";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 const nullable = (fd: FormData, k: string) => str(fd, k) || null;
-const tags = (fd: FormData, k: string) =>
-  str(fd, k)
+/**
+ * Sector tags now come from the use-class checkboxes (repeated values), plus a
+ * hidden field carrying any free-text tags the picker can't express, so an
+ * older "brewery"/"landlord" tag survives a save.
+ */
+const sectorTags = (fd: FormData) => {
+  const picked = fd.getAll("sector_tags").map((v) => String(v).trim());
+  const extra = String(fd.get("sector_tags_extra") ?? "")
     .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+    .map((v) => v.trim());
+  return [...new Set([...picked, ...extra].filter(Boolean))];
+};
 // Company types are now editable data, so any custom slug is allowed.
 const asType = (v: string): string => v.trim() || "other";
 
@@ -118,7 +125,7 @@ export async function createCompany(
       created_by: user.id,
       name,
       type: asType(str(formData, "type")),
-      sector_tags: tags(formData, "sector_tags"),
+      sector_tags: sectorTags(formData),
       website: nullable(formData, "website"),
       phone: nullable(formData, "phone"),
       notes: nullable(formData, "notes"),
@@ -197,7 +204,7 @@ export async function quickCreateCompany(
       created_by: user.id,
       name,
       type: asType(str(formData, "type")),
-      sector_tags: tags(formData, "sector_tags"),
+      sector_tags: sectorTags(formData),
       website: nullable(formData, "website"),
       phone: nullable(formData, "phone"),
       notes: nullable(formData, "notes"),
@@ -256,7 +263,7 @@ export async function updateCompany(
     .update({
       name,
       type: asType(str(formData, "type")),
-      sector_tags: tags(formData, "sector_tags"),
+      sector_tags: sectorTags(formData),
       website: nullable(formData, "website"),
       phone: nullable(formData, "phone"),
       notes: nullable(formData, "notes"),

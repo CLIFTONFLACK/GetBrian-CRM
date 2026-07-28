@@ -1,4 +1,6 @@
 import type { Tables } from "@/lib/database.types";
+import { containsWord } from "@/lib/text-match";
+import { USE_CLASS_CONCEPTS, USE_CLASS_PLANNING } from "@/lib/use-classes";
 import {
   deriveCounty,
   distanceMiles,
@@ -113,52 +115,14 @@ function withinBand(
   return true;
 }
 
-/**
- * Requirement use classes are trading concepts (Pub, Café, Gym). A disposal
- * records the same idea twice and unreliably: `property_type` is the concept in
- * free text ("Bar / Restaurant", "Cafe (A1) / Gym") and `use_class` is the
- * planning class ("Class E", "Sui Generis"). The concept is far more precise,
- * so it decides the match whenever the listing has one.
- */
-const USE_CLASS_CONCEPTS: Record<string, string[]> = {
-  pub: ["pub", "public house", "inn", "tavern"],
-  bar: ["bar", "wine bar", "cocktail bar"],
-  nightclub: ["nightclub", "night club"],
-  restaurant: ["restaurant", "dining", "diner"],
-  cafe: ["cafe", "coffee", "coffee shop"],
-  gym: ["gym", "fitness", "health club"],
-  leisure: ["leisure", "cinema", "bowling", "soft play", "entertainment"],
-  sui_generis_hot_food: ["takeaway", "take away", "hot food"],
-  // Retired options — still honoured for briefs written before 0034 ran.
-  sui_generis_pub_bar: ["pub", "bar", "public house"],
-  sui_generis_nightclub: ["nightclub", "night club"],
-  other: [],
-};
-
-/** Planning classes consistent with each concept — the fallback when a listing has no `property_type`. */
-const USE_CLASS_PLANNING: Record<string, string[]> = {
-  pub: ["sui generis", "a4"],
-  bar: ["sui generis", "a4"],
-  nightclub: ["sui generis"],
-  restaurant: ["class e", "e", "a3"],
-  cafe: ["class e", "e", "a3", "a1"],
-  gym: ["class e", "e", "d2"],
-  leisure: ["class e", "e", "d2", "sui generis"],
-  sui_generis_hot_food: ["sui generis", "a5"],
-  sui_generis_pub_bar: ["sui generis", "a4"],
-  sui_generis_nightclub: ["sui generis"],
-  E: ["class e", "e"],
-  A3: ["a3", "class e"],
-  A4: ["a4", "sui generis"],
-  A5: ["a5", "sui generis"],
-  other: [],
-};
-
 /** Credit for a listing that only agrees on the planning class, not the concept. */
 const PLANNING_ONLY_CREDIT = 0.6;
 
 /**
- * Use-class factor 0–1. A listing that states its own type is judged on that
+ * Use-class factor 0–1. A disposal records its trade twice and unreliably:
+ * `property_type` is the concept in free text ("Bar / Restaurant") and
+ * `use_class` is the planning class ("Class E", "Sui Generis"). The concept is
+ * far more precise, so a listing that states its own type is judged on that
  * alone: if an operator wants a Pub, a listing marked "Restaurant" is a miss,
  * not a partial hit, even though both can sit in the same planning class.
  */
@@ -182,28 +146,6 @@ function scoreUseClass(
 }
 
 const DISTRICT_RE = /^[A-Za-z]{1,2}\d[A-Za-z\d]?$/;
-
-/**
- * Collapse punctuation to single spaces and pad with a space either side, so a
- * plain `includes()` on the result is a whole-word test: " ash " is not found
- * in " ashford road ", but " st albans " is found in " 12 st. albans way ".
- * Multi-word and hyphenated targets survive ("stoke-on-trent" → "stoke on
- * trent"); the caller lowercases both sides first.
- *
- * Accents are stripped first, otherwise "café" would collapse to "caf" and stop
- * matching the "cafe" spelling the data actually uses.
- */
-function wordPad(s: string): string {
-  const plain = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  return ` ${plain.replace(/[^a-z0-9]+/g, " ").trim()} `;
-}
-
-/** Whole-word containment — see {@link wordPad}. Empty targets never match. */
-function containsWord(haystack: string, needle: string): boolean {
-  const n = wordPad(needle);
-  if (n.trim() === "") return false;
-  return wordPad(haystack).includes(n);
-}
 
 /**
  * A named coordinate for the proximity pass. `bonus` widens the search radius

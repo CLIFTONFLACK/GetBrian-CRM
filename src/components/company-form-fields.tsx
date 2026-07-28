@@ -8,8 +8,10 @@ import { Label } from "@/components/ui/label";
 import { LocationSelect } from "@/components/location-select";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { UseClassCheckboxes } from "@/components/use-class-checkboxes";
 import type { Tables } from "@/lib/database.types";
 import type { AgentOption } from "@/lib/supabase/agency";
+import { partitionSectorTags } from "@/lib/use-classes";
 
 /**
  * Every field of the company record, with no `<form>` of its own — so the same
@@ -39,6 +41,7 @@ export function CompanyFormFields({
   idPrefix?: string;
 }) {
   const id = (name: string) => `${idPrefix}${name}`;
+  const sectors = partitionSectorTags(company?.sector_tags ?? []);
 
   return (
     <>
@@ -56,17 +59,21 @@ export function CompanyFormFields({
         </Select>
       </Field>
 
-      <Field
-        label="Sector tags"
-        htmlFor={id("sector_tags")}
-        hint="Comma-separated, e.g. pub, bar, restaurant"
-      >
-        <Input
-          id={id("sector_tags")}
-          name="sector_tags"
-          defaultValue={(company?.sector_tags ?? []).join(", ")}
-        />
-      </Field>
+      <UseClassCheckboxes
+        name="sector_tags"
+        legend="Sectors traded"
+        selected={sectors.slugs}
+        idPrefix={idPrefix}
+        hint={
+          sectors.extra.length > 0
+            ? `Also tagged ${sectors.extra.join(", ")} — kept from before this was a fixed list.`
+            : undefined
+        }
+      />
+      {/* Tags the picker can't express are carried through so a save doesn't drop them. */}
+      {sectors.extra.length > 0 ? (
+        <input type="hidden" name="sector_tags_extra" value={sectors.extra.join(", ")} />
+      ) : null}
 
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Website" htmlFor={id("website")}>

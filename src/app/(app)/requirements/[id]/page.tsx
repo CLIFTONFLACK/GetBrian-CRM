@@ -10,8 +10,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   isListingMatchable,
-  listingTypeBadge,
-  matchScoreBadge,
   requirementStatusBadge,
   tenureBadge,
   propertyUseBadge,
@@ -20,9 +18,7 @@ import { deleteRequirement } from "@/lib/actions/requirements";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
 import { LocationFlexSlider } from "@/components/location-flex-slider";
-import { CreateDealButton } from "@/components/create-deal-button";
-import { MatchReasons } from "@/components/match-reasons";
-import { SendDealModal } from "@/components/send-deal-modal";
+import { MatchOpportunities } from "@/components/match-opportunities";
 import { SendHistoryCard } from "@/components/send-history-card";
 import { SendToTeam } from "@/components/send-to-team";
 import { getSendHistory } from "@/lib/send-history";
@@ -30,12 +26,6 @@ import { getCompanyTypes } from "@/lib/company-types";
 import { getAgencyMembers } from "@/lib/supabase/agency";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
-
-const FIT_OUT_LABELS: Record<string, string> = {
-  fully_fitted: "Fully fitted",
-  part_fitted: "Part fitted",
-  shell: "Shell",
-};
 
 function band(min: number | null, max: number | null, unit = "") {
   if (min == null && max == null) return "—";
@@ -131,7 +121,7 @@ export default async function RequirementDetailPage({
   const { data: disposals } = await supabase
     .from("disposals")
     .select(
-      "id, title, status, listing_type, city, area, postcode, address_line, county, lat, lng, size_sqft, covers_internal, use_class, property_type, disposal_type, rent_pa, premium, guide_price, fit_out_state",
+      "id, title, status, listing_type, city, area, postcode, address_line, county, lat, lng, size_sqft, covers_internal, use_class, property_type, disposal_type, rent_pa, premium, guide_price",
     );
   const matches = (disposals ?? [])
     .filter((d) => isListingMatchable(d.status))
@@ -242,23 +232,17 @@ export default async function RequirementDetailPage({
             <CardTitle>Location</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
+            <Row label="Zones">
+              <ChipList items={r.target_london_zones} tone="indigo" />
+            </Row>
+            <Row label="Areas">{r.target_neighbourhoods.join(", ") || "—"}</Row>
             <Row label="Towns">{r.target_towns.join(", ") || "—"}</Row>
             <Row label="Counties">{r.target_counties.join(", ") || "—"}</Row>
             <Row label="Regions">{r.target_regions.join(", ") || "—"}</Row>
             {/* Districts are a first-class target (a W1-only brief has nothing
                 else), so they must not be invisible on the record. */}
             <Row label="Districts">
-              {r.target_postcode_districts.length > 0 ? (
-                <span className="flex flex-wrap gap-1.5">
-                  {r.target_postcode_districts.map((d) => (
-                    <Badge key={d} tone="sky">
-                      {d}
-                    </Badge>
-                  ))}
-                </span>
-              ) : (
-                "—"
-              )}
+              <ChipList items={r.target_postcode_districts} tone="sky" />
             </Row>
           </CardContent>
         </Card>
@@ -268,17 +252,11 @@ export default async function RequirementDetailPage({
             <CardTitle>Property</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <Row label="Types">{r.property_types.join(", ") || "—"}</Row>
             <Row label="Use class">
               <BadgeList items={r.use_classes.map((u) => propertyUseBadge(u))} />
             </Row>
             <Row label="Size">{band(r.min_sqft, r.max_sqft, " sq ft")}</Row>
             <Row label="Covers">{band(r.min_covers, r.max_covers)}</Row>
-            <Row label="Fit-out">
-              {r.fit_out_prefs.length
-                ? r.fit_out_prefs.map((f) => FIT_OUT_LABELS[f] ?? f).join(", ")
-                : "—"}
-            </Row>
           </CardContent>
         </Card>
 
@@ -350,63 +328,24 @@ export default async function RequirementDetailPage({
           </form>
         </CardHeader>
         <CardContent>
-          {matches.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No MatchMaker opportunities yet — add disposals to generate matches.
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {matches.map(({ d, score, reasons }) => {
-                const ms = matchScoreBadge(score);
-                const previousSends = sentByListing.get(d.id);
-                return (
-                  <li key={d.id} className="rounded-md border p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="flex flex-wrap items-center gap-1.5">
-                        <Link
-                          href={`/listings/${d.id}`}
-                          className="font-medium text-foreground hover:text-info hover:underline"
-                        >
-                          {d.title ?? "Untitled listing"}
-                          {d.city ? ` · ${d.city}` : ""}
-                        </Link>
-                        {(() => {
-                          const t = listingTypeBadge(d.listing_type);
-                          return <Badge tone={t.tone}>{t.label}</Badge>;
-                        })()}
-                      </span>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {previousSends ? (
-                          <Badge tone="violet">
-                            Sent{previousSends.length > 1 ? ` ×${previousSends.length}` : ""}
-                            {" · "}
-                            {new Date(previousSends[0].at).toLocaleDateString("en-GB")}
-                          </Badge>
-                        ) : null}
-                        <Badge tone={ms.tone}>{ms.label}</Badge>
-                        <SendDealModal
-                          agents={members}
-                          meId={user?.id}
-                          companies={companyOptions}
-                          contacts={contactOptions}
-                          companyTypes={companyTypes}
-                          requirementId={r.id}
-                          listingId={d.id}
-                          requirementTitle={r.title}
-                          listingTitle={d.title ?? "Untitled listing"}
-                          previousSends={previousSends}
-                        />
-                        <CreateDealButton requirementId={r.id} listingId={d.id} />
-                      </div>
-                    </div>
-                    <div className="mt-2">
-                      <MatchReasons reasons={reasons} />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <MatchOpportunities
+            opportunities={matches.map(({ d, score, reasons }) => ({
+              id: d.id,
+              title: d.title ?? "Untitled listing",
+              city: d.city,
+              listingType: d.listing_type,
+              score,
+              reasons,
+              previousSends: sentByListing.get(d.id),
+            }))}
+            requirementId={r.id}
+            requirementTitle={r.title}
+            agents={members}
+            meId={user?.id}
+            companies={companyOptions}
+            contacts={contactOptions}
+            companyTypes={companyTypes}
+          />
         </CardContent>
       </Card>
 
@@ -427,6 +366,26 @@ function Row({
       <span className="text-muted-foreground">{label}</span>
       <span className="text-foreground">{children}</span>
     </div>
+  );
+}
+
+/** A row of small badges for a plain string array, or an em dash when empty. */
+function ChipList({
+  items,
+  tone,
+}: {
+  items: readonly string[];
+  tone: React.ComponentProps<typeof Badge>["tone"];
+}) {
+  if (items.length === 0) return <>—</>;
+  return (
+    <span className="flex flex-wrap gap-1.5">
+      {items.map((v) => (
+        <Badge key={v} tone={tone}>
+          {v}
+        </Badge>
+      ))}
+    </span>
   );
 }
 

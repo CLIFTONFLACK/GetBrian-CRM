@@ -160,22 +160,38 @@ export function dealStageBadge(stage: string): BadgeSpec {
   }
 }
 
+// Trading concepts (what the requirement form now offers) first, then the
+// planning-class slugs kept for briefs written before migration 0034.
 export function propertyUseBadge(useClass: string): BadgeSpec {
   switch (useClass) {
-    case "E":
-      return { tone: "sky", label: "Class E" };
-    case "sui_generis_pub_bar":
-      return { tone: "violet", label: "Pub / Bar (SG)" };
+    case "pub":
+      return { tone: "violet", label: "Pub" };
+    case "bar":
+      return { tone: "violet", label: "Bar" };
     case "sui_generis_nightclub":
-      return { tone: "indigo", label: "Nightclub (SG)" };
+      return { tone: "indigo", label: "Nightclub" };
     case "sui_generis_hot_food":
-      return { tone: "orange", label: "Hot-food Takeaway (SG)" };
+      return { tone: "orange", label: "Hot Food Takeaway" };
+    case "cafe":
+      return { tone: "amber", label: "Café" };
+    case "gym":
+      return { tone: "teal", label: "Gym" };
+    case "leisure":
+      return { tone: "sky", label: "Leisure" };
+    case "restaurant":
+      return { tone: "emerald", label: "Restaurant" };
+    case "E":
+      return { tone: "slate", label: "Class E (legacy)" };
+    case "sui_generis_pub_bar":
+      return { tone: "slate", label: "Pub / Bar (legacy)" };
     case "A3":
       return { tone: "slate", label: "A3 (legacy)" };
     case "A4":
       return { tone: "slate", label: "A4 (legacy)" };
     case "A5":
       return { tone: "slate", label: "A5 (legacy)" };
+    case "other":
+      return { tone: "slate", label: "Other" };
     default:
       return { tone: "slate", label: useClass };
   }

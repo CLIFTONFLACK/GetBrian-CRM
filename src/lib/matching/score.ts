@@ -7,7 +7,10 @@ import {
   expandRegions,
   extractDistrict,
   getCounty,
+  getLondonArea,
   getTown,
+  londonAreasInZone,
+  parseLondonZone,
   regionOfCounty,
   type LatLng,
 } from "@/lib/locations";
@@ -21,17 +24,17 @@ type Requirement = Pick<
   | "target_regions"
   | "target_counties"
   | "target_postcode_districts"
+  | "target_neighbourhoods"
+  | "target_london_zones"
   | "min_sqft"
   | "max_sqft"
   | "min_covers"
   | "max_covers"
   | "use_classes"
-  | "property_types"
   | "tenure_prefs"
   | "max_rent"
   | "max_premium"
   | "max_guide_price"
-  | "fit_out_prefs"
 >;
 type Disposal = Pick<
   Tables<"disposals">,
@@ -50,7 +53,6 @@ type Disposal = Pick<
   | "rent_pa"
   | "premium"
   | "guide_price"
-  | "fit_out_state"
 >;
 
 export type MatchReason = { label: string; ok: boolean; partial?: boolean };
@@ -76,15 +78,26 @@ const PROXIMITY_CAP = 0.8;
  * bonus only applies when flex > 0 (flex 0 still means exact matches only).
  */
 const COUNTY_RADIUS_BONUS_MILES = 15;
+/**
+ * Hard reach caps for the fine-grained London targets. A neighbourhood or a
+ * fare zone is a small, dense thing — "Soho" must not pull in a listing 20
+ * miles away just because the flex slider is wide open, the way a county
+ * target legitimately can.
+ */
+const NEIGHBOURHOOD_MAX_REACH_MILES = 3;
+const ZONE_MAX_REACH_MILES = 2;
 
 const lc = (s: string) => s.toLowerCase();
 const gbp = (n: number) => `£${Number(n).toLocaleString("en-GB")}`;
 const num = (n: number) => Number(n).toLocaleString("en-GB");
 
 // Requirement tenure preference -> acceptable disposal_type values.
+// The form now offers only Freehold and Leasehold, so "leasehold" has to carry
+// every leasehold structure — including assignments, which used to be their own
+// (now retired) option.
 const TENURE_MAP: Record<string, string[]> = {
   freehold: ["freehold"],
-  leasehold: ["new_lease", "sublease"],
+  leasehold: ["new_lease", "sublease", "lease_assignment"],
   new_letting: ["new_lease"],
   assignment: ["lease_assignment"],
 };
@@ -100,17 +113,72 @@ function withinBand(
   return true;
 }
 
-// Requirement use_classes are enum slugs; disposal.use_class is free text
-// ("Class E", "Sui Generis", "A3"). Compare loosely.
-function matchesUseClass(reqClasses: readonly string[], use: string | null): boolean {
-  if (!use) return false;
-  const t = lc(use);
-  return reqClasses.some((rc) => {
-    if (rc === "E") return t.includes("class e") || t === "e";
-    if (rc.startsWith("sui_generis"))
-      return t.includes("sui generis") || t.includes("sui-generis");
-    return t.includes(lc(rc));
-  });
+/**
+ * Requirement use classes are trading concepts (Pub, Café, Gym). A disposal
+ * records the same idea twice and unreliably: `property_type` is the concept in
+ * free text ("Bar / Restaurant", "Cafe (A1) / Gym") and `use_class` is the
+ * planning class ("Class E", "Sui Generis"). The concept is far more precise,
+ * so it decides the match whenever the listing has one.
+ */
+const USE_CLASS_CONCEPTS: Record<string, string[]> = {
+  pub: ["pub", "public house", "inn", "tavern"],
+  bar: ["bar", "wine bar", "cocktail bar"],
+  nightclub: ["nightclub", "night club"],
+  restaurant: ["restaurant", "dining", "diner"],
+  cafe: ["cafe", "coffee", "coffee shop"],
+  gym: ["gym", "fitness", "health club"],
+  leisure: ["leisure", "cinema", "bowling", "soft play", "entertainment"],
+  sui_generis_hot_food: ["takeaway", "take away", "hot food"],
+  // Retired options — still honoured for briefs written before 0034 ran.
+  sui_generis_pub_bar: ["pub", "bar", "public house"],
+  sui_generis_nightclub: ["nightclub", "night club"],
+  other: [],
+};
+
+/** Planning classes consistent with each concept — the fallback when a listing has no `property_type`. */
+const USE_CLASS_PLANNING: Record<string, string[]> = {
+  pub: ["sui generis", "a4"],
+  bar: ["sui generis", "a4"],
+  nightclub: ["sui generis"],
+  restaurant: ["class e", "e", "a3"],
+  cafe: ["class e", "e", "a3", "a1"],
+  gym: ["class e", "e", "d2"],
+  leisure: ["class e", "e", "d2", "sui generis"],
+  sui_generis_hot_food: ["sui generis", "a5"],
+  sui_generis_pub_bar: ["sui generis", "a4"],
+  sui_generis_nightclub: ["sui generis"],
+  E: ["class e", "e"],
+  A3: ["a3", "class e"],
+  A4: ["a4", "sui generis"],
+  A5: ["a5", "sui generis"],
+  other: [],
+};
+
+/** Credit for a listing that only agrees on the planning class, not the concept. */
+const PLANNING_ONLY_CREDIT = 0.6;
+
+/**
+ * Use-class factor 0–1. A listing that states its own type is judged on that
+ * alone: if an operator wants a Pub, a listing marked "Restaurant" is a miss,
+ * not a partial hit, even though both can sit in the same planning class.
+ */
+function scoreUseClass(
+  reqClasses: readonly string[],
+  d: Disposal,
+): { factor: number; label: string } {
+  const type = d.property_type?.trim() ?? "";
+  const hits = (map: Record<string, string[]>, haystack: string) =>
+    reqClasses.some((rc) => (map[rc] ?? []).some((w) => containsWord(haystack, w)));
+
+  if (type) {
+    const ok = hits(USE_CLASS_CONCEPTS, lc(type));
+    return { factor: ok ? 1 : 0, label: `Type: ${type}` };
+  }
+  const planning = d.use_class?.trim() ?? "";
+  if (planning && hits(USE_CLASS_PLANNING, lc(planning))) {
+    return { factor: PLANNING_ONLY_CREDIT, label: `Use class: ${planning} (planning only)` };
+  }
+  return { factor: 0, label: `Type: ${planning || "—"}` };
 }
 
 const DISTRICT_RE = /^[A-Za-z]{1,2}\d[A-Za-z\d]?$/;
@@ -121,9 +189,13 @@ const DISTRICT_RE = /^[A-Za-z]{1,2}\d[A-Za-z\d]?$/;
  * in " ashford road ", but " st albans " is found in " 12 st. albans way ".
  * Multi-word and hyphenated targets survive ("stoke-on-trent" → "stoke on
  * trent"); the caller lowercases both sides first.
+ *
+ * Accents are stripped first, otherwise "café" would collapse to "caf" and stop
+ * matching the "cafe" spelling the data actually uses.
  */
 function wordPad(s: string): string {
-  return ` ${s.replace(/[^a-z0-9]+/g, " ").trim()} `;
+  const plain = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return ` ${plain.replace(/[^a-z0-9]+/g, " ").trim()} `;
 }
 
 /** Whole-word containment — see {@link wordPad}. Empty targets never match. */
@@ -133,6 +205,13 @@ function containsWord(haystack: string, needle: string): boolean {
   return wordPad(haystack).includes(n);
 }
 
+/**
+ * A named coordinate for the proximity pass. `bonus` widens the search radius
+ * around coarse points (county centroids); `maxReach` caps it for fine ones
+ * (London neighbourhoods and fare zones).
+ */
+type TargetPoint = { name: string; at: LatLng; bonus: number; maxReach?: number };
+
 type ResolvedTargets = {
   /** Lowercased free-text targets for the whole-word containment pass. */
   text: string[];
@@ -140,13 +219,13 @@ type ResolvedTargets = {
   counties: string[];
   /** Lowercased region targets (after Home Counties expansion). */
   regions: string[];
-  /** Uppercased district codes (from the district column + district-shaped towns). */
-  districts: string[];
   /**
-   * Named coordinates (towns + district centroids + county centroids) for the
-   * proximity pass. `bonus` widens the search radius around coarse points.
+   * Uppercased district codes — from the district column, district-shaped
+   * towns, and the districts covered by any targeted London neighbourhood or
+   * fare zone.
    */
-  points: { name: string; at: LatLng; bonus: number }[];
+  districts: string[];
+  points: TargetPoint[];
   any: boolean;
 };
 
@@ -161,6 +240,8 @@ function resolveTargets(req: Requirement): ResolvedTargets {
   const towns = req.target_towns.filter(Boolean);
   const expanded = expandRegions(req.target_regions.filter(Boolean));
   const counties = [...req.target_counties, ...expanded.counties].filter(Boolean);
+  const neighbourhoods = (req.target_neighbourhoods ?? []).filter(Boolean);
+  const zones = (req.target_london_zones ?? []).filter(Boolean);
   // Legacy free-text targets like "W1" may be filed under towns — treat
   // district-shaped values as districts everywhere.
   const districts = [
@@ -168,7 +249,40 @@ function resolveTargets(req: Requirement): ResolvedTargets {
     ...towns.filter((t) => DISTRICT_RE.test(t.trim())),
   ].map((t) => t.trim().toUpperCase());
 
-  const points: { name: string; at: LatLng; bonus: number }[] = [];
+  const points: TargetPoint[] = [];
+
+  // London neighbourhoods resolve to their own postcode districts (a direct
+  // hit) plus a tight proximity circle. Names that aren't in the dataset —
+  // typed freely — still work through the text pass below.
+  for (const n of neighbourhoods) {
+    const area = getLondonArea(n);
+    if (!area) continue;
+    districts.push(...area.districts);
+    points.push({
+      name: area.name,
+      at: { lat: area.lat, lng: area.lng },
+      bonus: 0,
+      maxReach: NEIGHBOURHOOD_MAX_REACH_MILES,
+    });
+  }
+
+  // A fare zone is the union of its neighbourhoods: their districts give direct
+  // hits, their centroids give a short-range fallback for listings whose
+  // postcode we can't place.
+  for (const z of zones) {
+    const zone = parseLondonZone(z);
+    if (zone == null) continue;
+    for (const area of londonAreasInZone(zone)) {
+      districts.push(...area.districts);
+      points.push({
+        name: `${area.name} (Zone ${zone})`,
+        at: { lat: area.lat, lng: area.lng },
+        bonus: 0,
+        maxReach: ZONE_MAX_REACH_MILES,
+      });
+    }
+  }
+
   for (const t of towns) {
     if (DISTRICT_RE.test(t.trim())) continue;
     const town = getTown(t);
@@ -195,15 +309,21 @@ function resolveTargets(req: Requirement): ResolvedTargets {
   }
 
   const resolved: ResolvedTargets = {
-    text: [...towns, ...req.target_regions, ...counties].map(lc).filter(Boolean),
+    // Neighbourhoods join the text pass so a listing filed under `area = "Soho"`
+    // scores a direct hit even when its postcode is missing.
+    text: [...towns, ...req.target_regions, ...counties, ...neighbourhoods]
+      .map(lc)
+      .filter(Boolean),
     counties: counties.map(lc),
     regions: expanded.regions.map(lc),
-    districts,
+    districts: [...new Set(districts)],
     points,
     any:
       towns.length > 0 ||
       req.target_regions.length > 0 ||
       counties.length > 0 ||
+      neighbourhoods.length > 0 ||
+      zones.length > 0 ||
       districts.length > 0,
   };
   targetCache.set(req, resolved);
@@ -266,7 +386,8 @@ function locationFactor(
       // town (which earns nothing at all).
       let best: { name: string; dist: number; factor: number } | null = null;
       for (const p of t.points) {
-        const reach = radius + p.bonus;
+        const reach = Math.min(radius + p.bonus, p.maxReach ?? Infinity);
+        if (reach <= 0) continue;
         const dist = distanceMiles(p.at, at);
         if (dist > reach) continue;
         const factor = PROXIMITY_CAP * (1 - dist / reach);
@@ -333,21 +454,10 @@ export function scoreMatch(
     `Covers: ${d.covers_internal != null ? d.covers_internal : "unknown"}`,
   );
 
-  add(
-    15,
-    req.use_classes.length > 0,
-    matchesUseClass(req.use_classes, d.use_class),
-    `Use class: ${d.use_class ?? "—"}`,
-  );
-
-  add(
-    10,
-    req.property_types.length > 0,
-    req.property_types.some(
-      (p) => !!d.property_type && lc(d.property_type).includes(lc(p)),
-    ),
-    `Type: ${d.property_type ?? "—"}`,
-  );
+  // Use class absorbed the old, separate "property types" dimension — the two
+  // asked the same question of the same listing, so they now share one weight.
+  const use = scoreUseClass(req.use_classes, d);
+  add(20, req.use_classes.length > 0, use.factor, use.label);
 
   add(
     10,
@@ -375,13 +485,6 @@ export function scoreMatch(
     req.max_guide_price != null,
     d.guide_price == null || d.guide_price <= (req.max_guide_price as number),
     `Guide: ${d.guide_price != null ? gbp(d.guide_price) : "—"}`,
-  );
-
-  add(
-    5,
-    req.fit_out_prefs.length > 0,
-    !d.fit_out_state || req.fit_out_prefs.includes(d.fit_out_state),
-    `Fit-out: ${d.fit_out_state ?? "—"}`,
   );
 
   const score = possible > 0 ? Math.round((gained / possible) * 100) : 0;

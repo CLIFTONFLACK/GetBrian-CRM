@@ -6,7 +6,10 @@ import { escapeLike } from "@/lib/search";
 import { classifyLocation, type LocationKind } from "@/lib/locations/options";
 import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/database.types";
 import type { FormState } from "@/lib/actions/types";
+
+type UseClass = Database["public"]["Enums"]["use_class"];
 
 // Same env var (and fallback) the public form resolves the owning agent with —
 // approved requirements are handed to that agent as lead.
@@ -15,13 +18,15 @@ const defaultAgentEmail = () =>
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 
-/** Split the submitted comma-joined locations into the requirement's four arrays. */
+/** Split the submitted comma-joined locations into the requirement's target arrays. */
 function partitionLocations(raw: string | null) {
   const buckets: Record<LocationKind, string[]> = {
     town: [],
     county: [],
     region: [],
     district: [],
+    neighbourhood: [],
+    zone: [],
   };
   for (const value of (raw ?? "").split(",").map((s) => s.trim()).filter(Boolean)) {
     // Unrecognised free text is filed as a town — the same fallback the
@@ -31,6 +36,27 @@ function partitionLocations(raw: string | null) {
   }
   return buckets;
 }
+
+/**
+ * The public form's "Property type" list in the operator's own words → the
+ * requirement's use classes, which is what the matcher actually reads.
+ * Anything unrecognised (or blank) leaves the brief open on use class rather
+ * than guessing.
+ */
+const INTAKE_USE_CLASSES: Record<string, UseClass[]> = {
+  restaurant: ["restaurant"],
+  bar: ["bar"],
+  pub: ["pub"],
+  "café / coffee": ["cafe"],
+  nightclub: ["sui_generis_nightclub"],
+  takeaway: ["sui_generis_hot_food"],
+  hotel: ["other"],
+  "health & fitness": ["gym"],
+  "other leisure": ["leisure"],
+};
+
+const intakeUseClasses = (propertyType: string | null): UseClass[] =>
+  INTAKE_USE_CLASSES[(propertyType ?? "").trim().toLowerCase()] ?? [];
 
 /**
  * Approve a pending intake submission: find-or-create the operator company and
@@ -155,7 +181,9 @@ export async function approveSubmission(
       target_counties: locations.county,
       target_regions: locations.region,
       target_postcode_districts: locations.district,
-      property_types: sub.property_type ? [sub.property_type] : [],
+      target_neighbourhoods: locations.neighbourhood,
+      target_london_zones: locations.zone,
+      use_classes: intakeUseClasses(sub.property_type),
       min_sqft: sub.min_sqft,
       max_sqft: sub.max_sqft,
       min_covers: sub.min_covers,

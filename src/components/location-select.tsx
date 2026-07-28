@@ -16,9 +16,23 @@ import { cn } from "@/lib/utils";
 const INPUT_CLASS =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-const MAX_SUGGESTIONS = 20;
+const MAX_SUGGESTIONS = 30;
+/**
+ * Per-kind cap. Towns outnumber London neighbourhoods ~7:1 and postcode
+ * districts outnumber both, so a single global cap let one kind fill the whole
+ * list and bury the rest — "Zone 2" or "Shoreditch" would never surface behind
+ * a wall of towns.
+ */
+const MAX_PER_KIND = 5;
+/** There are only nine fare zones — never show a partial list of them. */
+const PER_KIND_CAP: Partial<Record<LocationKind, number>> = { zone: 9 };
+const capFor = (kind: LocationKind) => PER_KIND_CAP[kind] ?? MAX_PER_KIND;
 
-/** Rank matches: prefix hits first, then substring hits, per option order. */
+/**
+ * Rank matches: prefix hits before substring hits *within* each kind, then emit
+ * the kinds in the order the caller asked for them (which is also the order the
+ * grouped listbox renders its headers in).
+ */
 function filterOptions(
   options: LocationOption[],
   query: string,
@@ -26,16 +40,29 @@ function filterOptions(
 ): LocationOption[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  const starts: LocationOption[] = [];
-  const contains: LocationOption[] = [];
+  const byKind = new Map<
+    LocationKind,
+    { starts: LocationOption[]; contains: LocationOption[] }
+  >();
   for (const o of options) {
     if (exclude.has(o.value.toLowerCase())) continue;
     const v = o.value.toLowerCase();
-    if (v.startsWith(q)) starts.push(o);
-    else if (v.includes(q) || o.detail?.toLowerCase().includes(q)) contains.push(o);
-    if (starts.length >= MAX_SUGGESTIONS) break;
+    const isStart = v.startsWith(q);
+    const extra = (o.search ?? o.detail)?.toLowerCase();
+    if (!isStart && !v.includes(q) && !extra?.includes(q)) continue;
+    const cap = capFor(o.kind);
+    const bucket = byKind.get(o.kind) ?? { starts: [], contains: [] };
+    // Each list is capped independently so a run of substring hits early in the
+    // alphabet can't crowd out a prefix hit that appears later ("Balham" must
+    // not squeeze out "Hammersmith" for the query "ham").
+    const list = isStart ? bucket.starts : bucket.contains;
+    if (list.length < cap) list.push(o);
+    byKind.set(o.kind, bucket);
   }
-  return [...starts, ...contains].slice(0, MAX_SUGGESTIONS);
+  const out: LocationOption[] = [];
+  for (const [kind, { starts, contains }] of byKind)
+    out.push(...[...starts, ...contains].slice(0, capFor(kind)));
+  return out.slice(0, MAX_SUGGESTIONS);
 }
 
 /** Grouped suggestion listbox; selection via onPick (mousedown, so blur can close). */
@@ -104,6 +131,7 @@ export function LocationSelect({
   required,
   hint,
   placeholder,
+  idPrefix = "",
 }: {
   name: string;
   label: string;
@@ -112,23 +140,26 @@ export function LocationSelect({
   required?: boolean;
   hint?: string;
   placeholder?: string;
+  /** Keeps the input id unique when this field renders in a modal over another form. */
+  idPrefix?: string;
 }) {
   const options = useMemo(() => optionsForKinds(kinds), [kinds]);
   const [value, setValue] = useState(defaultValue);
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
-  const listId = `${name}-listbox`;
+  const inputId = `${idPrefix}${name}`;
+  const listId = `${inputId}-listbox`;
   const none = useMemo(() => new Set<string>(), []);
   const items = open ? filterOptions(options, value, none) : [];
 
   return (
     <div className="relative space-y-2">
-      <Label htmlFor={name}>
+      <Label htmlFor={inputId}>
         {label}
         {required ? <span className="text-destructive"> *</span> : null}
       </Label>
       <input
-        id={name}
+        id={inputId}
         name={name}
         value={value}
         required={required}

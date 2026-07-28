@@ -52,7 +52,7 @@ export default async function RequirementsPage({
   let query = supabase
     .from("requirements")
     .select(
-      "id, status, target_towns, target_regions, target_counties, target_postcode_districts, created_at, property_types, use_classes",
+      "id, status, target_towns, target_regions, target_counties, target_postcode_districts, target_neighbourhoods, target_london_zones, created_at, use_classes",
     )
     .order(column, { ascending });
   if (q) query = query.ilike("title", `%${q}%`);
@@ -65,6 +65,8 @@ export default async function RequirementsPage({
     ...(r.target_regions ?? []),
     ...(r.target_counties ?? []),
     ...(r.target_postcode_districts ?? []),
+    ...(r.target_neighbourhoods ?? []),
+    ...(r.target_london_zones ?? []),
   ];
   const matchesLoc = (r: (typeof rows)[number]) => {
     if (!loc) return true;
@@ -110,17 +112,19 @@ export default async function RequirementsPage({
     const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
     return { distinct: counts.size, top: top?.[0] };
   };
-  const propStats = countDistinct(rows.flatMap((r) => r.property_types ?? []));
+  // "Property types" left the requirement form — the equivalent read on the
+  // book is now how widely spread its target locations are.
+  const locStats = countDistinct(rows.flatMap(targetsOf));
   const useStats = countDistinct(rows.flatMap((r) => r.use_classes ?? []));
 
   const stats = [
     { label: "New this month", value: newThisMonth, icon: CalendarPlus },
     { label: "Total", value: rows.length, icon: Target },
     {
-      label: "Property types",
-      value: propStats.distinct,
+      label: "Target locations",
+      value: locStats.distinct,
       icon: Building2,
-      hint: propStats.top ?? "—",
+      hint: locStats.top ?? "—",
     },
     {
       label: "Use classes",

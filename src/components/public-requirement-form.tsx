@@ -99,9 +99,9 @@ export function PublicRequirementForm() {
           <LocationMultiPicker
             idBase="pr-locations"
             label="Target locations"
-            kinds={["town", "county", "region", "district"]}
+            kinds={["zone", "neighbourhood", "town", "county", "region", "district"]}
             name="target_locations"
-            placeholder="Search towns, counties, regions, postcodes…"
+            placeholder="Search zones, neighbourhoods, towns, counties, postcodes…"
             hint="Pick as many as you like — anything we don't list can be typed in."
           />
         </div>

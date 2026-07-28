@@ -22,7 +22,12 @@ export function Alert({
   children: React.ReactNode;
 }) {
   return (
-    <p className={cn("rounded-md border px-3 py-2 text-sm", TONE[tone], className)}>
+    // Errors are announced: most appear after a form submit, and a red box alone
+    // is invisible to a screen reader.
+    <p
+      role={tone === "error" ? "alert" : undefined}
+      className={cn("rounded-md border px-3 py-2 text-sm", TONE[tone], className)}
+    >
       {children}
     </p>
   );

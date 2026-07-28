@@ -11,9 +11,16 @@
 // from a client component — client components use `@/lib/locations/options`.
 
 import data from "./data/uk-locations.json";
+import londonData from "./data/london-areas.json";
 
 export type LatLng = { lat: number; lng: number };
-export type LocationKind = "town" | "county" | "region" | "district";
+export type LocationKind =
+  | "town"
+  | "county"
+  | "region"
+  | "district"
+  | "neighbourhood"
+  | "zone";
 
 type Town = { name: string; county: string | null; region: string | null } & LatLng;
 type County = {
@@ -131,6 +138,42 @@ export function expandRegions(regions: readonly string[]): {
     else out.regions.push(r);
   }
   return out;
+}
+
+// --- London neighbourhoods & transport fare zones -------------------------
+//
+// Hand-curated (see `london-areas.json`): each area carries its borough, its
+// TfL fare zone, the postcode districts it dominates and an approximate
+// centroid. Selecting "Soho" or "Zone 2" on a brief resolves through here into
+// the same district / proximity targets the rest of the matcher already speaks.
+
+export type LondonArea = {
+  name: string;
+  borough: string;
+  zone: number;
+  districts: string[];
+} & LatLng;
+
+const londonAreas = londonData.areas as LondonArea[];
+
+export const LONDON_ZONES: readonly number[] = londonData.zones;
+
+const londonAreaByName = new Map(londonAreas.map((a) => [lc(a.name), a]));
+
+export function getLondonArea(name: string | null | undefined): LondonArea | null {
+  return name ? (londonAreaByName.get(lc(name)) ?? null) : null;
+}
+
+/** "Zone 3" → 3; "3" → 3; anything else → null. */
+export function parseLondonZone(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const m = value.trim().match(/^(?:zone\s*)?(\d)$/i);
+  const n = m ? Number(m[1]) : NaN;
+  return LONDON_ZONES.includes(n) ? n : null;
+}
+
+export function londonAreasInZone(zone: number): LondonArea[] {
+  return londonAreas.filter((a) => a.zone === zone);
 }
 
 const EARTH_RADIUS_MILES = 3958.8;

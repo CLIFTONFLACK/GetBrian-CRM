@@ -120,7 +120,7 @@ export default async function ListingDetailPage({
     supabase
       .from("requirements")
       .select(
-        "id, title, target_towns, target_regions, target_counties, target_postcode_districts, min_sqft, max_sqft, min_covers, max_covers, use_classes, property_types, tenure_prefs, max_rent, max_premium, max_guide_price, fit_out_prefs",
+        "id, title, target_towns, target_regions, target_counties, target_postcode_districts, target_neighbourhoods, target_london_zones, min_sqft, max_sqft, min_covers, max_covers, use_classes, tenure_prefs, max_rent, max_premium, max_guide_price",
       )
       .eq("status", "active"),
     // Deals already created from this listing ("under offer to X").

@@ -50,14 +50,18 @@ const SCORE_ACCENT: Record<string, { border: string; chip: string }> = {
   },
 };
 
+/** Mirrors the requirement form's use classes — the planning-class slugs it
+ *  retired (Class E, A3–A5) were migrated away in 0034, so filtering on them
+ *  would only ever return nothing. */
 const USE_CLASS_OPTIONS = [
-  { value: "E", label: "Class E" },
-  { value: "sui_generis_pub_bar", label: "Pub / Bar" },
+  { value: "pub", label: "Pub" },
+  { value: "bar", label: "Bar" },
   { value: "sui_generis_nightclub", label: "Nightclub" },
-  { value: "sui_generis_hot_food", label: "Hot-food takeaway" },
-  { value: "A3", label: "A3" },
-  { value: "A4", label: "A4" },
-  { value: "A5", label: "A5" },
+  { value: "sui_generis_hot_food", label: "Hot food takeaway" },
+  { value: "cafe", label: "Café" },
+  { value: "gym", label: "Gym" },
+  { value: "leisure", label: "Leisure" },
+  { value: "restaurant", label: "Restaurant" },
   { value: "other", label: "Other" },
 ];
 
@@ -96,7 +100,7 @@ export default async function MatchesPage({
     supabase
       .from("requirements")
       .select(
-        "id, title, company_id, target_towns, target_regions, target_counties, target_postcode_districts, min_sqft, max_sqft, min_covers, max_covers, use_classes, property_types, tenure_prefs, max_rent, max_premium, max_guide_price, fit_out_prefs",
+        "id, title, company_id, target_towns, target_regions, target_counties, target_postcode_districts, target_neighbourhoods, target_london_zones, min_sqft, max_sqft, min_covers, max_covers, use_classes, tenure_prefs, max_rent, max_premium, max_guide_price",
       )
       .eq("status", "active"),
     supabase

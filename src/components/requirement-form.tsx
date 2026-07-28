@@ -23,26 +23,26 @@ import { cn } from "@/lib/utils";
 
 type Option = readonly [string, string];
 
+/**
+ * Trading concepts, not planning classes — agents brief in "Pub", not "Class E".
+ * `sui_generis_*` slugs are kept for the two concepts that already had one, so
+ * existing briefs keep their selection.
+ */
 const USE_CLASSES: Option[] = [
-  ["E", "Class E"],
-  ["sui_generis_pub_bar", "Pub / Bar"],
+  ["pub", "Pub"],
+  ["bar", "Bar"],
   ["sui_generis_nightclub", "Nightclub"],
-  ["sui_generis_hot_food", "Hot-food takeaway"],
-  ["A3", "A3"],
-  ["A4", "A4"],
-  ["A5", "A5"],
+  ["sui_generis_hot_food", "Hot food takeaway"],
+  ["cafe", "Café"],
+  ["gym", "Gym"],
+  ["leisure", "Leisure"],
+  ["restaurant", "Restaurant"],
   ["other", "Other"],
 ];
+/** Leasehold now covers assignments and new lettings alike. */
 const TENURES: Option[] = [
   ["freehold", "Freehold"],
   ["leasehold", "Leasehold"],
-  ["assignment", "Assignment"],
-  ["new_letting", "New letting"],
-];
-const FITOUTS: Option[] = [
-  ["fully_fitted", "Fully fitted"],
-  ["part_fitted", "Part fitted"],
-  ["shell", "Shell"],
 ];
 const STATUSES: Option[] = [
   ["active", "Active"],
@@ -78,10 +78,14 @@ export function RequirementForm({
   const r = requirement;
 
   return (
-    <form action={formAction} className="space-y-8">
+    <form action={formAction} className="space-y-6">
       {r ? <input type="hidden" name="id" value={r.id} /> : null}
 
-      <Section title="Brief">
+      <Section
+        step={1}
+        title="Brief"
+        description="Who this requirement is for, and how live it is."
+      >
         <Field label="Title" htmlFor="title" required>
           <Input
             id="title"
@@ -119,27 +123,26 @@ export function RequirementForm({
         />
       </Section>
 
-      <Section title="Location → matches disposal town / county / postcode">
+      <Section
+        step={2}
+        title="Location"
+        description="Where they want to trade. Matched against each listing's town, county and postcode."
+      >
         <TargetLocationsField
           towns={r?.target_towns ?? []}
           regions={r?.target_regions ?? []}
           counties={r?.target_counties ?? []}
           districts={r?.target_postcode_districts ?? []}
+          neighbourhoods={r?.target_neighbourhoods ?? []}
+          zones={r?.target_london_zones ?? []}
         />
       </Section>
 
-      <Section title="Property → matches use class / type / size / covers / fit-out">
-        <Field
-          label="Property types"
-          htmlFor="property_types"
-          hint="Comma-separated, e.g. Restaurant, Bar"
-        >
-          <Input
-            id="property_types"
-            name="property_types"
-            defaultValue={(r?.property_types ?? []).join(", ")}
-          />
-        </Field>
+      <Section
+        step={3}
+        title="Property"
+        description="The kind of premises they're after. Matched against each listing's type, size and covers."
+      >
         <CheckboxGroup
           legend="Use classes"
           name="use_classes"
@@ -162,15 +165,13 @@ export function RequirementForm({
             maxDefault={r?.max_covers}
           />
         </div>
-        <CheckboxGroup
-          legend="Fit-out"
-          name="fit_out_prefs"
-          options={FITOUTS}
-          selected={r?.fit_out_prefs ?? []}
-        />
       </Section>
 
-      <Section title="Structure & budget → matches disposal type / rent / premium / guide price">
+      <Section
+        step={4}
+        title="Structure & budget"
+        description="What they'll take on and what they'll pay. Matched against each listing's tenure and asking terms."
+      >
         <CheckboxGroup
           legend="Tenure"
           name="tenure_prefs"
@@ -208,15 +209,20 @@ export function RequirementForm({
         </div>
       </Section>
 
-      <Field label="Notes" htmlFor="notes">
-        <Textarea id="notes" name="notes" defaultValue={r?.notes ?? ""} />
-      </Field>
-
-      <AgentFields
-        agents={agents}
-        leadAgentId={r?.lead_agent_id}
-        additionalAgentIds={additionalAgentIds}
-      />
+      <Section
+        step={5}
+        title="Notes & ownership"
+        description="Anything the criteria above can't capture, and who's running the brief."
+      >
+        <Field label="Notes" htmlFor="notes">
+          <Textarea id="notes" name="notes" defaultValue={r?.notes ?? ""} />
+        </Field>
+        <AgentFields
+          agents={agents}
+          leadAgentId={r?.lead_agent_id}
+          additionalAgentIds={additionalAgentIds}
+        />
+      </Section>
 
       {state.error ? <Alert tone="error">{state.error}</Alert> : null}
 
@@ -235,17 +241,50 @@ export function RequirementForm({
   );
 }
 
+/**
+ * One numbered step of the brief: a stepper bead, a plain title, and a sentence
+ * saying what the section is for and what it gets matched against. The old
+ * headings crammed that into the title itself ("Location → matches disposal
+ * town / county / postcode"), which read like a spec note rather than a form.
+ *
+ * The visible heading is a real `<h2>` (so the form has an outline) and the
+ * fieldset borrows it via `aria-labelledby` — a hidden `<legend>` alongside it
+ * would just make a screen reader say the title twice.
+ */
 function Section({
+  step,
   title,
+  description,
   children,
 }: {
+  step: number;
   title: string;
+  description: string;
   children: React.ReactNode;
 }) {
+  const headingId = `req-section-${step}`;
   return (
-    <fieldset className="space-y-4">
-      <legend className="text-sm font-semibold text-foreground">{title}</legend>
-      {children}
+    <fieldset
+      aria-labelledby={headingId}
+      className="space-y-4 border-t border-border pt-7 first-of-type:border-t-0 first-of-type:pt-0"
+    >
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold tabular-nums text-primary"
+        >
+          {step}
+        </span>
+        <div className="space-y-1">
+          <h2 id={headingId} className="text-sm font-semibold leading-none text-foreground">
+            {title}
+          </h2>
+          <p className="max-w-prose text-xs leading-5 text-muted-foreground">
+            {description}
+          </p>
+        </div>
+      </div>
+      <div className="space-y-5 sm:pl-9">{children}</div>
     </fieldset>
   );
 }

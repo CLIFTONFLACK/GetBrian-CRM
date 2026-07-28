@@ -34,7 +34,7 @@ const CHUNK = 400;
 const MAX_NOTIFICATION_ITEMS = 3;
 
 const REQUIREMENT_COLUMNS =
-  "id, title, lead_agent_id, target_towns, target_regions, target_counties, target_postcode_districts, min_sqft, max_sqft, min_covers, max_covers, use_classes, property_types, tenure_prefs, max_rent, max_premium, max_guide_price, fit_out_prefs";
+  "id, title, lead_agent_id, target_towns, target_regions, target_counties, target_postcode_districts, target_neighbourhoods, target_london_zones, min_sqft, max_sqft, min_covers, max_covers, use_classes, tenure_prefs, max_rent, max_premium, max_guide_price";
 
 const LISTING_COLUMNS =
   "id, title, status, city, area, postcode, address_line, county, lat, lng, size_sqft, covers_internal, use_class, property_type, disposal_type, rent_pa, premium, guide_price, fit_out_state";

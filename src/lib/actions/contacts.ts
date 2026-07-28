@@ -185,9 +185,12 @@ export async function updateContact(
 }
 
 /**
- * Inline quick-create used by the "+ New contact" modal (#13). Creates a minimal
- * contact (optionally pre-linked to a company) and returns its id + display name
- * so the caller can select it — no redirect.
+ * Inline create used by the "+ New contact" modal. The modal now carries the
+ * whole contact form, so this accepts every field `createContact` does —
+ * address (geocoded), role, marketing opt-in, agents — and returns the new id +
+ * display name for the caller to select instead of redirecting. Fields the
+ * short variant of the modal omits are absent from the FormData and land as
+ * null (`role` defaults to "other" via `payload`).
  */
 export async function quickCreateContact(
   _prev: FormState,
@@ -202,31 +205,28 @@ export async function quickCreateContact(
   const agencyId = await currentAgencyId(supabase);
   if (!agencyId) return { error: "No agency is linked to your account." };
 
-  const first = str(formData, "first_name");
-  if (!first) return { error: "A first name is required." };
+  const data = payload(formData);
+  if (!data.first_name) return { error: "A first name is required." };
+  data.role = await validRole(supabase, data.role);
 
-  const dup = await findDuplicateContact(supabase, agencyId, nullable(formData, "email"));
-  if (dup) return { error: `A contact with this email already exists: ${dup}.` };
+  if (formData.get("allow_duplicate") == null) {
+    const dup = await findDuplicateContact(supabase, agencyId, data.email);
+    if (dup) return { error: `A contact with this email already exists: ${dup}.` };
+  }
 
-  const { data, error } = await supabase
+  const geo = await geocodeForSave(data);
+  const { data: row, error } = await supabase
     .from("contacts")
-    .insert({
-      agency_id: agencyId,
-      created_by: user.id,
-      first_name: first,
-      last_name: nullable(formData, "last_name"),
-      email: nullable(formData, "email"),
-      phone: nullable(formData, "phone"),
-      company_id: nullable(formData, "company_id"),
-      marketing_opt_in: formData.get("marketing_opt_in") != null,
-    })
+    .insert({ agency_id: agencyId, created_by: user.id, ...data, ...(geo ?? {}) })
     .select("id, first_name, last_name")
     .single();
-  if (error || !data) return { error: error?.message ?? "Could not create contact." };
+  if (error || !row) return { error: error?.message ?? "Could not create contact." };
 
-  const name = [data.first_name, data.last_name].filter(Boolean).join(" ");
+  await syncContactAgents(supabase, row.id, agencyId, agents(formData).extra);
+
+  const name = [row.first_name, row.last_name].filter(Boolean).join(" ");
   revalidatePath("/contacts");
-  return { created: { id: data.id, name }, message: `Added ${name}.` };
+  return { created: { id: row.id, name }, message: `Added ${name}.` };
 }
 
 export async function deleteContact(formData: FormData): Promise<void> {

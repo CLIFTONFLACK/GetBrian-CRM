@@ -1577,6 +1577,8 @@ export type Database = {
           property_types: string[]
           status: Database["public"]["Enums"]["requirement_status"]
           target_counties: string[]
+          target_london_zones: string[]
+          target_neighbourhoods: string[]
           target_postcode_districts: string[]
           target_regions: string[]
           target_towns: string[]
@@ -1605,6 +1607,8 @@ export type Database = {
           property_types?: string[]
           status?: Database["public"]["Enums"]["requirement_status"]
           target_counties?: string[]
+          target_london_zones?: string[]
+          target_neighbourhoods?: string[]
           target_postcode_districts?: string[]
           target_regions?: string[]
           target_towns?: string[]
@@ -1633,6 +1637,8 @@ export type Database = {
           property_types?: string[]
           status?: Database["public"]["Enums"]["requirement_status"]
           target_counties?: string[]
+          target_london_zones?: string[]
+          target_neighbourhoods?: string[]
           target_postcode_districts?: string[]
           target_regions?: string[]
           target_towns?: string[]
@@ -1798,6 +1804,12 @@ export type Database = {
         | "A4"
         | "A5"
         | "other"
+        | "pub"
+        | "bar"
+        | "restaurant"
+        | "cafe"
+        | "gym"
+        | "leisure"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1953,6 +1965,12 @@ export const Constants = {
         "A4",
         "A5",
         "other",
+        "pub",
+        "bar",
+        "restaurant",
+        "cafe",
+        "gym",
+        "leisure",
       ],
     },
   },

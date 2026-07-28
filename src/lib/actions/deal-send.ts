@@ -27,10 +27,17 @@ export async function listContactEmails(): Promise<
 }
 
 /**
- * "Send Deal → External" — email a matched opportunity (or a batch of
- * requirement briefs) to a company contact, attaching the listing particulars
- * PDF when a listing is involved (branded for CDG stock, unbranded for intel).
- * Every send is logged to `external_sends`.
+ * Ceiling on particulars PDFs in one email. Each is a few hundred KB and most
+ * providers reject a message over ~25 MB outright; anything past this is listed
+ * in the body instead of attached, and the agent is told.
+ */
+const MAX_ATTACHMENTS = 8;
+
+/**
+ * "Send Deal → External" — email one or more matched opportunities (or a batch
+ * of requirement briefs) to a company contact, attaching each listing's
+ * particulars PDF (branded for CDG stock, unbranded for intel). Every send is
+ * logged to `external_sends`, one row per requirement × listing.
  */
 export async function sendDealExternal(
   _prev: FormState,
@@ -57,7 +64,16 @@ export async function sendDealExternal(
   const contactId = str(formData, "contact_id");
   if (!contactId) return { error: "Pick a contact to send to." };
   const companyId = str(formData, "company_id") || null;
-  const listingId = str(formData, "listing_id") || null;
+  // `listing_ids` is the multi-select form; `listing_id` is the single-listing
+  // shape older callers still post.
+  const listingIds = Array.from(
+    new Set(
+      [
+        ...formData.getAll("listing_ids").map((v) => String(v)),
+        str(formData, "listing_id"),
+      ].filter(Boolean),
+    ),
+  );
   // Optional — set when the wizard is opened from a deal, so the deal can show
   // its own outbound history.
   const dealId = str(formData, "deal_id") || null;
@@ -77,14 +93,19 @@ export async function sendDealExternal(
   if (!contact.email)
     return { error: "That contact has no email address — add one first." };
 
-  // Attach the particulars PDF when a listing is part of the send.
-  let attachment: { filename: string; content: Buffer } | null = null;
-  let pdfKind: "branded" | "unbranded" | null = null;
-  if (listingId) {
-    const pdf = await renderParticularsPdf(listingId, supabase);
+  // Attach a particulars PDF per listing, up to MAX_ATTACHMENTS.
+  const attachments: { filename: string; content: Buffer }[] = [];
+  const pdfKindOf = new Map<string, "branded" | "unbranded">();
+  const notAttached: string[] = [];
+  for (const id of listingIds) {
+    const pdf = await renderParticularsPdf(id, supabase);
     if (!pdf) return { error: "Listing not found." };
-    attachment = { filename: pdf.filename, content: pdf.buffer };
-    pdfKind = pdf.isIntel ? "unbranded" : "branded";
+    pdfKindOf.set(id, pdf.isIntel ? "unbranded" : "branded");
+    if (attachments.length < MAX_ATTACHMENTS) {
+      attachments.push({ filename: pdf.filename, content: pdf.buffer });
+    } else {
+      notAttached.push(pdf.filename);
+    }
   }
 
   // Requirement briefs (bulk mode) — summarised inline in the email body.
@@ -106,15 +127,42 @@ export async function sendDealExternal(
     });
   }
 
+  // Listings (opportunity mode) — named inline so the email reads as a list
+  // even when the attachments are stripped by the recipient's mail client.
+  let listingLines: string[] = [];
+  if (listingIds.length > 0) {
+    const { data: listingRows } = await supabase
+      .from("disposals")
+      .select("id, title, city, size_sqft, rent_pa")
+      .in("id", listingIds);
+    listingLines = (listingRows ?? []).map((l) => {
+      const bits = [
+        l.city,
+        l.size_sqft != null ? `${l.size_sqft.toLocaleString("en-GB")} sq ft` : null,
+        l.rent_pa != null ? `£${l.rent_pa.toLocaleString("en-GB")} pa` : null,
+      ].filter(Boolean);
+      return `• ${l.title ?? "Untitled listing"}${bits.length ? ` — ${bits.join(" · ")}` : ""}`;
+    });
+  }
+
+  const attachmentNote =
+    attachments.length === 0
+      ? null
+      : attachments.length === 1
+        ? "Full property particulars are attached."
+        : `Particulars for ${attachments.length} of these are attached.`;
+
   const greeting = contact.first_name ? `Hi ${contact.first_name},` : "Hi,";
   const text = [
     greeting,
     "",
     body || "Please find details below.",
+    listingLines.length ? "" : null,
+    listingLines.length ? listingLines.join("\n") : null,
     briefLines.length ? "" : null,
     briefLines.length ? briefLines.join("\n") : null,
-    attachment ? "" : null,
-    attachment ? "Full property particulars are attached." : null,
+    attachmentNote ? "" : null,
+    attachmentNote,
   ]
     .filter((l): l is string => l != null)
     .join("\n");
@@ -137,9 +185,7 @@ export async function sendDealExternal(
       replyTo: me?.email ?? undefined,
       subject,
       text,
-      attachments: attachment
-        ? [{ filename: attachment.filename, content: attachment.content }]
-        : undefined,
+      attachments: attachments.length > 0 ? attachments : undefined,
     });
     if (sendError) return { error: `Email failed: ${sendError.message}` };
     sent = data;
@@ -149,22 +195,27 @@ export async function sendDealExternal(
     };
   }
 
-  // Log the send — one row per requirement when bulk, else a single row.
+  // Log the send — one row per requirement × listing, so the "already sent"
+  // chips on both records stay accurate for every pair in the batch.
   const baseRow = {
     agency_id: agencyId,
-    listing_id: listingId,
     deal_id: dealId,
     company_id: companyId,
     contact_id: contactId,
     recipient_email: contact.email,
     subject,
     body: body || null,
-    pdf_kind: pdfKind,
     provider_id: sent?.id ?? null,
     sent_by: user.id,
   };
-  const rows = (requirementIds.length > 0 ? requirementIds : [null]).map(
-    (requirement_id) => ({ ...baseRow, requirement_id }),
+  const rows = (requirementIds.length > 0 ? requirementIds : [null]).flatMap(
+    (requirement_id) =>
+      (listingIds.length > 0 ? listingIds : [null]).map((listing_id) => ({
+        ...baseRow,
+        requirement_id,
+        listing_id,
+        pdf_kind: listing_id ? (pdfKindOf.get(listing_id) ?? null) : null,
+      })),
   );
   const { error: logError } = await supabase.from("external_sends").insert(rows);
   if (logError) {
@@ -172,5 +223,8 @@ export async function sendDealExternal(
     return { message: `Sent to ${contact.email} (logging failed: ${logError.message})` };
   }
 
-  return { message: `Sent to ${contact.email}.` };
+  const capped = notAttached.length
+    ? ` ${notAttached.length} particulars weren't attached (${MAX_ATTACHMENTS} max per email).`
+    : "";
+  return { message: `Sent to ${contact.email}.${capped}` };
 }

@@ -45,6 +45,7 @@ export function SendDealModal({
   companyTypes,
   requirementId,
   listingId,
+  listings,
   dealId,
   requirementTitle,
   listingTitle,
@@ -62,6 +63,8 @@ export function SendDealModal({
   /** Opportunity mode — one matched pair. */
   requirementId?: string;
   listingId?: string;
+  /** Multi-opportunity mode — several listings picked against one requirement. */
+  listings?: { id: string; title: string }[];
   /** Set when the wizard is opened from a deal — logged on the send. */
   dealId?: string;
   requirementTitle?: string;
@@ -83,20 +86,31 @@ export function SendDealModal({
     : requirementId
       ? [requirementId]
       : [];
+  // One listing or many — everything downstream only ever sees the array.
+  const picked = listings ?? [];
+  const listingIds =
+    picked.length > 0 ? picked.map((l) => l.id) : listingId ? [listingId] : [];
+  const isMultiListing = picked.length > 1;
 
   const subject = isBulk
     ? `${bulk.length} property requirement${bulk.length === 1 ? "" : "s"}`
-    : [requirementTitle, listingTitle].filter(Boolean).join(" ↔ ") || "Opportunity";
+    : isMultiListing
+      ? `${picked.length} opportunities${requirementTitle ? ` — ${requirementTitle}` : ""}`
+      : [requirementTitle, listingTitle ?? picked[0]?.title]
+          .filter(Boolean)
+          .join(" ↔ ") || "Opportunity";
   const link = isBulk
     ? "/requirements"
     : requirementId
       ? `/requirements/${requirementId}`
-      : listingId
-        ? `/listings/${listingId}`
+      : listingIds.length === 1
+        ? `/listings/${listingIds[0]}`
         : "/matches";
   const defaultBody = isBulk
     ? `Requirements:\n${bulk.map((r) => `• ${r.title}`).join("\n")}`
-    : `Take a look at ${subject}.`;
+    : isMultiListing
+      ? `A few opportunities that fit${requirementTitle ? ` ${requirementTitle}` : ""}:`
+      : `Take a look at ${subject}.`;
 
   const close = () => {
     setOpen(false);
@@ -124,7 +138,12 @@ export function SendDealModal({
         {step === "choose" ? (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Send {isBulk ? `${bulk.length} requirement${bulk.length === 1 ? "" : "s"}` : subject}{" "}
+              Send{" "}
+              {isBulk
+                ? `${bulk.length} requirement${bulk.length === 1 ? "" : "s"}`
+                : isMultiListing
+                  ? `${picked.length} opportunities`
+                  : subject}{" "}
               to your team, or to an outside company contact by email.
             </p>
             <PreviousSendsNote previousSends={previousSends} />
@@ -151,7 +170,12 @@ export function SendDealModal({
                 <span className="block text-sm font-medium">External</span>
                 <span className="block text-xs text-muted-foreground">
                   Email a company contact
-                  {listingId ? " with the property particulars PDF attached" : ""}.
+                  {listingIds.length === 1
+                    ? " with the property particulars PDF attached"
+                    : listingIds.length > 1
+                      ? ` with ${listingIds.length} particulars PDFs attached`
+                      : ""}
+                  .
                 </span>
               </span>
             </button>
@@ -171,11 +195,11 @@ export function SendDealModal({
             companies={companies}
             contacts={contacts}
             companyTypes={companyTypes}
-            listingId={listingId}
+            listingIds={listingIds}
             dealId={dealId}
             requirementIds={requirementIds}
             defaultSubject={subject}
-            defaultBody={isBulk ? defaultBody : ""}
+            defaultBody={isBulk || isMultiListing ? defaultBody : ""}
             previousSends={previousSends}
             onBack={() => setStep("choose")}
             onDone={close}
@@ -294,7 +318,7 @@ function ExternalStep({
   companies,
   contacts,
   companyTypes,
-  listingId,
+  listingIds,
   dealId,
   requirementIds,
   defaultSubject,
@@ -306,7 +330,7 @@ function ExternalStep({
   companies: EntityOption[];
   contacts: ContactSendOption[];
   companyTypes?: { slug: string; label: string }[];
-  listingId?: string;
+  listingIds: string[];
   dealId?: string;
   requirementIds: string[];
   defaultSubject: string;
@@ -357,7 +381,9 @@ function ExternalStep({
   return (
     <form action={formAction} className="space-y-4">
       <PreviousSendsNote previousSends={previousSends} />
-      {listingId ? <input type="hidden" name="listing_id" value={listingId} /> : null}
+      {listingIds.map((id) => (
+        <input key={id} type="hidden" name="listing_ids" value={id} />
+      ))}
       {dealId ? <input type="hidden" name="deal_id" value={dealId} /> : null}
       {requirementIds.map((id) => (
         <input key={id} type="hidden" name="requirement_ids" value={id} />
@@ -398,9 +424,11 @@ function ExternalStep({
         />
       </div>
 
-      {listingId ? (
+      {listingIds.length > 0 ? (
         <p className="text-xs text-muted-foreground">
-          The property particulars PDF is attached automatically.
+          {listingIds.length === 1
+            ? "The property particulars PDF is attached automatically."
+            : `Particulars PDFs for all ${listingIds.length} properties are attached automatically.`}
         </p>
       ) : null}
 

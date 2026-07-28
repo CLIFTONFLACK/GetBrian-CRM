@@ -12,22 +12,22 @@ export function AgentFields({
   agents,
   leadAgentId,
   additionalAgentIds,
+  idPrefix = "",
 }: {
   agents: AgentOption[];
   leadAgentId?: string | null;
   additionalAgentIds?: string[];
+  /** Keeps ids unique when these fields render in a modal over another form. */
+  idPrefix?: string;
 }) {
   const selected = new Set(additionalAgentIds ?? []);
+  const leadId = `${idPrefix}lead_agent_id`;
 
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <Label htmlFor="lead_agent_id">Lead agent</Label>
-        <Select
-          id="lead_agent_id"
-          name="lead_agent_id"
-          defaultValue={leadAgentId ?? ""}
-        >
+        <Label htmlFor={leadId}>Lead agent</Label>
+        <Select id={leadId} name="lead_agent_id" defaultValue={leadAgentId ?? ""}>
           <option value="">— Unassigned —</option>
           {agents.map((a) => (
             <option key={a.id} value={a.id}>

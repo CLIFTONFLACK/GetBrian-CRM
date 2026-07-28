@@ -13,7 +13,10 @@ type UseClass = Database["public"]["Enums"]["use_class"];
 type Tenure = Database["public"]["Enums"]["tenure_type"];
 type ReqStatus = Database["public"]["Enums"]["requirement_status"];
 
-const FIT_OUTS = ["fully_fitted", "part_fitted", "shell"] as const;
+// `property_types` and `fit_out_prefs` left the form in the 0033/0034 batch:
+// use class absorbed the first and the second was never used in briefing. The
+// columns are deliberately absent from `payload()`, so existing values are
+// preserved rather than blanked on the next save.
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 const nullableStr = (fd: FormData, k: string) => str(fd, k) || null;
@@ -55,10 +58,10 @@ function payload(fd: FormData) {
     target_postcode_districts: commaArr(fd, "target_postcode_districts").map((s) =>
       s.toUpperCase(),
     ),
-    property_types: commaArr(fd, "property_types"),
+    target_neighbourhoods: commaArr(fd, "target_neighbourhoods"),
+    target_london_zones: commaArr(fd, "target_london_zones"),
     use_classes: pickEnum<UseClass>(fd, "use_classes", Constants.public.Enums.use_class),
     tenure_prefs: pickEnum<Tenure>(fd, "tenure_prefs", Constants.public.Enums.tenure_type),
-    fit_out_prefs: pickEnum(fd, "fit_out_prefs", FIT_OUTS),
     min_sqft: num(fd, "min_sqft"),
     max_sqft: num(fd, "max_sqft"),
     min_covers: num(fd, "min_covers"),

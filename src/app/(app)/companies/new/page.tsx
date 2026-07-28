@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { createCompany } from "@/lib/actions/companies";
 import { getCompanyTypes } from "@/lib/company-types";
+import { getContactRoles } from "@/lib/contact-roles";
 import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,6 +16,8 @@ export default async function NewCompanyPage() {
   const agencyId = await currentAgencyId(supabase);
   const agents = agencyId ? await getAgencyMembers(supabase, agencyId) : [];
   const types = await getCompanyTypes();
+  // Feeds the full "+ New contact" form inside the company form's modal.
+  const contactRoles = await getContactRoles();
 
   const { data: contactRows } = await supabase
     .from("contacts")
@@ -38,6 +41,7 @@ export default async function NewCompanyPage() {
             agents={agents}
             contacts={contacts}
             types={types}
+            contactRoles={contactRoles}
           />
         </CardContent>
       </Card>

@@ -4,6 +4,8 @@ import * as React from "react";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 
+import { CompanyFormFields } from "@/components/company-form-fields";
+import { ContactFormFields } from "@/components/contact-form-fields";
 import { Modal } from "@/components/ui/modal";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -13,6 +15,7 @@ import { Select } from "@/components/ui/select";
 import { quickCreateCompany } from "@/lib/actions/companies";
 import { quickCreateContact } from "@/lib/actions/contacts";
 import type { FormState } from "@/lib/actions/types";
+import type { AgentOption } from "@/lib/supabase/agency";
 import { cn } from "@/lib/utils";
 
 export type EntityOption = { id: string; name: string };
@@ -123,6 +126,9 @@ export function CreatableSelect({
   action,
   modalTitle,
   createLabel,
+  modalSize = "sm",
+  allowCreate = true,
+  idPrefix = "",
   children,
 }: {
   name: string;
@@ -135,6 +141,15 @@ export function CreatableSelect({
   action: (state: FormState, fd: FormData) => Promise<FormState>;
   modalTitle: string;
   createLabel: string;
+  /** "lg" for the full record forms, "sm" for the short quick-create. */
+  modalSize?: "sm" | "lg";
+  /**
+   * Hide the "+ New" button. Set when this picker is itself rendered inside a
+   * quick-create modal, so a modal can never open another modal.
+   */
+  allowCreate?: boolean;
+  /** Keeps the input id unique when this picker renders in a modal over a form. */
+  idPrefix?: string;
   children: React.ReactNode;
 }) {
   const [options, setOptions] = useState<EntityOption[]>(initial);
@@ -171,7 +186,8 @@ export function CreatableSelect({
   const items = open ? results.items : [];
   // The list shrinks as the query narrows — clamp at use-time, not in an effect.
   const active = Math.min(highlighted, Math.max(0, items.length - 1));
-  const listId = `${name}-listbox`;
+  const inputId = `${idPrefix}${name}`;
+  const listId = `${inputId}-listbox`;
 
   const pick = (o: EntityOption) => {
     setValue(o.id);
@@ -189,7 +205,7 @@ export function CreatableSelect({
 
   return (
     <div className="space-y-2">
-      <Label htmlFor={name}>
+      <Label htmlFor={inputId}>
         {label}
         {required ? <span className="text-destructive"> *</span> : null}
       </Label>
@@ -197,7 +213,7 @@ export function CreatableSelect({
         <div className="relative flex-1">
           <input
             ref={inputRef}
-            id={name}
+            id={inputId}
             value={text}
             required={required}
             placeholder={placeholder}
@@ -272,27 +288,38 @@ export function CreatableSelect({
               onPick={pick}
               emptyLabel={
                 options.length === 0
-                  ? "Nothing to pick yet — use “+ New”."
-                  : "No matches — use “+ New” to add one."
+                  ? allowCreate
+                    ? "Nothing to pick yet — use “+ New”."
+                    : "Nothing to pick yet."
+                  : allowCreate
+                    ? "No matches — use “+ New” to add one."
+                    : "No matches."
               }
             />
           ) : null}
         </div>
         <input type="hidden" name={name} value={value} />
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="shrink-0"
-          onClick={() => setModalOpen(true)}
-        >
-          <Plus />
-          New
-        </Button>
+        {allowCreate ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="shrink-0"
+            onClick={() => setModalOpen(true)}
+          >
+            <Plus />
+            New
+          </Button>
+        ) : null}
       </div>
       {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={modalTitle}>
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={modalTitle}
+        size={modalSize}
+      >
         <form action={formAction} className="space-y-4">
           {children}
           {state.error ? <Alert tone="error">{state.error}</Alert> : null}
@@ -322,7 +349,12 @@ const DEFAULT_COMPANY_TYPES: { slug: string; label: string }[] = [
   { slug: "other", label: "Other" },
 ];
 
-/** Company picker with inline "+ New company" modal (#12, #14). */
+/**
+ * Company picker with an inline "+ New company" modal. Pass `full` (the agency
+ * roster) and the modal carries the entire company form — address, CRN, agents
+ * and all — instead of just a name and a type. Callers without the roster to
+ * hand keep the short version.
+ */
 export function CompanyCreatableSelect({
   name = "company_id",
   label = "Company",
@@ -332,6 +364,9 @@ export function CompanyCreatableSelect({
   hint,
   placeholder,
   types,
+  full,
+  allowCreate,
+  idPrefix,
 }: {
   name?: string;
   label?: string;
@@ -342,6 +377,10 @@ export function CompanyCreatableSelect({
   placeholder?: string;
   /** Editable company-type list; falls back to the seeded system types. */
   types?: { slug: string; label: string }[];
+  /** Supply to swap the short quick-create for the whole company form. */
+  full?: { agents: AgentOption[] };
+  allowCreate?: boolean;
+  idPrefix?: string;
 }) {
   const typeOptions = types && types.length > 0 ? types : DEFAULT_COMPANY_TYPES;
   return (
@@ -356,32 +395,49 @@ export function CompanyCreatableSelect({
       action={quickCreateCompany}
       modalTitle="New company"
       createLabel="Create company"
+      modalSize={full ? "lg" : "sm"}
+      allowCreate={allowCreate}
+      idPrefix={idPrefix}
     >
-      <div className="space-y-2">
-        <Label htmlFor="qc-company-name">
-          Company name<span className="text-destructive"> *</span>
-        </Label>
-        <Input id="qc-company-name" name="name" required />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="qc-company-type">Type</Label>
-        <Select
-          id="qc-company-type"
-          name="type"
-          defaultValue={typeOptions[0]?.slug ?? "other"}
-        >
-          {typeOptions.map((t) => (
-            <option key={t.slug} value={t.slug}>
-              {t.label}
-            </option>
-          ))}
-        </Select>
-      </div>
+      {full ? (
+        <CompanyFormFields
+          types={typeOptions}
+          agents={full.agents}
+          idPrefix="qc-company-"
+        />
+      ) : (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="qc-company-name">
+              Company name<span className="text-destructive"> *</span>
+            </Label>
+            <Input id="qc-company-name" name="name" required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="qc-company-type">Type</Label>
+            <Select
+              id="qc-company-type"
+              name="type"
+              defaultValue={typeOptions[0]?.slug ?? "other"}
+            >
+              {typeOptions.map((t) => (
+                <option key={t.slug} value={t.slug}>
+                  {t.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </>
+      )}
     </CreatableSelect>
   );
 }
 
-/** Contact picker with inline "+ New contact" modal (#13). */
+/**
+ * Contact picker with an inline "+ New contact" modal. Pass `full` (roster plus
+ * the editable role list) and the modal carries the entire contact form rather
+ * than just a name and an email.
+ */
 export function ContactCreatableSelect({
   name = "link_contact",
   label = "Contact",
@@ -390,6 +446,9 @@ export function ContactCreatableSelect({
   required,
   hint,
   placeholder,
+  full,
+  allowCreate,
+  idPrefix,
 }: {
   name?: string;
   label?: string;
@@ -398,6 +457,10 @@ export function ContactCreatableSelect({
   required?: boolean;
   hint?: string;
   placeholder?: string;
+  /** Supply to swap the short quick-create for the whole contact form. */
+  full?: { agents: AgentOption[]; roles: { slug: string; label: string }[] };
+  allowCreate?: boolean;
+  idPrefix?: string;
 }) {
   return (
     <CreatableSelect
@@ -411,23 +474,36 @@ export function ContactCreatableSelect({
       action={quickCreateContact}
       modalTitle="New contact"
       createLabel="Create contact"
+      modalSize={full ? "lg" : "sm"}
+      allowCreate={allowCreate}
+      idPrefix={idPrefix}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="qc-contact-first">
-            First name<span className="text-destructive"> *</span>
-          </Label>
-          <Input id="qc-contact-first" name="first_name" required />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="qc-contact-last">Last name</Label>
-          <Input id="qc-contact-last" name="last_name" />
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="qc-contact-email">Email</Label>
-        <Input id="qc-contact-email" name="email" type="email" />
-      </div>
+      {full ? (
+        <ContactFormFields
+          roles={full.roles}
+          agents={full.agents}
+          idPrefix="qc-contact-"
+        />
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="qc-contact-first">
+                First name<span className="text-destructive"> *</span>
+              </Label>
+              <Input id="qc-contact-first" name="first_name" required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="qc-contact-last">Last name</Label>
+              <Input id="qc-contact-last" name="last_name" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="qc-contact-email">Email</Label>
+            <Input id="qc-contact-email" name="email" type="email" />
+          </div>
+        </>
+      )}
     </CreatableSelect>
   );
 }

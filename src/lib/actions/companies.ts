@@ -150,9 +150,11 @@ export async function createCompany(
 }
 
 /**
- * Inline quick-create used by the "+ New company" modal (#12/#14). Creates a
- * minimal company and returns its id + name so the caller can select it — no
- * redirect.
+ * Inline create used by the "+ New company" modal. The modal now carries the
+ * whole company form, so this accepts every field `createCompany` does —
+ * address (geocoded), CRN/VAT, agents — and simply returns the new id + name
+ * for the caller to select instead of redirecting. Fields the short variant of
+ * the modal omits are absent from the FormData and land as null.
  */
 export async function quickCreateCompany(
   _prev: FormState,
@@ -170,9 +172,24 @@ export async function quickCreateCompany(
   const name = str(formData, "name");
   if (!name) return { error: "Company name is required." };
 
-  const dup = await findDuplicateCompany(supabase, agencyId, name);
-  if (dup) return { error: `A company with this name already exists: ${dup}.` };
+  if (formData.get("allow_duplicate") == null) {
+    const dup = await findDuplicateCompany(supabase, agencyId, name);
+    if (dup) return { error: `A company with this name already exists: ${dup}.` };
+  }
 
+  const { lead, extra } = agents(formData);
+  const address = {
+    address_line: nullable(formData, "address_line"),
+    city: nullable(formData, "city"),
+    postcode: nullable(formData, "postcode"),
+    county:
+      nullable(formData, "county") ??
+      deriveCounty({
+        postcode: str(formData, "postcode"),
+        city: str(formData, "city"),
+      }),
+  };
+  const geo = await geocodeForSave(address);
   const { data, error } = await supabase
     .from("companies")
     .insert({
@@ -180,10 +197,21 @@ export async function quickCreateCompany(
       created_by: user.id,
       name,
       type: asType(str(formData, "type")),
+      sector_tags: tags(formData, "sector_tags"),
+      website: nullable(formData, "website"),
+      phone: nullable(formData, "phone"),
+      notes: nullable(formData, "notes"),
+      company_number: nullable(formData, "company_number"),
+      vat_number: nullable(formData, "vat_number"),
+      lead_agent_id: lead,
+      ...address,
+      ...(geo ?? {}),
     })
     .select("id, name")
     .single();
   if (error || !data) return { error: error?.message ?? "Could not create company." };
+
+  await syncCompanyAgents(supabase, data.id, agencyId, extra);
 
   revalidatePath("/companies");
   return { created: { id: data.id, name: data.name }, message: `Added ${data.name}.` };

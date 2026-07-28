@@ -4,16 +4,25 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
+const SIZES = {
+  /** Confirmations and short forms. */
+  sm: "max-w-md",
+  /** A whole record form — the company/contact quick-create. */
+  lg: "max-w-2xl",
+} as const;
+
 /** Lightweight modal dialog, portalled to <body> so it never nests inside a parent <form>. */
 export function Modal({
   open,
   onClose,
   title,
+  size = "sm",
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
+  size?: keyof typeof SIZES;
   children: React.ReactNode;
 }) {
   React.useEffect(() => {
@@ -39,7 +48,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative z-10 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border bg-card p-5 shadow-lg"
+        className={`relative z-10 max-h-[90vh] w-full ${SIZES[size]} overflow-y-auto rounded-lg border bg-card p-5 shadow-lg`}
       >
         <div className="mb-4 flex items-center justify-between gap-4">
           <h2 className="text-base font-semibold text-foreground">{title}</h2>

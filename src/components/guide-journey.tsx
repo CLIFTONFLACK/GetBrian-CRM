@@ -287,7 +287,7 @@ const STEPS: Step[] = [
         path: "/requirements/new",
         src: "/guide/requirements-new.png",
         caption:
-          "Capture a brief — location, property, size, covers, fit-out, tenure and budget.",
+          "Capture a brief — location, use class, size, covers, tenure and budget.",
       },
       {
         path: "/requirements/…",

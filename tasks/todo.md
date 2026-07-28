@@ -453,3 +453,67 @@ Verified: next build GREEN (tsc clean) - sign-up -> Dashboard -> Listings -> Con
 NOT changed: the ~60 other auth.getUser() call sites in pages/actions - once functions are in-region each costs ~10ms, not worth the churn. Page query waterfalls (e.g. listings agents->detail, dashboard membership->profiles) similarly become negligible in-region.
 
 NOTE: region pin takes effect on the next Vercel deploy.
+
+## 2026-07-27 - Full-form modals, London zones/neighbourhoods, requirement form rework
+
+- [x] 0. `New Company -> Add contact` and `New Contact -> Add company` open the FULL form
+      in the modal. Extract `CompanyFormFields` / `ContactFormFields`; `Modal` gains `size`;
+      `CreatableSelect` gains `size` + `allowCreate` (blocks modal-in-modal recursion);
+      `quickCreate*` accept the full payload (address, geocode, agents, dup override).
+- [x] 1. London transport fare zones + neighbourhoods as targetable locations.
+      Curated `london-areas.json` (name, borough, zone, districts, centroid) ->
+      client-safe options via `scripts/build-london-areas.mjs`; new location kinds
+      `neighbourhood` + `zone`; migration adds `target_neighbourhoods` /
+      `target_london_zones`; scorer resolves them to text/district/proximity targets.
+- [x] 2. Use classes -> Pub, Bar, Nightclub, Hot food takeaway, Cafe, Gym, Leisure,
+      Restaurant, Other. Class E / A3 / A4 / A5 removed from the picker; enum values
+      added + existing rows backfilled. Matcher now scores `property_type` (the concept)
+      as a direct hit and `use_class` (the planning class) as partial credit.
+- [x] 3. Fit-out removed from requirements (listings keep `fit_out_state`).
+- [x] 4. Tenure -> Freehold / Leasehold only; leasehold now also covers assignments.
+- [x] 5. Property types removed (folded into use classes).
+- [x] 6. Section headers redesigned - numbered step + plain-English description instead
+      of the `-> matches ...` strings.
+- [x] 7. Requirement page: checkbox per MatchMaker opportunity + sticky bar to send
+      several listings to one contact in a single email.
+
+### Review
+
+Shipped 2026-07-28. `tsc` CLEAN - `eslint` CLEAN - `next build` GREEN - exercised end to end
+in the browser against a prod build with a throwaway QA agency.
+
+Migrations 0033 (additive: 2 columns + 6 enum values) and 0034 (backfill) applied to the
+live project with the user's go-ahead. Backfill verified: no `E` / `A3` / `A4` / `A5` /
+`sui_generis_pub_bar` / `assignment` / `new_letting` values remain.
+
+Key decisions
+- London data is ONE curated file (`src/lib/locations/data/london-areas.json`, 218 areas:
+  name, borough, fare zone, dominant postcode districts, centroid). Zones are derived from
+  it rather than stored separately, so "Zone 1" resolves to the union of its areas'
+  districts (a direct hit) plus a 2-mile proximity fallback. Neighbourhoods get a 3-mile
+  cap. Both caps exist because the flex slider can otherwise stretch a target 25 miles,
+  which is meaningless for Soho.
+- A district can sit in two zones (NW1 is in both Zone 1 and Zone 2 sets). Inherent to
+  district-level approximation; it errs toward inclusion, which is the right bias here.
+- Use class absorbed the old "property types" dimension (15 + 10 -> 20 of a 100-point
+  scale). The matcher now trusts a listing's `property_type` (the trading concept) over
+  its `use_class` (the planning class): concept hit = full credit, and a listing that
+  states a type it doesn't match scores zero rather than partial. Planning class is only a
+  fallback, at 0.6, for the ~40% of listings with no `property_type`.
+- Leasehold now maps to `new_lease` + `sublease` + `lease_assignment`, so retiring the
+  Assignment option loses no matching.
+- `property_types` / `fit_out_prefs` columns and data are kept, just unread - `payload()`
+  omits them, so saving a brief no longer blanks them.
+- Full-form modals avoid recursion by omitting the reciprocal picker rather than nesting
+  modals; `idPrefix` keeps modal input ids distinct from the page form's.
+
+Also fixed along the way
+- The location picker capped suggestions globally, so 1,448 towns buried everything else -
+  now capped per kind (all 9 zones always shown).
+- `Alert tone="error"` gets `role="alert"` so form errors are announced.
+
+NOT done (out of scope, flagged)
+- The public intake form's "Property type" now maps into `use_classes`; its own field is
+  unchanged.
+- Screenshots weren't possible - the Browser pane isn't displayed in this session, so the
+  page never composites frames. Verified structurally through the DOM instead.

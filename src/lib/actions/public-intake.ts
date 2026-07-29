@@ -7,7 +7,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import type { FormState } from "@/lib/actions/types";
 
 // The CDG agent who owns every publicly-submitted requirement, plus the
-// CliftonAi admin who is cc'd on the notification. Both resolved by email at
+// Brian-side admin who is cc'd on the notification. Both resolved by email at
 // submit time (no hardcoded UUIDs); overridable per-environment, with the
 // original values as fallbacks so nothing breaks when the vars are unset.
 const defaultAgentEmail = () =>

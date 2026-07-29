@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils";
 
 /**
- * The "Brian | CRM" lockup — the mark, the name, a navy rule, the tool.
+ * The "GetBrian | CRM" lockup — the mark, the wordmark, a navy rule, the tool.
  *
- * Two brand-book rules are load-bearing here and easy to break by accident:
+ * Three brand-book rules are load-bearing here and easy to break by accident:
  *
  *  1. The mark comes in three cuts and the *size* decides which. The display
  *     cut silts into mud below 40px, so anything smaller takes the compact cut,
@@ -13,9 +13,15 @@ import { cn } from "@/lib/utils";
  *     Grotesk Semibold, as here, is a deliberate near-match so the name stays
  *     selectable and indexable. Anywhere the wordmark is presentational —
  *     decks, social, print, favicons — use `brian-wordmark.svg` instead.
+ *  3. "Get" is navy and "Brian" is gold, matching the drawn wordmark. This is
+ *     the one place Brian Gold may sit on white at display size: it measures
+ *     3.1:1, which WCAG exempts for logotypes but which would fail for any
+ *     other text. Don't copy this colour pairing onto headings or labels — and
+ *     on navy grounds it becomes Gold Light, because the on-white gold ramp
+ *     goes muddy there.
  *
  * `tone="brand"` pins ink navy for the always-light public pages; `tone="app"`
- * follows the theme and swaps in the reversed mark on dark grounds.
+ * follows the theme and swaps in the reversed mark and Gold Light on dark.
  */
 export function BrandLockup({
   size = "sm",
@@ -56,10 +62,20 @@ export function BrandLockup({
         className={cn(
           "flex items-baseline font-heading font-semibold leading-none",
           lg ? "text-2xl" : "text-lg",
-          tone === "brand" ? "text-brand-ink" : "text-foreground",
         )}
       >
-        Brian
+        <span className={tone === "brand" ? "text-brand-navy" : "text-foreground"}>
+          Get
+        </span>
+        <span
+          className={
+            tone === "brand"
+              ? "text-brand-gold"
+              : "text-brand-gold dark:text-brand-gold-light"
+          }
+        >
+          Brian
+        </span>
         <span
           aria-hidden="true"
           className={cn(

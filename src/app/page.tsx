@@ -177,7 +177,7 @@ export default function LandingPage() {
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-y-3 px-6 py-4">
           <Link
             href="/"
-            aria-label="Brian CRM — home"
+            aria-label="GetBrian CRM — home"
             className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy-bright focus-visible:ring-offset-2"
           >
             <BrandLockup />
@@ -411,8 +411,9 @@ export default function LandingPage() {
                   )}
                 >
                   <span className="min-w-0">
-                    <span className="flex items-baseline font-heading text-sm font-semibold text-brand-navy">
-                      Brian
+                    <span className="flex items-baseline font-heading text-sm font-semibold">
+                      <span className="text-brand-navy">Get</span>
+                      <span className="text-brand-gold">Brian</span>
                       <span
                         aria-hidden="true"
                         className="mx-1.5 inline-block h-[0.85em] w-px self-center bg-brand-navy-bright"

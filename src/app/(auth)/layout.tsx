@@ -14,7 +14,7 @@ export default function AuthLayout({
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted/30 px-4 py-12">
       <Link
         href="/"
-        aria-label="Brian CRM — home"
+        aria-label="GetBrian CRM — home"
         className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         <BrandLockup size="lg" tone="app" />

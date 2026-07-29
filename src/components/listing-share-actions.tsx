@@ -45,7 +45,7 @@ export function ListingShareActions({
 
   async function handlePostToCdg() {
     const url = window.location.href;
-    const text = [title, summary, "", url, "", "Submitted via CliftonAi-CRM for listing on CDG Leisure."]
+    const text = [title, summary, "", url, "", "Submitted via Brian | CRM for listing on CDG Leisure."]
       .filter((line) => line !== undefined)
       .join("\n");
     try {

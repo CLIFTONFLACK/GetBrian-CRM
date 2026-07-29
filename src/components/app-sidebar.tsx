@@ -21,6 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { BrandLockup } from "@/components/brand-lockup";
 import { signOut } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
 
@@ -92,8 +93,7 @@ export function AppSidebar({
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
       <div className="flex h-16 items-center border-b px-4">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="CliftonAi-CRM" className="h-[49px] w-auto" />
+        <BrandLockup tone="app" />
       </div>
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">

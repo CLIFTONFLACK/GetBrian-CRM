@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
 import { NAV, visibleItems } from "@/components/app-sidebar";
+import { BrandLockup } from "@/components/brand-lockup";
 import { signOut } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
 
@@ -59,8 +60,7 @@ export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
             />
           <aside className="absolute inset-y-0 left-0 flex w-64 flex-col border-r bg-sidebar text-sidebar-foreground shadow-lg">
             <div className="flex h-16 items-center justify-between gap-2 border-b px-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.png" alt="CliftonAi-CRM" className="h-[49px] w-auto" />
+              <BrandLockup tone="app" />
               <button
                 ref={closeRef}
                 type="button"

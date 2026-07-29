@@ -2,111 +2,150 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ── SLC-CRM design tokens (see design-system/slc-crm/MASTER.md) ───────────── */
+/* ── Brian brand ramp ───────────────────────────────────────────────────────
+   Fixed values from the GetBrian brand field guide (v3, July 2026), sampled
+   from the logo artwork rather than eyeballed. These are BRAND constants, not
+   theme tokens: they never flip in dark mode, because the landing page is a
+   brand surface that is always ink-navy/gold on white.
+
+   The four golds are four different jobs — see the guide's "Why gold has four
+   values". Do not substitute one for another to "match the logo":
+     gold       3.1:1 on white — fills and logotype ONLY, never body text
+     gold-hover 4.7:1 vs ink   — CTA hover fill, ink text on top
+     gold-deep  5.3:1 on white — the only gold allowed as small text on white
+     gold-light                — gold on navy grounds only; the on-white ramp
+                                 goes muddy there                             */
+:root {
+  --brand-navy: #0a1d3b; /* masterbrand: the mark, headings, rules. 15.9:1 */
+  --brand-navy-mid: #14305c; /* gradient ramp only */
+  --brand-navy-soft: #24497f; /* body-safe navy for running text. 9.0:1 */
+  --brand-navy-bright: #35629f; /* focus rings, accents, keylines. 6.2:1 */
+  --brand-gold: #ba8b32;
+  --brand-gold-hover: #a87b2a;
+  --brand-gold-deep: #8a6520;
+  --brand-gold-light: #e0b84f;
+  --brand-ink: #14172b; /* body text and rules */
+  --brand-paper: #ffffff;
+  --brand-panel: #f2f3f6;
+  --brand-rule: rgba(20, 23, 43, 0.1);
+  --brand-rule-strong: rgba(20, 23, 43, 0.18);
+  --brand-ink-muted: #454a64;
+  --brand-ink-subtle: #6b7089;
+}
+
+/* ── SLC-CRM design tokens (see design-system/slc-crm/MASTER.md) ─────────────
+   The app chrome is driven off the brand ramp above. Navy is the workhorse
+   (--primary, sidebar, focus) because the guide reserves gold for shouting;
+   gold surfaces in the app only as --warning, where "pay attention" is the
+   whole point. */
 :root {
   --radius: 0.5rem;
 
   --background: #ffffff;
-  --foreground: #0f172a;
+  --foreground: #14172b;
 
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #14172b;
 
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
+  --popover-foreground: #14172b;
 
-  --primary: #0f766e; /* trust teal */
+  --primary: #0a1d3b; /* Brian Navy — masterbrand */
   --primary-foreground: #ffffff;
 
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
+  --secondary: #f2f3f6;
+  --secondary-foreground: #14172b;
 
-  --muted: #f1f5f9;
-  --muted-foreground: #475569;
+  --muted: #f2f3f6;
+  --muted-foreground: #454a64;
 
-  --accent: #f1f5f9; /* subtle hover surface (shadcn semantics) */
-  --accent-foreground: #0f172a;
+  --accent: #f2f3f6; /* subtle hover surface (shadcn semantics) */
+  --accent-foreground: #14172b;
 
-  --destructive: #dc2626;
+  --destructive: #c2261c;
   --destructive-foreground: #ffffff;
 
-  --success: #047857;
+  --success: #04704f;
   --success-foreground: #ffffff;
-  --warning: #b45309;
+  --warning: #8a6520; /* Gold Deep — the only gold that may set small text */
   --warning-foreground: #ffffff;
-  --info: #0369a1; /* professional blue — links / info */
+  --info: #35629f; /* Navy Bright — links / info */
   --info-foreground: #ffffff;
 
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #0f766e;
+  --border: #e3e6ec;
+  --input: #d9dde6;
+  --ring: #35629f; /* Navy Bright — the guide's focus-ring colour */
 
-  --chart-1: #0f766e;
-  --chart-2: #0369a1;
-  --chart-3: #b45309;
-  --chart-4: #7c3aed;
-  --chart-5: #475569;
+  --chart-1: #0a1d3b;
+  --chart-2: #35629f;
+  --chart-3: #ba8b32;
+  --chart-4: #7f96c4;
+  --chart-5: #6b7089;
 
-  --sidebar: #f8fafc;
-  --sidebar-foreground: #334155;
-  --sidebar-primary: #0f766e;
+  --sidebar: #f7f8fa;
+  --sidebar-foreground: #454a64;
+  --sidebar-primary: #0a1d3b;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ecfdf5;
-  --sidebar-accent-foreground: #0f766e;
-  --sidebar-border: #e2e8f0;
-  --sidebar-ring: #0f766e;
+  --sidebar-accent: #eaeef7;
+  --sidebar-accent-foreground: #0a1d3b;
+  --sidebar-border: #e3e6ec;
+  --sidebar-ring: #35629f;
 }
 
+/* Dark mode is app chrome only — the brand guide specifies light grounds and
+   says nothing about a dark theme. Grounds are navy-derived rather than slate,
+   and gold reverses to Gold Light, which is the guide's rule for gold sitting
+   on navy. The --brand-* ramp above deliberately does NOT flip here. */
 .dark {
-  --background: #0b1220;
-  --foreground: #e2e8f0;
+  --background: #0a1226;
+  --foreground: #e6e9f2;
 
-  --card: #0f172a;
-  --card-foreground: #e2e8f0;
+  --card: #101a35;
+  --card-foreground: #e6e9f2;
 
-  --popover: #0f172a;
-  --popover-foreground: #e2e8f0;
+  --popover: #101a35;
+  --popover-foreground: #e6e9f2;
 
-  --primary: #14b8a6;
-  --primary-foreground: #042f2e;
+  --primary: #97a7d6;
+  --primary-foreground: #0a1d3b;
 
-  --secondary: #1e293b;
-  --secondary-foreground: #e2e8f0;
+  --secondary: #1b2545;
+  --secondary-foreground: #e6e9f2;
 
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
+  --muted: #1b2545;
+  --muted-foreground: #a9aec4;
 
-  --accent: #1e293b;
-  --accent-foreground: #e2e8f0;
+  --accent: #1b2545;
+  --accent-foreground: #e6e9f2;
 
-  --destructive: #f87171;
-  --destructive-foreground: #450a0a;
+  --destructive: #f39a94;
+  --destructive-foreground: #3d0b07;
 
-  --success: #6ee7b7;
-  --success-foreground: #022c22;
-  --warning: #fcd34d;
-  --warning-foreground: #1c1407;
-  --info: #7dd3fc;
-  --info-foreground: #08243a;
+  --success: #6ecfae;
+  --success-foreground: #032a20;
+  --warning: #e0b84f; /* Gold Light — gold on navy grounds */
+  --warning-foreground: #2a2103;
+  --info: #cdd7ff;
+  --info-foreground: #0a1d3b;
 
-  --border: #1e293b;
-  --input: #334155;
-  --ring: #2dd4bf;
+  --border: #1f2a4d;
+  --input: #2b3767;
+  --ring: #97a7d6;
 
-  --chart-1: #2dd4bf;
-  --chart-2: #38bdf8;
-  --chart-3: #fbbf24;
-  --chart-4: #a78bfa;
-  --chart-5: #94a3b8;
+  --chart-1: #97a7d6;
+  --chart-2: #cdd7ff;
+  --chart-3: #e0b84f;
+  --chart-4: #5b81c4;
+  --chart-5: #a9aec4;
 
-  --sidebar: #0b1220;
-  --sidebar-foreground: #cbd5e1;
-  --sidebar-primary: #14b8a6;
-  --sidebar-primary-foreground: #042f2e;
-  --sidebar-accent: #042f2e;
-  --sidebar-accent-foreground: #2dd4bf;
-  --sidebar-border: #1e293b;
-  --sidebar-ring: #2dd4bf;
+  --sidebar: #0a1226;
+  --sidebar-foreground: #c3c9da;
+  --sidebar-primary: #97a7d6;
+  --sidebar-primary-foreground: #0a1d3b;
+  --sidebar-accent: #16224a;
+  --sidebar-accent-foreground: #cdd7ff;
+  --sidebar-border: #1f2a4d;
+  --sidebar-ring: #97a7d6;
 }
 
 /* ── Map tokens into Tailwind's theme (v4 CSS-first) ───────────────────────── */
@@ -150,13 +189,41 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-navy-mid: var(--brand-navy-mid);
+  --color-brand-navy-soft: var(--brand-navy-soft);
+  --color-brand-navy-bright: var(--brand-navy-bright);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-gold-hover: var(--brand-gold-hover);
+  --color-brand-gold-deep: var(--brand-gold-deep);
+  --color-brand-gold-light: var(--brand-gold-light);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-ink-muted: var(--brand-ink-muted);
+  --color-brand-ink-subtle: var(--brand-ink-subtle);
+  --color-brand-paper: var(--brand-paper);
+  --color-brand-panel: var(--brand-panel);
+  --color-brand-rule: var(--brand-rule);
+  --color-brand-rule-strong: var(--brand-rule-strong);
+
+  --font-sans: var(--font-body);
+  --font-heading: var(--font-heading);
+  --font-mono: var(--font-mono-family);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ── Brand surface ──────────────────────────────────────────────────────────
+   The public pages are brand artwork, not app chrome: ink navy and gold on
+   white, in both themes. `.brand-surface` pins the ground so a visitor whose
+   OS prefers dark still gets the brand as specified, and `color-scheme`
+   keeps form controls and scrollbars light to match. */
+.brand-surface {
+  background: var(--brand-paper);
+  color: var(--brand-ink);
+  color-scheme: light;
 }
 
 /* ── Quick Guide onboarding animations ─────────────────────────────────────

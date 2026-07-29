@@ -1,4 +1,4 @@
-# Design System — Brian | CRM (app layer)
+# Design System — GetBrian | CRM (app layer)
 
 > **This file is no longer the source of truth for brand.**
 > Colour, typography, and logo are governed by the **GetBrian brand field guide**
@@ -13,7 +13,7 @@
 > If it exists, its rules **override** this file. Otherwise follow this file, and the
 > brand book above it.
 
-**Project:** Brian | CRM — B2B CRM for the UK leisure & licensed commercial-property sector
+**Project:** GetBrian | CRM — B2B CRM for the UK leisure & licensed commercial-property sector
 **Style:** Minimalism & Swiss — clean, dense, functional, grid-based, high-contrast
 **Reference feel:** Kato / Linear / modern property-tech (utilitarian, trustworthy, fast)
 **Stack:** Next.js 16 (App Router) · TypeScript · Tailwind v4 · shadcn/ui

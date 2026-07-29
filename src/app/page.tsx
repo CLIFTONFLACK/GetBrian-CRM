@@ -5,7 +5,7 @@ import { BrandLockup } from "@/components/brand-lockup";
 import { cn } from "@/lib/utils";
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   Brian | CRM — the public marketing page.
+   GetBrian | CRM — the public marketing page.
 
    This is a brand surface, not app chrome. Everything below is drawn from the
    fixed `brand-*` ramp rather than the semantic theme tokens, so a visitor

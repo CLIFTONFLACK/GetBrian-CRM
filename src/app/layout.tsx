@@ -24,7 +24,7 @@ const monoFont = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://crm.cliftonai.co"),
+  metadataBase: new URL("https://crm.getbrian.xyz"),
   title: {
     default: "Brian | CRM — Leisure & Licensed Property",
     template: "%s · Brian | CRM",

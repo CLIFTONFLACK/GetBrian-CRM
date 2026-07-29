@@ -20,22 +20,24 @@ import { cn } from "@/lib/utils";
    fill/logotype colour only.
    ───────────────────────────────────────────────────────────────────────── */
 
-/** Brian's other tools, for the cross-sell footer band. */
+/** Brian's other tools, for the cross-sell footer band. The legacy
+    `*.cliftonai.co` hosts still answer, but cliftonai.co is being retired —
+    crm.cliftonai.co is already gone — so link the getbrian.xyz names. */
 const SIBLINGS = [
   {
     name: "ContentFlow",
     tag: "Content operations for WordPress",
-    href: "https://flow.cliftonai.co",
+    href: "https://flow.getbrian.xyz",
   },
   {
     name: "DiffDoc",
     tag: "Document comparison",
-    href: "https://diffdoc.cliftonai.co",
+    href: "https://diffdoc.getbrian.xyz",
   },
   {
     name: "DealMaker",
     tag: "Deal pipeline for small business",
-    href: "https://dealmaker.cliftonai.co",
+    href: "https://dealmaker.getbrian.xyz",
   },
 ];
 

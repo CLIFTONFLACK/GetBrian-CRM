@@ -435,19 +435,37 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-sm text-brand-ink-subtle sm:flex-row">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-4 px-6 py-8 text-sm text-brand-ink-subtle">
           <BrandLockup />
-          <span>
-            Built for leisure &amp; licensed-sector agents ·{" "}
-            <a
-              href="https://getbrian.xyz"
-              target="_blank"
-              rel="noopener"
-              className="font-medium text-brand-navy-soft underline-offset-4 hover:underline"
-            >
-              Built by Brian
-            </a>
-          </span>
+          <span>Built for leisure &amp; licensed-sector agents</span>
+          {/* The "Built by GetBrian" endorsement badge, ported from ContentFlow's
+              footer so the credit reads identically across the portfolio: compact
+              mark at 20px, pill keyline, "GetBrian" in Space Grotesk Semibold navy,
+              the whole thing going navy on hover. Deliberately quieter than the
+              product lockup above it — it's a credit, not a second logo. */}
+          <a
+            href="https://getbrian.xyz"
+            target="_blank"
+            rel="noopener"
+            className={cn(
+              "inline-flex items-center gap-2 rounded-full border border-brand-rule-strong px-3.5 py-1.5",
+              "text-[0.85rem] text-brand-ink-muted",
+              "transition-colors duration-200 hover:border-brand-navy hover:text-brand-navy",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy-bright focus-visible:ring-offset-2",
+            )}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/brian-mark-compact.svg"
+              alt=""
+              aria-hidden="true"
+              className="h-5 w-auto"
+            />
+            <span>
+              Built by{" "}
+              <b className="font-heading font-semibold text-brand-navy">GetBrian</b>
+            </span>
+          </a>
         </div>
       </footer>
     </div>

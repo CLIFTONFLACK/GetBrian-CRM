@@ -26,15 +26,15 @@ const monoFont = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://crm.getbrian.xyz"),
   title: {
-    default: "GetBrian | CRM — Leisure & Licensed Property",
-    template: "%s · GetBrian | CRM",
+    default: "CRM by GetBrian — CRM — UK Leisure Property Agents",
+    template: "%s · CRM by GetBrian",
   },
   description:
     "The CRM that speaks fluent licensed premises. Track operators, landlords and listings, and let MatchMaker score every requirement against every listing. Built by Brian.",
   openGraph: {
     type: "website",
-    siteName: "GetBrian | CRM",
-    title: "GetBrian | CRM — Leisure & Licensed Property",
+    siteName: "CRM by GetBrian",
+    title: "CRM by GetBrian — CRM — UK Leisure Property Agents",
     description:
       "The CRM that speaks fluent licensed premises. MatchMaker scores every requirement against every listing, on the detail that actually decides a leisure deal.",
     images: ["/brand/og-image.png"],

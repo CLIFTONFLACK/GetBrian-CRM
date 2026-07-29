@@ -60,7 +60,7 @@ export function BrandLockup({
       )}
       <span
         className={cn(
-          "flex items-baseline font-heading font-semibold leading-none",
+          "flex items-baseline font-heading font-semibold leading-none tracking-[-0.02em]",
           lg ? "text-2xl" : "text-lg",
         )}
       >
@@ -76,20 +76,25 @@ export function BrandLockup({
         >
           Brian
         </span>
-        <span
-          aria-hidden="true"
-          className={cn(
-            "mx-2 inline-block h-[0.9em] w-0.5 self-center",
-            tone === "brand" ? "bg-brand-navy-bright" : "bg-primary",
-          )}
-        />
-        <span
-          className={cn(
-            "font-medium tracking-tight",
-            tone === "brand" ? "text-brand-ink-muted" : "text-muted-foreground",
-          )}
-        >
-          CRM
+        {/* Below 520px the product word drops and the masterbrand stands alone,
+            matching ContentFlow. On a 375px header, "GetBrian | CRM" beside the
+            mark crowds out the nav. */}
+        <span className="flex items-baseline max-[519px]:hidden">
+          <span
+            aria-hidden="true"
+            className={cn(
+              "mx-2 inline-block h-[0.9em] w-0.5 self-center",
+              tone === "brand" ? "bg-brand-navy-bright" : "bg-primary",
+            )}
+          />
+          <span
+            className={cn(
+              "font-medium tracking-tight",
+              tone === "brand" ? "text-brand-ink-muted" : "text-muted-foreground",
+            )}
+          >
+            CRM
+          </span>
         </span>
       </span>
     </span>

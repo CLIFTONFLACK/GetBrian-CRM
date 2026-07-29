@@ -10,7 +10,11 @@ import {
 
 import { BRAND_FONT } from "./fonts";
 
-// CDG Leisure brand palette (sampled from the reference particulars PDF).
+// CDG Leisure brand palette (sampled from the reference particulars PDF) — NOT the
+// product's. These particulars go out under the client agency's name, so they stay CDG
+// teal even though the app itself is now on the Brian navy/gold ramp. Hard-coded rather
+// than read from the design tokens precisely so a product rebrand can't leak into
+// client-facing paperwork.
 const TEAL = "#1ab6b6";
 const BLACK = "#000000";
 const INK = "#1a1a1a";

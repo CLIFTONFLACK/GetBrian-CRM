@@ -1,18 +1,23 @@
-# Design System — SLC-CRM (Master / Source of Truth)
+# Design System — Brian | CRM (app layer)
+
+> **This file is no longer the source of truth for brand.**
+> Colour, typography, and logo are governed by the **GetBrian brand field guide**
+> (v3, July 2026) at `C:\Users\clift\Ai-Projects\CliftonAi\docs\brand-book.html`.
+> Where this file and the brand book disagree, **the brand book wins.**
+>
+> What remains here is the app-specific layer the brand book doesn't cover: density,
+> component patterns, data-table behaviour, and the a11y gates. The brand book is a
+> brand document — it says nothing about how a 40px table row should behave.
 
 > **LOGIC:** When building a page, first check `design-system/slc-crm/pages/[page].md`.
-> If it exists, its rules **override** this file. Otherwise follow this file strictly.
+> If it exists, its rules **override** this file. Otherwise follow this file, and the
+> brand book above it.
 
-**Project:** SLC-CRM — B2B CRM for the UK leisure & licensed commercial-property sector
+**Project:** Brian | CRM — B2B CRM for the UK leisure & licensed commercial-property sector
 **Style:** Minimalism & Swiss — clean, dense, functional, grid-based, high-contrast
 **Reference feel:** Kato / Linear / modern property-tech (utilitarian, trustworthy, fast)
-**Stack:** Next.js 16 (App Router) · TypeScript · Tailwind v4 · shadcn/ui · Geist
+**Stack:** Next.js 16 (App Router) · TypeScript · Tailwind v4 · shadcn/ui
 **Surface:** desktop-first internal tool (data-dense), responsive down to tablet/mobile
-
-> **Corrections vs auto-generated draft:** the generator over-indexed on "real estate
-> luxury" and proposed display serifs (Cinzel/Josefin) and a landing-page "Before-After"
-> pattern. Both are **rejected** — this is an internal data tool, not a brochure. We keep
-> only the *Swiss minimalism* style and the *trust-teal + professional-blue* palette.
 
 ---
 
@@ -20,65 +25,43 @@
 
 1. **Density with air** — show a lot without clutter. Tight, consistent spacing; let whitespace and hairline borders (not shadows) do the separating.
 2. **Legibility first** — numbers, money, areas and references are the product. Tabular, monospaced figures; never let type styling fight the data.
-3. **Calm chrome, loud data** — UI furniture (nav, toolbars) is neutral slate; colour is reserved for status, meaning and the single primary action.
-4. **One primary action per view** — teal primary button. Everything else is secondary/ghost.
+3. **Calm chrome, loud data** — UI furniture (nav, toolbars) is neutral; colour is reserved for status, meaning and the single primary action.
+4. **One primary action per view** — navy primary button. Everything else is secondary/ghost.
 5. **Status is colour-coded and labelled** — colour is never the *only* signal (a11y); always pair with text/icon.
 6. **Keyboard-first** — this is a tool used all day. Visible focus rings, logical tab order, `/` to search, shortcuts where sensible.
 
 ---
 
-## 2. Color tokens (shadcn-compatible, light + dark)
+## 2. Colour — see the brand book
 
-Token names match shadcn/ui so components theme automatically. Values are authored as
-HSL channels in `globals.css` under `@theme` / `:root` / `.dark` (Tailwind v4 — exact
-syntax confirmed during stack research before implementation).
+The palette is the **Brian ramp**, defined once in `src/app/globals.css` and documented in
+chapter 03 of the brand book. Don't restate hex values here; read them from `globals.css`,
+which carries the contrast figures inline.
 
-### Core (light → dark)
+Three rules govern everything and are the ones people break:
 
-| Token | Light | Dark | Use |
-|---|---|---|---|
-| `--background` | `#FFFFFF` | `#0B1220` | App background |
-| `--foreground` | `#0F172A` (slate-900) | `#E2E8F0` (slate-200) | Primary text |
-| `--card` | `#FFFFFF` | `#0F172A` | Card/surface |
-| `--card-foreground` | `#0F172A` | `#E2E8F0` | Text on card |
-| `--popover` / `--popover-foreground` | `#FFFFFF` / `#0F172A` | `#0F172A` / `#E2E8F0` | Menus, dropdowns |
-| `--muted` | `#F1F5F9` (slate-100) | `#1E293B` (slate-800) | Subtle fills, table header |
-| `--muted-foreground` | `#475569` (slate-600) | `#94A3B8` (slate-400) | Secondary text, labels |
-| `--border` | `#E2E8F0` (slate-200) | `#1E293B` (slate-800) | Hairlines, dividers |
-| `--input` | `#E2E8F0` | `#334155` (slate-700) | Input borders |
-| `--ring` | `#0F766E` (teal-700) | `#2DD4BF` (teal-400) | Focus ring |
-
-### Brand & action
-
-| Token | Light | Dark | Use |
-|---|---|---|---|
-| `--primary` | `#0F766E` (teal-700) | `#14B8A6` (teal-500) | Primary buttons, active nav, key accents |
-| `--primary-foreground` | `#FFFFFF` | `#042F2E` | Text on primary |
-| `--secondary` | `#F1F5F9` | `#1E293B` | Secondary buttons |
-| `--secondary-foreground` | `#0F172A` | `#E2E8F0` | Text on secondary |
-| `--accent` | `#0369A1` (sky-700) | `#38BDF8` (sky-400) | Links, info accents, focus highlights |
-| `--accent-foreground` | `#FFFFFF` | `#082F49` | Text on accent |
-| `--destructive` | `#DC2626` (red-600) | `#F87171` (red-400) | Destructive actions |
-| `--destructive-foreground` | `#FFFFFF` | `#450A0A` | Text on destructive |
-
-Primary teal carries WCAG AA on white (#0F766E ≈ 4.7:1). Use `primary` for the one main
-action; use `accent` (blue) for hyperlinks and informational emphasis so the two never
-compete.
-
-### Semantic status (fills are `-50/-100` tints in light, `-950/900` in dark; text is `-700/-300`)
-
-| Meaning | Hue | Light text / fill | Dark text / fill |
-|---|---|---|---|
-| Success / positive | emerald | `#047857` / `#ECFDF5` | `#6EE7B7` / `#022C22` |
-| Warning / pending | amber | `#B45309` / `#FFFBEB` | `#FCD34D` / `#1C1407` |
-| Danger / negative | red | `#B91C1C` / `#FEF2F2` | `#FCA5A5` / `#1A0606` |
-| Info / neutral-note | sky | `#0369A1` / `#F0F9FF` | `#7DD3FC` / `#08243A` |
+1. **Navy is the workhorse, gold is a shout.** `--primary`, the sidebar, focus rings and
+   links are all navy. Gold appears in app chrome *only* as `--warning`, where "pay
+   attention" is the entire point. Don't reach for gold to make something look branded.
+2. **Gold has four values doing four jobs.** Brian Gold `#BA8B32` is 3.1:1 on white — a
+   fill and logotype colour only, never body text. Small gold text on white takes Gold
+   Deep; hover fills take Gold Hover; on navy grounds gold becomes Gold Light. Never
+   substitute one for another "to match the logo".
+3. **`--brand-*` tokens do not flip in dark mode, by design.** They are brand constants.
+   The semantic tokens (`--primary`, `--card`, …) *do* flip. Public pages are built from
+   `--brand-*` plus `.brand-surface` so they stay ink-navy/gold-on-white for a visitor
+   whose OS prefers dark; app chrome is built from the semantic tokens so it themes.
 
 ### Domain badge palettes (CRM-specific — always label + colour)
 
+These are **categorical** colours for meaning, deliberately independent of the brand
+ramp — a status palette needs hues that are distinguishable from each other, which is a
+different job from brand identity. Implemented as a typed map in `src/lib/badges.ts`,
+not ad-hoc classes, so colour↔meaning stays consistent.
+
 **Listing status:** Available → emerald · Under Offer (U.O.) → amber · Let → sky · Sold → violet · Withdrawn/Unavailable → slate.
 
-**Deal stage (sequential, left→right warm-to-cool):** Lead → slate · Viewing → sky · Offer → amber · Heads of Terms → indigo · Legal → violet · Completed → emerald · Fell through → red.
+**Deal stage (sequential, warm-to-cool):** Lead → slate · Viewing → sky · Offer → amber · Heads of Terms → indigo · Legal → violet · Completed → emerald · Fell through → red.
 
 **Use class:** E (Commercial/Business/Service) → sky · Sui Generis–Pub/Bar → violet · Sui Generis–Nightclub → indigo · Sui Generis–Hot-food takeaway → orange · Legacy A3/A4/A5 → slate (with the letter shown).
 
@@ -86,27 +69,29 @@ compete.
 
 **Tenure:** Freehold → emerald · Leasehold → sky · Assignment → amber · New letting → teal.
 
-> Implement these as a typed `badgeVariant(domain, value)` map, not ad-hoc classes, so
-> colour↔meaning stays consistent everywhere.
-
-### chart-1…5 (for the dashboard, colour-blind-safer ordering)
-`#0F766E` (teal) · `#0369A1` (blue) · `#B45309` (amber) · `#7C3AED` (violet) · `#475569` (slate).
-
-### sidebar tokens
-`--sidebar` `#F8FAFC` (light) / `#0B1220` (dark); `--sidebar-foreground` slate-700/300;
-`--sidebar-accent` (hover/active) teal-50 / teal-950; `--sidebar-border` slate-200/800.
+> **Known inconsistency:** `teal` is currently doing double duty as the *default positive*
+> tone (match scores ≥50%, operator companies, CDG listings) as well as a categorical hue.
+> That was a fit with the old trust-teal brand and now reads as leftover on the densest
+> screens. Retoning the default-positive uses to navy is an open item; the genuinely
+> categorical uses can stay.
 
 ---
 
-## 3. Typography
+## 3. Typography — see the brand book
 
-- **UI / body:** **Geist Sans** (already bundled via `next/font` — no network cost).
-- **Numeric / tabular / references:** **Geist Mono** — money, sq ft / sq m, covers, rates, dates, IDs, postcodes. Use `font-variant-numeric: tabular-nums`.
-- Rationale: Geist is a neutral grotesque (Linear-like) ideal for dense UI; mono for data keeps columns aligned and scannable. **No display serifs.**
+- **Headings:** **Space Grotesk** — `font-heading`, loaded in `src/app/layout.tsx`.
+- **UI / body:** **DM Sans** — `font-sans`.
+- **Numeric / tabular / references:** **Geist Mono** — `font-mono`. Money, sq ft / sq m,
+  covers, rates, dates, IDs, postcodes. Use `font-variant-numeric: tabular-nums`.
+
+The brand book fixes the first two and is silent on mono, which is why mono stayed Geist.
+Note the wordmark itself is drawn artwork; setting "Brian" as live text in Space Grotesk
+Semibold (as `BrandLockup` does) is a deliberate near-match so the name stays selectable
+and indexable — for presentational uses take `brian-wordmark.svg` instead.
 
 | Role | Size | Weight | Line-height | Notes |
 |---|---|---|---|---|
-| Display (marketing h1) | 32–40px | 600 | 1.1 | Public pages only |
+| Display (marketing h1) | 36–48px | 600 | 1.1 | Public pages only |
 | Page title (h1) | 24px | 600 | 1.25 | App page header |
 | Section (h2) | 18px | 600 | 1.3 | Card/section headers |
 | Subsection (h3) | 15px | 600 | 1.4 | |
@@ -116,7 +101,7 @@ compete.
 | Data (mono) | 13–14px | 500 | 1.4 | `tabular-nums` |
 
 > **Mobile a11y:** form `<input>`/`<textarea>` font-size **≥16px** to prevent iOS zoom,
-> even though the desktop UI base is 14px.
+> even though the desktop UI base is 14px. Marketing body copy is 16px, not 14px.
 
 ---
 
@@ -131,32 +116,40 @@ compete.
 
 ## 5. Component patterns
 
-**App shell:** fixed left **sidebar** (240px, collapsible to 64px icon-rail) + **top bar** (56px: global search, create, notifications, account) + scrollable content (`max-w` none for tables; `max-w-3xl` for forms).
+**App shell:** fixed left **sidebar** (240px) + **top bar** (56px: global search, create, notifications, account) + scrollable content (`max-w` none for tables; `max-w-3xl` for forms). The sidebar and mobile drawer both open with `BrandLockup tone="app"`.
 
-**Sidebar nav:** grouped sections (Workspace / Records / Insights). Item = icon + label, 36px tall, `rounded-md`; active = teal text + `--sidebar-accent` fill + 2px left teal marker; hover = muted fill. Lucide icons, 18px.
+**Sidebar nav:** grouped sections (Workspace / CRM / Dealflow / Settings). Item = icon + label, 36px tall, `rounded-md`; active = primary text + `--sidebar-accent` fill; hover = muted fill. Lucide icons, 18px.
 
 **Data table** (the workhorse): sticky header (`--muted`, 12px uppercase labels), 40px rows (compact mode 32px), hairline row borders, zebra optional, hover row highlight, checkbox column for bulk actions, right-aligned numeric/mono columns, sortable headers, sticky first column on overflow, `overflow-x-auto` wrapper. Bulk action bar appears on selection. Empty state with icon + primary CTA. Always offer pagination or virtualization for >100 rows.
 
 **Filter bar:** above tables — segmented/pill filters + search + faceted dropdowns (town, use class, status, tenure, £ range, sq ft range). Active filters render as removable chips; "Clear all".
 
-**Cards:** `border` + `rounded-lg` + `p-4/6`, header (h2 + optional action), no default shadow; hover only if the whole card is a link (then `cursor-pointer` + subtle border/bg change, **no layout-shifting scale**).
+**Cards:** `border` + `rounded-lg` + `p-4/6`, header (h2 + optional action), no default shadow; hover only if the whole card is a link (then `cursor-pointer` + subtle border/bg change, **no layout-shifting scale**). Note `CardContent` zeroes top padding at `sm:` and up — headerless form cards need `pt-4 sm:pt-6`.
 
-**Forms:** single column, grouped fieldsets, labels above inputs, 16px inputs, helper/error text below, required `*`, validate on blur, inline errors near field, sticky save bar on long forms, disabled+spinner on submit, optimistic where safe. Use react-hook-form + zod (confirm in stack research).
+**Forms:** single column, grouped fieldsets, labels above inputs, 16px inputs, helper/error text below, required `*`, validate on blur, inline errors near field, sticky save bar on long forms, disabled+spinner on submit.
 
 **Badges/pills:** `rounded-md`/`rounded-full`, 12px, 500 weight, tint fill + darker text per the domain palettes above; always include a text label (never colour-only).
 
 **Activity timeline:** vertical line, dot per event (type-coloured), actor + verb + target + relative time; group by day.
 
-**Buttons:** primary (teal solid) · secondary (slate outline) · ghost (text) · destructive (red). 36px default height, `rounded-md`, `cursor-pointer`, focus-visible ring.
+**Buttons:** primary (navy solid) · secondary (outline) · ghost (text) · destructive (red). 36px default height in-app, ≥44px on public pages, `rounded-md`, `cursor-pointer`, focus-visible ring.
 
 **Toasts/feedback:** bottom-right, status-coloured left border + icon; loading→success/error on all mutations.
+
+### Generated PDFs are a different brand
+
+`src/lib/pdf/*` renders **CDG Leisure's** identity, not Brian's — those documents go out
+under the client agency's name, so they keep CDG's teal `#1ab6b6` and their own type. The
+colours are hard-coded in those files rather than read from tokens, precisely so a
+product-brand change can't leak into client-facing particulars. Don't "fix" them to match
+the app. INTEL listings render an unbranded variant with no CDG marks at all.
 
 ---
 
 ## 6. Accessibility & quality gates (enforced pre-delivery)
 
 - [ ] Contrast ≥ 4.5:1 body / 3:1 large & UI; **colour never the only signal**
-- [ ] Visible `focus-visible` rings (teal `--ring`) on every interactive element
+- [ ] Visible `focus-visible` rings (`--ring`, Navy Bright) on every interactive element
 - [ ] Icon-only buttons have `aria-label`; images have alt; inputs have `<label for>`
 - [ ] Tab order matches visual order; menus/dialogs keyboard-operable + focus-trapped
 - [ ] Touch targets ≥ 44px on mobile; `cursor-pointer` on all clickables
@@ -164,14 +157,21 @@ compete.
 - [ ] Tables: `overflow-x-auto`, header `scope`, caption/`aria` where useful
 - [ ] Responsive at 375 / 768 / 1024 / 1440; no horizontal page scroll on mobile
 - [ ] Dark mode verified (borders & muted text visible in both themes)
+- [ ] Public pages verified with `.dark` forced on `<html>` — they must stay light
 
 ## 7. Anti-patterns (do NOT use)
 
-- ❌ Display serifs / luxury brochure fonts (Cinzel, Josefin, Playfair) — this is a tool
+- ❌ Semantic tokens (`bg-card`, `text-muted-foreground`) inside `src/app/page.tsx` — the public page must be built from `--brand-*` or it half-flips in dark mode
+- ❌ Brian Gold as body text, captions or icon labels (3.1:1) — small gold text on white is Gold Deep only
+- ❌ Deleting the mark's gold traces, or using `brian-mark-solo.svg` on its own — without traces the B reads as a "3"
+- ❌ The display mark below 40px — use the compact cut
+- ❌ Hand-editing `public/brand/*` — it's generated in the CliftonAi repo by `npm run brand`
+- ❌ Retoning the PDF templates to the app palette — they're CDG's brand
+- ❌ Display serifs / luxury brochure fonts — this is a tool
 - ❌ Landing-page "conversion" patterns inside the app
 - ❌ Emojis as icons (use Lucide SVG)
 - ❌ Shadow-heavy "card soup" — prefer borders; reserve shadow for floating layers
-- ❌ Colour-only status; low-contrast slate-400 body text in light mode
+- ❌ Colour-only status; low-contrast body text in light mode
 - ❌ Layout-shifting hover scales; instant (un-transitioned) state changes
 - ❌ Proportional figures in data columns (use `tabular-nums` mono)
 - ❌ Full-width form fields stretched across the whole screen (cap at `max-w-3xl`)

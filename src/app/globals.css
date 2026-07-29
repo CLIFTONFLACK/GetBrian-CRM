@@ -33,7 +33,11 @@
   --brand-ink-subtle: #6b7089;
 }
 
-/* ── SLC-CRM design tokens (see design-system/slc-crm/MASTER.md) ─────────────
+/* ── App design tokens ──────────────────────────────────────────────────────
+   Brand authority is the GetBrian field guide (see the ramp above);
+   design-system/slc-crm/MASTER.md covers the app layer on top of it — density,
+   component patterns, a11y gates.
+
    The app chrome is driven off the brand ramp above. Navy is the workhorse
    (--primary, sidebar, focus) because the guide reserves gold for shouting;
    gold surfaces in the app only as --warning, where "pay attention" is the

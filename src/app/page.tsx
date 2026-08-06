@@ -3,6 +3,7 @@ import { ArrowUpRight, Check, Handshake } from "lucide-react";
 
 import { BrandLockup } from "@/components/brand-lockup";
 import { cn } from "@/lib/utils";
+import { StickyCta } from "./sticky-cta";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    GetBrian | CRM — the public marketing page.
@@ -178,7 +179,7 @@ export default function LandingPage() {
           <Link
             href="/"
             aria-label="GetBrian CRM — home"
-            className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy-bright focus-visible:ring-offset-2"
+            className="inline-flex min-h-11 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy-bright focus-visible:ring-offset-2"
           >
             <BrandLockup />
           </Link>
@@ -224,7 +225,7 @@ export default function LandingPage() {
                 pairings worth your morning at the top.
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-3">
-                <Link href="/sign-up" className={CTA_GOLD}>
+                <Link href="/sign-up" id="hero-cta" className={CTA_GOLD}>
                   Start free — takes a minute
                 </Link>
                 <Link href="/login" className={CTA_QUIET}>
@@ -448,7 +449,7 @@ export default function LandingPage() {
             target="_blank"
             rel="noopener"
             className={cn(
-              "inline-flex items-center gap-2 rounded-full border border-brand-rule-strong px-3.5 py-1.5",
+              "inline-flex min-h-11 items-center gap-2 rounded-full border border-brand-rule-strong px-3.5 py-1.5",
               "text-[0.85rem] text-brand-ink-muted",
               "transition-colors duration-200 hover:border-brand-navy hover:text-brand-navy",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy-bright focus-visible:ring-offset-2",
@@ -468,6 +469,8 @@ export default function LandingPage() {
           </a>
         </div>
       </footer>
+
+      <StickyCta href="/sign-up" label="Start free" watchId="hero-cta" />
     </div>
   );
 }

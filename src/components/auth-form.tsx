@@ -28,6 +28,9 @@ export function AuthForm({
   const isSignUp = mode === "sign-up";
 
   return (
+    // h-11 / h-12 override the shadcn defaults of h-9 (36px). This is the one
+    // form every account starts at and it is overwhelmingly reached on a
+    // phone, where 36px is under the 44px minimum touch target.
     <form action={formAction} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="email">Work email</Label>
@@ -37,6 +40,7 @@ export function AuthForm({
           type="email"
           autoComplete="email"
           placeholder="you@agency.co.uk"
+          className="h-11"
           required
         />
       </div>
@@ -50,6 +54,7 @@ export function AuthForm({
           autoComplete={isSignUp ? "new-password" : "current-password"}
           placeholder="••••••••"
           minLength={8}
+          className="h-11"
           required
         />
       </div>
@@ -57,7 +62,7 @@ export function AuthForm({
       {state.error ? <Alert tone="error">{state.error}</Alert> : null}
       {state.message ? <Alert tone="success">{state.message}</Alert> : null}
 
-      <Button type="submit" className="w-full" disabled={pending}>
+      <Button type="submit" className="h-12 w-full" disabled={pending}>
         {pending
           ? isSignUp
             ? "Creating account…"

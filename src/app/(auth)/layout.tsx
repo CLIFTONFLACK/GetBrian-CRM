@@ -24,7 +24,7 @@ export default function AuthLayout({
         href="https://getbrian.xyz"
         target="_blank"
         rel="noopener"
-        className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        className="inline-flex min-h-11 items-center px-3 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
       >
         Built by Brian
       </a>

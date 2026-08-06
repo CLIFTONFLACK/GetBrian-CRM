@@ -261,12 +261,30 @@
     @apply bg-background text-foreground font-sans;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
-  /* UI base is 14px, but keep inputs >=16px on mobile to avoid iOS zoom-on-focus */
-  @media (max-width: 640px) {
-    input,
-    textarea,
-    select {
-      font-size: 16px;
-    }
+}
+
+/* UI base is 14px, but iOS Safari force-zooms the viewport whenever a focused
+   field is under 16px — and never zooms back out.
+ *
+ * This rule was previously inside `@layer base`, where it did nothing: a
+ * base-layer declaration loses to any utility, and the shadcn `Input`
+ * component carries `text-sm`. The live /login fields still measured 14px.
+ * Left deliberately UNLAYERED — unlayered CSS outranks every @layer, including
+ * Tailwind's utilities, so this wins without !important. */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px;
   }
+}
+
+html {
+  /* Anchored jumps otherwise land under any sticky header. */
+  scroll-padding-top: 5rem;
+}
+
+body {
+  /* Stops rubber-band scroll chaining to browser chrome / pull-to-refresh. */
+  overscroll-behavior-y: none;
 }

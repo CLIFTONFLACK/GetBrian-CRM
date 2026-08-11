@@ -49,10 +49,17 @@ export type Requirement = {
   target_london_zones: string[];
 };
 
+// use_classes/tenure_prefs are arrays of a custom Postgres enum (use_class[]/
+// tenure_type[]), not a primitive array type — neon()'s driver only parses
+// well-known array types (text[], uuid[], etc.) into real JS arrays; a custom
+// enum array comes back as the raw literal string "{E}" instead, which then
+// crashes anything calling .some()/.map() on it (see AGENTS.md). Casting to
+// ::text[] in the query itself is the fix: same string values, but now a type
+// the driver actually parses.
 const FULL_COLUMNS = `
   id, agency_id, company_id, contact_id, title, target_towns, target_regions,
-  min_sqft, max_sqft, min_covers, max_covers, use_classes, max_rent, max_premium,
-  tenure_prefs, notes, status, created_by,
+  min_sqft, max_sqft, min_covers, max_covers, use_classes::text[] as use_classes,
+  max_rent, max_premium, tenure_prefs::text[] as tenure_prefs, notes, status, created_by,
   created_at::text as created_at, updated_at::text as updated_at,
   property_types, max_guide_price, fit_out_prefs, lead_agent_id,
   target_counties, target_postcode_districts, target_neighbourhoods, target_london_zones
@@ -92,7 +99,8 @@ export type RequirementFacetRow = {
 
 const FACET_COLUMNS = `
   id, status, target_towns, target_regions, target_counties, target_postcode_districts,
-  target_neighbourhoods, target_london_zones, created_at::text as created_at, use_classes
+  target_neighbourhoods, target_london_zones, created_at::text as created_at,
+  use_classes::text[] as use_classes
 `;
 
 /** The requirements-list aggregate pass (search applied, unpaginated, sorted
@@ -211,7 +219,8 @@ export type MatchRequirement = {
 const MATCH_COLUMNS = `
   id, title, lead_agent_id, company_id, target_towns, target_regions, target_counties,
   target_postcode_districts, target_neighbourhoods, target_london_zones, min_sqft, max_sqft,
-  min_covers, max_covers, use_classes, tenure_prefs, max_rent, max_premium, max_guide_price
+  min_covers, max_covers, use_classes::text[] as use_classes, tenure_prefs::text[] as tenure_prefs,
+  max_rent, max_premium, max_guide_price
 `;
 
 /** Every active requirement in the agency, for scoring against live stock. */

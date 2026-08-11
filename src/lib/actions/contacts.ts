@@ -17,6 +17,7 @@ import {
   type ContactWriteInput,
 } from "@/lib/db/queries/contacts";
 import { contactRoleSlugExists } from "@/lib/db/queries/lookups";
+import { getCompanyName } from "@/lib/db/queries/companies";
 import { deriveCounty } from "@/lib/locations";
 import { geocodeForSave } from "@/lib/maps/geocode";
 import type { FormState } from "@/lib/actions/types";
@@ -63,6 +64,15 @@ async function validRole(value: string): Promise<string> {
   return (await contactRoleSlugExists(value)) ? value : "other";
 }
 
+/** Drop a client-supplied company_id this agency doesn't own, so a contact can't
+ *  be linked to another agency's company (no RLS backstop — see AGENTS.md).
+ *  getCompanyName returns the name when owned (possibly "") or null otherwise,
+ *  so test `!== null`, not truthiness. */
+async function ownedCompanyId(agencyId: string, companyId: string | null): Promise<string | null> {
+  if (!companyId) return null;
+  return (await getCompanyName(agencyId, companyId)) !== null ? companyId : null;
+}
+
 /** Resolves the signed-in caller's user id + agency id, or an error message. */
 async function requireCaller(): Promise<
   { userId: string; agencyId: string } | { error: string }
@@ -88,6 +98,7 @@ export async function createContact(
   const role = await validRole(str(formData, "role") || "other");
   const input = writeInput(formData, role);
   if (!input.firstName) return { error: "A first name is required." };
+  input.companyId = await ownedCompanyId(agencyId, input.companyId);
 
   if (formData.get("allow_duplicate") == null) {
     const dup = await findDuplicateContactByEmail(agencyId, input.email);
@@ -121,6 +132,7 @@ export async function updateContact(
   const role = await validRole(str(formData, "role") || "other");
   const input = writeInput(formData, role);
   if (!input.firstName) return { error: "A first name is required." };
+  input.companyId = await ownedCompanyId(agencyId, input.companyId);
 
   const existing = await getContactForUpdate(agencyId, id);
   if (!existing) return { error: "This contact no longer exists." };
@@ -160,6 +172,7 @@ export async function quickCreateContact(
   const role = await validRole(str(formData, "role") || "other");
   const input = writeInput(formData, role);
   if (!input.firstName) return { error: "A first name is required." };
+  input.companyId = await ownedCompanyId(agencyId, input.companyId);
 
   if (formData.get("allow_duplicate") == null) {
     const dup = await findDuplicateContactByEmail(agencyId, input.email);

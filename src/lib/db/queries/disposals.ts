@@ -612,7 +612,11 @@ export async function deleteDisposal(agencyId: string, id: string): Promise<stri
     ), imgs as (
       select (img->>'url') as url
       from public.disposals d,
-           jsonb_array_elements(coalesce(d.images, '[]'::jsonb)) as img
+           -- jsonb_array_elements throws on a non-array; guard with jsonb_typeof
+           -- so a malformed images value can't abort the whole delete.
+           jsonb_array_elements(
+             case when jsonb_typeof(d.images) = 'array' then d.images else '[]'::jsonb end
+           ) as img
       where d.id = ${id} and d.agency_id = ${agencyId}
     )
     select url from docs where url is not null
@@ -742,9 +746,13 @@ export async function addDisposalArea(
     sortOrder: number;
   },
 ): Promise<void> {
+  // Guard the insert on the parent disposal belonging to this agency, so a
+  // client-supplied disposal_id owned by another agency can't create an orphan
+  // area row (no RLS backstop — see AGENTS.md).
   await sql`
     insert into public.disposal_areas (agency_id, disposal_id, name, size_sqft, size_sqm, rent_pa, availability, sort_order)
-    values (${agencyId}, ${disposalId}, ${input.name}, ${input.sizeSqft}, ${input.sizeSqm}, ${input.rentPa}, ${input.availability}, ${input.sortOrder})
+    select ${agencyId}, ${disposalId}, ${input.name}, ${input.sizeSqft}, ${input.sizeSqm}, ${input.rentPa}, ${input.availability}, ${input.sortOrder}
+    where exists (select 1 from public.disposals where id = ${disposalId} and agency_id = ${agencyId})
   `;
 }
 

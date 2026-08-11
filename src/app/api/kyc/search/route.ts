@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
 import { isKycConfigured } from "@/lib/kyc/config";
 import { searchCompanies } from "@/lib/kyc/companies-house";
 
@@ -20,6 +21,12 @@ export async function GET(request: Request): Promise<Response> {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  // Require an agency too — this endpoint spends the Companies House quota, so
+  // don't let an authenticated-but-agency-less account drive external calls.
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) {
+    return NextResponse.json({ error: "No agency is linked to your account." }, { status: 403 });
   }
 
   const q = new URL(request.url).searchParams.get("q")?.trim() ?? "";

@@ -71,8 +71,12 @@ export async function sendDealExternal(
   // company_id comes from the form; only keep it if this agency owns it, so a
   // foreign id can't be stamped onto external_sends and later surface another
   // agency's name in the send-history join (no RLS backstop — see AGENTS.md).
+  // Note: getCompanyName returns the name (possibly "") when owned, or null when
+  // not — so test `!== null`, NOT truthiness, or an owned company with a blank
+  // name would be wrongly dropped.
   const rawCompanyId = str(formData, "company_id") || null;
-  const companyId = rawCompanyId && (await getCompanyName(agencyId, rawCompanyId)) ? rawCompanyId : null;
+  const companyOwned = rawCompanyId ? (await getCompanyName(agencyId, rawCompanyId)) !== null : false;
+  const companyId = companyOwned ? rawCompanyId : null;
   // `listing_ids` is the multi-select form; `listing_id` is the single-listing
   // shape older callers still post.
   const listingIds = Array.from(

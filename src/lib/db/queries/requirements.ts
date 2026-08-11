@@ -216,11 +216,20 @@ export type MatchRequirement = {
   max_guide_price: number | null;
 };
 
+// min_sqft/max_sqft/max_rent/max_premium/max_guide_price are numeric columns.
+// neon()'s driver returns numeric (and bigint) as JS strings, not numbers — so
+// the scorer's band checks (v < min, rent <= max) would compare strings
+// lexicographically ("900" < "1000" is false; "12000" <= "9500" is true) and
+// silently mis-score. Casting to ::float8 makes the driver hand back real
+// numbers, matching the `number | null` field types above. (min_covers/max_covers
+// are integer, already parsed as numbers.)
 const MATCH_COLUMNS = `
   id, title, lead_agent_id, company_id, target_towns, target_regions, target_counties,
-  target_postcode_districts, target_neighbourhoods, target_london_zones, min_sqft, max_sqft,
+  target_postcode_districts, target_neighbourhoods, target_london_zones,
+  min_sqft::float8 as min_sqft, max_sqft::float8 as max_sqft,
   min_covers, max_covers, use_classes::text[] as use_classes, tenure_prefs::text[] as tenure_prefs,
-  max_rent, max_premium, max_guide_price
+  max_rent::float8 as max_rent, max_premium::float8 as max_premium,
+  max_guide_price::float8 as max_guide_price
 `;
 
 /** Every active requirement in the agency, for scoring against live stock. */

@@ -277,10 +277,17 @@ export type MatchDisposal = {
   fit_out_state: string | null;
 };
 
+// size_sqft/rent_pa/premium/guide_price are numeric columns; neon() returns
+// numeric as JS strings, which makes the scorer's size/rent/premium/guide band
+// checks compare strings lexicographically and mis-score (see MATCH_COLUMNS in
+// requirements.ts). Cast to ::float8 so they arrive as real numbers, matching the
+// `number | null` field types above. (lat/lng are float8, covers_internal is
+// integer — already parsed as numbers.)
 const MATCH_COLUMNS = `
   id, title, status, listing_type, city, area, postcode, address_line, county, lat, lng,
-  size_sqft, covers_internal, use_class, property_type, disposal_type, rent_pa, premium,
-  guide_price, fit_out_state
+  size_sqft::float8 as size_sqft, covers_internal, use_class, property_type, disposal_type,
+  rent_pa::float8 as rent_pa, premium::float8 as premium, guide_price::float8 as guide_price,
+  fit_out_state
 `;
 
 /** Every disposal in the agency, for scoring against a requirement's criteria. */

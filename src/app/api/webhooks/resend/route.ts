@@ -78,7 +78,18 @@ export async function POST(request: Request): Promise<Response> {
   const raw = await request.text();
 
   const secret = process.env.RESEND_WEBHOOK_SECRET;
-  if (secret && !verify(request, raw, secret)) {
+  if (!secret) {
+    // Fail CLOSED in production: an unset secret must never mean "accept any
+    // unauthenticated POST" (which would let anyone forge delivered/opened/
+    // bounced events and corrupt engagement tracking). Only allow unsigned
+    // requests outside production, so local testing without a secret still works.
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json(
+        { error: "RESEND_WEBHOOK_SECRET not configured." },
+        { status: 503 },
+      );
+    }
+  } else if (!verify(request, raw, secret)) {
     return NextResponse.json({ error: "Invalid signature." }, { status: 401 });
   }
 
@@ -91,7 +102,11 @@ export async function POST(request: Request): Promise<Response> {
 
   const type = event.type ?? "";
   const emailId = event.data?.email_id;
-  const column = STAMP[type];
+  // Object.hasOwn, not a bare STAMP[type]: a bare index lookup with
+  // type="constructor" (or another Object.prototype key) would return a
+  // function off the prototype chain, which then flows into sql.unsafe in the
+  // DAO. Only own keys map to a real column.
+  const column = Object.hasOwn(STAMP, type) ? STAMP[type] : undefined;
   // Acknowledge anything we don't track (email.sent, delivery_delayed, …).
   if (!column || !emailId) return NextResponse.json({ ok: true, ignored: type });
 

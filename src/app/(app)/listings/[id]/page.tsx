@@ -154,9 +154,16 @@ export default async function ListingDetailPage({
   // the old `createSignedUrls(paths, 3600)` batch call exactly, just one
   // agency-scoped DAO lookup per doc instead of one Storage API call for
   // the whole batch.
+  // Pick fields explicitly rather than spreading `...r`: the DB row carries
+  // `file_path` (the raw, private, never-expiring Blob URL), and a spread would
+  // ship it to the client even though DisposalDoc's type omits it (object
+  // spread bypasses excess-property checks). Only the signed proxy link crosses.
   const docs: DisposalDoc[] = await Promise.all(
     docRows.map(async (r) => ({
-      ...r,
+      id: r.id,
+      name: r.name,
+      doc_type: r.doc_type,
+      size_bytes: r.size_bytes,
       url: await signDisposalDocUrl(agencyId, r.id),
     })),
   );

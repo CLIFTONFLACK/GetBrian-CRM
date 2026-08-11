@@ -2,7 +2,7 @@ import NextAuth, { type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
 import { isDbConfigured, sql } from "@/lib/db/client";
-import { verifyPassword } from "@/lib/auth/password";
+import { verifyPassword, verifyPasswordDummy } from "@/lib/auth/password";
 
 // Auth.js v5 (next-auth@beta) — see report for why this was chosen over a
 // hand-rolled jose session (Step 0: next-auth@beta's published peer
@@ -65,7 +65,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               full_name: string | null;
             }
           | undefined;
-        if (!row) return null;
+        if (!row) {
+          // Burn an equivalent bcrypt compare so "no such email" takes the same
+          // time as "wrong password" — otherwise the timing gap enumerates which
+          // emails have accounts.
+          await verifyPasswordDummy(password);
+          return null;
+        }
 
         const valid = await verifyPassword(password, row.password_hash);
         if (!valid) return null;

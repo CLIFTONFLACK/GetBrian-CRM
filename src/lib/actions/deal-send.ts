@@ -12,6 +12,7 @@ import {
   getRequirementBriefsForSend,
 } from "@/lib/db/queries/deals";
 import { getContactById } from "@/lib/db/queries/contacts";
+import { getCompanyName } from "@/lib/db/queries/companies";
 import { getDisposalsByIds } from "@/lib/db/queries/disposals";
 import type { FormState } from "@/lib/actions/types";
 
@@ -67,7 +68,11 @@ export async function sendDealExternal(
 
   const contactId = str(formData, "contact_id");
   if (!contactId) return { error: "Pick a contact to send to." };
-  const companyId = str(formData, "company_id") || null;
+  // company_id comes from the form; only keep it if this agency owns it, so a
+  // foreign id can't be stamped onto external_sends and later surface another
+  // agency's name in the send-history join (no RLS backstop — see AGENTS.md).
+  const rawCompanyId = str(formData, "company_id") || null;
+  const companyId = rawCompanyId && (await getCompanyName(agencyId, rawCompanyId)) ? rawCompanyId : null;
   // `listing_ids` is the multi-select form; `listing_id` is the single-listing
   // shape older callers still post.
   const listingIds = Array.from(

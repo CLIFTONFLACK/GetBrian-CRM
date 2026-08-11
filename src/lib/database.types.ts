@@ -1484,42 +1484,6 @@ export type Database = {
           },
         ]
       }
-      profiles: {
-        Row: {
-          avatar_url: string | null
-          created_at: string
-          email: string | null
-          full_name: string | null
-          id: string
-          linkedin_url: string | null
-          phone: string | null
-          updated_at: string
-          x_url: string | null
-        }
-        Insert: {
-          avatar_url?: string | null
-          created_at?: string
-          email?: string | null
-          full_name?: string | null
-          id: string
-          linkedin_url?: string | null
-          phone?: string | null
-          updated_at?: string
-          x_url?: string | null
-        }
-        Update: {
-          avatar_url?: string | null
-          created_at?: string
-          email?: string | null
-          full_name?: string | null
-          id?: string
-          linkedin_url?: string | null
-          phone?: string | null
-          updated_at?: string
-          x_url?: string | null
-        }
-        Relationships: []
-      }
       requirement_agents: {
         Row: {
           agency_id: string

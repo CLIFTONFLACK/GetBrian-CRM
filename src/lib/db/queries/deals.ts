@@ -33,7 +33,7 @@ export type Deal = {
 };
 
 const FULL_COLUMNS = `
-  id, agency_id, listing_id, requirement_id, company_id, title, stage, value,
+  id, agency_id, listing_id, requirement_id, company_id, title, stage, value::float8 as value,
   hot_terms, notes, created_by, created_at::text as created_at, updated_at::text as updated_at,
   lead_agent_id, expected_close::text as expected_close
 `;
@@ -82,7 +82,7 @@ export type DealBoardRow = {
 export async function listDealsForBoard(agencyId: string): Promise<DealBoardRow[]> {
   return (await sql`
     select
-      d.id, d.title, d.stage, d.value,
+      d.id, d.title, d.stage, d.value::float8 as value,
       d.created_at::text as created_at, d.updated_at::text as updated_at,
       d.created_by, d.lead_agent_id, d.expected_close::text as expected_close,
       d.listing_id, d.requirement_id, d.company_id,
@@ -90,9 +90,9 @@ export async function listDealsForBoard(agencyId: string): Promise<DealBoardRow[
       r.title as requirement_title,
       c.name as company_name
     from public.deals d
-    left join public.disposals l on l.id = d.listing_id
-    left join public.requirements r on r.id = d.requirement_id
-    left join public.companies c on c.id = d.company_id
+    left join public.disposals l on l.id = d.listing_id and l.agency_id = ${agencyId}
+    left join public.requirements r on r.id = d.requirement_id and r.agency_id = ${agencyId}
+    left join public.companies c on c.id = d.company_id and c.agency_id = ${agencyId}
     where d.agency_id = ${agencyId}
     order by d.updated_at desc
   `) as DealBoardRow[];
@@ -116,7 +116,7 @@ export type DealReportRow = {
 
 export async function listDealsForReports(agencyId: string): Promise<DealReportRow[]> {
   return (await sql`
-    select id, title, stage, value,
+    select id, title, stage, value::float8 as value,
            created_at::text as created_at, updated_at::text as updated_at,
            lead_agent_id, created_by, requirement_id
     from public.deals
@@ -554,7 +554,8 @@ export async function getListingSummaryForDeal(
   rent_pa: number | null;
 } | null> {
   const rows = await sql`
-    select title, city, guide_price, premium, rent_pa from public.disposals
+    select title, city, guide_price::float8 as guide_price, premium::float8 as premium,
+           rent_pa::float8 as rent_pa from public.disposals
     where id = ${listingId} and agency_id = ${agencyId}
     limit 1
   `;
@@ -607,7 +608,8 @@ export async function getRequirementBriefsForSend(
 > {
   if (ids.length === 0) return [];
   return (await sql`
-    select id, title, target_towns, min_sqft, max_sqft, max_rent
+    select id, title, target_towns,
+           min_sqft::float8 as min_sqft, max_sqft::float8 as max_sqft, max_rent::float8 as max_rent
     from public.requirements
     where agency_id = ${agencyId} and id = ANY(${ids}::uuid[])
   `) as {
@@ -697,7 +699,7 @@ export async function getExternalSendPairRows(
            es.created_at::text as created_at,
            c.first_name as contact_first_name, c.last_name as contact_last_name
     from public.external_sends es
-    left join public.contacts c on c.id = es.contact_id
+    left join public.contacts c on c.id = es.contact_id and c.agency_id = ${agencyId}
     where es.agency_id = ${agencyId}
       and es.requirement_id = ANY(${requirementIds}::uuid[])
       and es.listing_id = ANY(${listingIds}::uuid[])
@@ -742,13 +744,6 @@ export async function getExternalSendHistoryRows(
   const requirementId = filter.requirementId ?? null;
   if (!listingId && !requirementId) return [];
 
-  const joins = sql.unsafe(`
-    left join public.contacts c on c.id = es.contact_id
-    left join public.companies co on co.id = es.company_id
-    left join public.requirements r on r.id = es.requirement_id
-    left join public.disposals d on d.id = es.listing_id
-    left join public.users u on u.id = es.sent_by
-  `);
   const columns = sql.unsafe(`
     es.id, es.created_at::text as created_at, es.recipient_email, es.pdf_kind,
     es.requirement_id, es.listing_id,
@@ -758,15 +753,29 @@ export async function getExternalSendHistoryRows(
     d.title as listing_title,
     u.full_name as sender_full_name, u.email as sender_email
   `);
+  // Every joined counterpart table except `users` (a shared, non-agency-scoped
+  // identity table) is re-scoped to this agency, so a stale foreign
+  // company_id/listing_id/etc. on the es row can't surface another agency's
+  // display fields (there's no RLS backstop — see AGENTS.md).
   const rows = listingId
     ? await sql`
-        select ${columns} from public.external_sends es ${joins}
+        select ${columns} from public.external_sends es
+        left join public.contacts c on c.id = es.contact_id and c.agency_id = ${agencyId}
+        left join public.companies co on co.id = es.company_id and co.agency_id = ${agencyId}
+        left join public.requirements r on r.id = es.requirement_id and r.agency_id = ${agencyId}
+        left join public.disposals d on d.id = es.listing_id and d.agency_id = ${agencyId}
+        left join public.users u on u.id = es.sent_by
         where es.agency_id = ${agencyId} and es.listing_id = ${listingId}
         order by es.created_at desc
         limit 50
       `
     : await sql`
-        select ${columns} from public.external_sends es ${joins}
+        select ${columns} from public.external_sends es
+        left join public.contacts c on c.id = es.contact_id and c.agency_id = ${agencyId}
+        left join public.companies co on co.id = es.company_id and co.agency_id = ${agencyId}
+        left join public.requirements r on r.id = es.requirement_id and r.agency_id = ${agencyId}
+        left join public.disposals d on d.id = es.listing_id and d.agency_id = ${agencyId}
+        left join public.users u on u.id = es.sent_by
         where es.agency_id = ${agencyId} and es.requirement_id = ${requirementId}
         order by es.created_at desc
         limit 50
@@ -806,9 +815,12 @@ export async function updateExternalSendTrackingByProviderId(
     at: string;
   },
 ): Promise<boolean> {
-  // patch.column is typed to a 4-value whitelist (never client input), so
-  // interpolating it as a raw identifier here is safe — mirrors
-  // disposals.ts's FACET_SORT_COLUMNS whitelist-then-sql.unsafe pattern.
+  // patch.column reaches sql.unsafe, so re-assert it against the 4-value
+  // whitelist at the boundary rather than trusting the TypeScript type alone
+  // (the value originates from a webhook event type). Mirrors disposals.ts's
+  // FACET_SORT_COLUMNS whitelist-then-sql.unsafe pattern.
+  const ALLOWED = new Set(["delivered_at", "opened_at", "clicked_at", "bounced_at"]);
+  if (!ALLOWED.has(patch.column)) throw new Error("Invalid tracking column.");
   const columnIdent = sql.unsafe(patch.column);
   const rows = await sql`
     update public.external_sends set status = ${patch.status}, ${columnIdent} = ${patch.at}

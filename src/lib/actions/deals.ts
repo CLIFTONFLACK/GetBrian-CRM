@@ -195,6 +195,15 @@ export async function createDealFromMatch(
     getListingSummaryForDeal(agencyId, listingId),
   ]);
 
+  // Both lookups are agency-scoped and return null for another agency's rows.
+  // Reject rather than persisting an id the caller doesn't own — otherwise a
+  // foreign requirement_id/listing_id would be written straight onto the new
+  // deal (there's no RLS backstop; the deal-board joins are agency-scoped, but
+  // this is the write-side half of that boundary — see AGENTS.md).
+  if ((requirementId && !req) || (listingId && !listing)) {
+    return { error: "That requirement or listing could not be found." };
+  }
+
   const listingName = listing?.title ?? (listing?.city ? `Listing · ${listing.city}` : "Listing");
   const reqName = req?.title ?? "Requirement";
   const value = listing?.guide_price ?? listing?.premium ?? listing?.rent_pa ?? null;

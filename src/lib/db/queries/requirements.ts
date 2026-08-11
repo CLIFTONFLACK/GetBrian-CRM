@@ -58,10 +58,12 @@ export type Requirement = {
 // the driver actually parses.
 const FULL_COLUMNS = `
   id, agency_id, company_id, contact_id, title, target_towns, target_regions,
-  min_sqft, max_sqft, min_covers, max_covers, use_classes::text[] as use_classes,
-  max_rent, max_premium, tenure_prefs::text[] as tenure_prefs, notes, status, created_by,
+  min_sqft::float8 as min_sqft, max_sqft::float8 as max_sqft, min_covers, max_covers,
+  use_classes::text[] as use_classes,
+  max_rent::float8 as max_rent, max_premium::float8 as max_premium,
+  tenure_prefs::text[] as tenure_prefs, notes, status, created_by,
   created_at::text as created_at, updated_at::text as updated_at,
-  property_types, max_guide_price, fit_out_prefs, lead_agent_id,
+  property_types, max_guide_price::float8 as max_guide_price, fit_out_prefs, lead_agent_id,
   target_counties, target_postcode_districts, target_neighbourhoods, target_london_zones
 `;
 
@@ -103,6 +105,10 @@ const FACET_COLUMNS = `
   use_classes::text[] as use_classes
 `;
 
+/** Whitelist of columns listRequirementFacetRows may ORDER BY — the value
+ *  reaches sql.unsafe, so it must be re-checked at runtime, not just typed. */
+const REQUIREMENT_FACET_SORT_COLUMNS = new Set(["title", "max_rent", "status", "created_at"]);
+
 /** The requirements-list aggregate pass (search applied, unpaginated, sorted
  *  by the caller's chosen column) — source for the tiles and stats bar. */
 export async function listRequirementFacetRows(
@@ -110,7 +116,12 @@ export async function listRequirementFacetRows(
   opts: { q?: string; column: "title" | "max_rent" | "status"; ascending: boolean },
 ): Promise<RequirementFacetRow[]> {
   const pattern = opts.q ? `%${escapeLike(opts.q)}%` : null;
-  const order = `${opts.column} ${opts.ascending ? "asc" : "desc"}`;
+  // Re-validate the sort column against a Set here rather than trusting the
+  // caller's TypeScript union — the value reaches sql.unsafe, and a stray URL
+  // param that slipped past the type must not become raw SQL (mirrors the
+  // FACET_SORT_COLUMNS pattern in disposals.ts).
+  const column = REQUIREMENT_FACET_SORT_COLUMNS.has(opts.column) ? opts.column : "created_at";
+  const order = `${column} ${opts.ascending ? "asc" : "desc"}`;
   return (await sql`
     select ${sql.unsafe(FACET_COLUMNS)}
     from public.requirements
@@ -174,7 +185,7 @@ export async function getRequirementsByIds(
 ): Promise<RequirementListRow[]> {
   if (ids.length === 0) return [];
   return (await sql`
-    select id, title, status, target_towns, max_rent, company_id
+    select id, title, status, target_towns, max_rent::float8 as max_rent, company_id
     from public.requirements
     where agency_id = ${agencyId} and id = ANY(${ids}::uuid[])
   `) as RequirementListRow[];

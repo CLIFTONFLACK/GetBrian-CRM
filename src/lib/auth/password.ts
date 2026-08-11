@@ -22,3 +22,17 @@ export async function verifyPassword(
 ): Promise<boolean> {
   return bcrypt.compare(password, hash);
 }
+
+// A fixed, valid $2a$12 bcrypt hash (computed once at module load — the
+// plaintext is irrelevant) used only to burn an equivalent round of bcrypt work
+// on the user-not-found path. Without it, a missing email returns instantly
+// while a wrong password runs a full ~cost-12 compare, and that timing gap lets
+// an attacker enumerate which emails have accounts.
+const TIMING_EQUALIZER_HASH = bcrypt.hashSync("not-a-real-secret", SALT_ROUNDS);
+
+/** Run a throwaway bcrypt compare (always returns false) to match the timing of
+ *  a real verifyPassword, for the branch where no user row was found. */
+export async function verifyPasswordDummy(password: string): Promise<false> {
+  await bcrypt.compare(password, TIMING_EQUALIZER_HASH);
+  return false;
+}

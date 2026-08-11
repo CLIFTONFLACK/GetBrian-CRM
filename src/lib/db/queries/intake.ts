@@ -45,7 +45,8 @@ export type IntakeSubmissionRow = {
 
 const LIST_COLUMNS = `
   id, status, company_name, first_name, last_name, email, phone, property_type,
-  target_locations, min_sqft, max_sqft, min_covers, max_covers, max_rent, max_premium,
+  target_locations, min_sqft, max_sqft, min_covers, max_covers,
+  max_rent::float8 as max_rent, max_premium::float8 as max_premium,
   notes, created_requirement_id, reviewed_by,
   reviewed_at::text as reviewed_at, created_at::text as created_at
 `;
@@ -75,7 +76,8 @@ export async function getPendingIntakeSubmission(
 > | null> {
   const rows = await sql`
     select id, status, company_name, first_name, last_name, email, phone, property_type,
-           target_locations, min_sqft, max_sqft, min_covers, max_covers, max_rent, max_premium, notes
+           target_locations, min_sqft, max_sqft, min_covers, max_covers,
+  max_rent::float8 as max_rent, max_premium::float8 as max_premium, notes
     from public.intake_submissions
     where id = ${id} and agency_id = ${agencyId} and status = 'pending'
     limit 1

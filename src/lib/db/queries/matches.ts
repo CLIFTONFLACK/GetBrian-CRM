@@ -76,6 +76,7 @@ export async function upsertMatchScores(agencyId: string, pairs: ScoredPair[]): 
       as t(l, r, s, j)
     on conflict (listing_id, requirement_id)
     do update set score = excluded.score, reasons = excluded.reasons, updated_at = now()
+    where public.matches.agency_id = ${agencyId}
   `;
 }
 
@@ -89,10 +90,23 @@ export async function setMatchStatus(
   score: number,
   status: MatchStatus,
 ): Promise<void> {
+  // The unique constraint is (listing_id, requirement_id) globally, not scoped
+  // by agency (see the module header). Two guards keep this cross-tenant-safe:
+  //  1. the INSERT source only yields a row when BOTH ids belong to this
+  //     agency, so a caller can never create a match row referencing another
+  //     agency's listing/requirement; and
+  //  2. the DO UPDATE only fires on a row this agency owns, so a colliding pair
+  //     owned by another agency can't be overwritten (it becomes a no-op).
   await sql`
     insert into public.matches (agency_id, listing_id, requirement_id, score, status)
-    values (${agencyId}, ${listingId}, ${requirementId}, ${score}, ${status})
+    select ${agencyId}, ${listingId}, ${requirementId}, ${score}, ${status}
+    where exists (
+      select 1 from public.disposals where id = ${listingId} and agency_id = ${agencyId}
+    ) and exists (
+      select 1 from public.requirements where id = ${requirementId} and agency_id = ${agencyId}
+    )
     on conflict (listing_id, requirement_id)
     do update set score = excluded.score, status = excluded.status, updated_at = now()
+    where public.matches.agency_id = ${agencyId}
   `;
 }

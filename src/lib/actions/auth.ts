@@ -13,7 +13,7 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import type { AuthState } from "@/lib/actions/types";
 
 const NOT_CONFIGURED =
-  "The database isn't configured yet. Set DATABASE_URL and AUTH_SECRET.";
+  "The database isn't configured yet. Set STORAGE_CRM_DATABASE_URL and AUTH_SECRET.";
 const TOO_MANY_ATTEMPTS = "Too many attempts — try again shortly.";
 
 /** Postgres SQLSTATE for a unique-constraint violation (users.email). */
@@ -79,6 +79,13 @@ export async function signUp(
   formData: FormData,
 ): Promise<AuthState> {
   if (!isDbConfigured) return { error: NOT_CONFIGURED };
+
+  // Throttle per IP: each sign-up creates a user + agency + admin row and runs
+  // a cost-12 bcrypt hash, so it can't be left unthrottled (mass account/agency
+  // creation, CPU burn). Fails open if Upstash isn't configured, like signIn.
+  const ip = await getClientIp();
+  const { success } = await checkRateLimit("signup", ip);
+  if (!success) return { error: TOO_MANY_ATTEMPTS };
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");

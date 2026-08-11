@@ -82,10 +82,12 @@ const FULL_COLUMNS = `
   id, agency_id, source, source_ref, source_url, status, source_updated_at::text as source_updated_at,
   title, summary, address_line, area, city, postcode, lat, lng,
   property_type, use_class, disposal_type, to_let, for_sale,
-  rent_pa, rent_raw, rent_period, premium, premium_raw, guide_price, price_qualifier,
-  vat_applicable, rateable_value, business_rates, service_charge, estate_charge, parking_charge,
+  rent_pa::float8 as rent_pa, rent_raw, rent_period, premium::float8 as premium, premium_raw,
+  guide_price::float8 as guide_price, price_qualifier,
+  vat_applicable, rateable_value::float8 as rateable_value, business_rates::float8 as business_rates,
+  service_charge::float8 as service_charge, estate_charge::float8 as estate_charge, parking_charge::float8 as parking_charge,
   tenure_raw, lease_term_years, lease_expiry::text as lease_expiry, rent_review_basis, next_rent_review, inside_1954_act,
-  size_sqft, size_sqm, covers_internal, covers_external, floors,
+  size_sqft::float8 as size_sqft, size_sqm::float8 as size_sqm, covers_internal, covers_external, floors,
   licensing_notes, fit_out_state, epc_rating,
   description, location_description, key_features, sections,
   agent_name, agent_email, agent_phone, agent_photo,
@@ -233,7 +235,9 @@ export async function getDisposalsByIds(
 ): Promise<DisposalListRow[]> {
   if (ids.length === 0) return [];
   return (await sql`
-    select id, title, city, use_class, source, size_sqft, rent_pa, premium, status, listing_type
+    select id, title, city, use_class, source,
+           size_sqft::float8 as size_sqft, rent_pa::float8 as rent_pa, premium::float8 as premium,
+           status, listing_type
     from public.disposals
     where agency_id = ${agencyId} and id = ANY(${ids}::uuid[])
   `) as DisposalListRow[];
@@ -594,8 +598,29 @@ export async function updateDisposal(
   return (rows[0] as { id: string } | undefined) ?? null;
 }
 
-export async function deleteDisposal(agencyId: string, id: string): Promise<void> {
+/** Deletes a disposal (agency-scoped) and returns the Blob URLs it owned — its
+ *  document files (`disposal_documents.file_path`) and gallery images
+ *  (`disposals.images[].url`) — so the caller can delete the underlying Blob
+ *  objects (the FK cascade only removes the DB rows, not the storage). The
+ *  caller filters to URLs we actually host before calling `del()`. */
+export async function deleteDisposal(agencyId: string, id: string): Promise<string[]> {
+  const urls = (await sql`
+    with docs as (
+      select file_path as url
+      from public.disposal_documents
+      where disposal_id = ${id} and agency_id = ${agencyId}
+    ), imgs as (
+      select (img->>'url') as url
+      from public.disposals d,
+           jsonb_array_elements(coalesce(d.images, '[]'::jsonb)) as img
+      where d.id = ${id} and d.agency_id = ${agencyId}
+    )
+    select url from docs where url is not null
+    union
+    select url from imgs where url is not null
+  `) as { url: string }[];
   await sql`delete from public.disposals where id = ${id} and agency_id = ${agencyId}`;
+  return urls.map((r) => r.url);
 }
 
 export async function updateDisposalLeadAgent(
@@ -697,7 +722,8 @@ export async function listDisposalAreas(
   disposalId: string,
 ): Promise<DisposalArea[]> {
   return (await sql`
-    select id, name, size_sqft, size_sqm, rent_pa, availability
+    select id, name, size_sqft::float8 as size_sqft, size_sqm::float8 as size_sqm,
+           rent_pa::float8 as rent_pa, availability
     from public.disposal_areas
     where agency_id = ${agencyId} and disposal_id = ${disposalId}
     order by sort_order, created_at
@@ -776,7 +802,7 @@ export async function listDisposalDocuments(
   disposalId: string,
 ): Promise<DisposalDocumentRow[]> {
   return (await sql`
-    select id, name, doc_type, size_bytes, file_path
+    select id, name, doc_type, size_bytes::float8 as size_bytes, file_path
     from public.disposal_documents
     where agency_id = ${agencyId} and disposal_id = ${disposalId}
     order by created_at
@@ -794,7 +820,7 @@ export async function getDisposalDocumentById(
   id: string,
 ): Promise<DisposalDocumentRow | null> {
   const rows = await sql`
-    select id, name, doc_type, size_bytes, file_path
+    select id, name, doc_type, size_bytes::float8 as size_bytes, file_path
     from public.disposal_documents
     where id = ${id} and agency_id = ${agencyId}
     limit 1
@@ -816,7 +842,7 @@ export async function getDisposalDocumentByIdUnsafe(
   id: string,
 ): Promise<DisposalDocumentRow | null> {
   const rows = await sql`
-    select id, name, doc_type, size_bytes, file_path
+    select id, name, doc_type, size_bytes::float8 as size_bytes, file_path
     from public.disposal_documents
     where id = ${id}
     limit 1

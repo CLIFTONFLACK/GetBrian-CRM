@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 
@@ -38,7 +40,10 @@ export async function GET(request: Request): Promise<Response> {
   if (!secret) {
     return NextResponse.json({ error: "CRON_SECRET not configured." }, { status: 503 });
   }
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  // Constant-time compare so the bearer secret can't be recovered by timing.
+  const provided = Buffer.from(request.headers.get("authorization") ?? "");
+  const expected = Buffer.from(`Bearer ${secret}`);
+  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   if (!isDbConfigured) {

@@ -45,7 +45,11 @@ export function resolveSort(
   allowed: Record<string, string>,
   fallback: { column: string; ascending: boolean },
 ): { column: string; ascending: boolean } {
-  if (sort && sort in allowed) {
+  // Object.hasOwn, not `in`: `in` walks the prototype chain, so `?sort=constructor`
+  // (or toString, hasOwnProperty, …) would pass the check and pull a Function off
+  // Object.prototype into `allowed[sort]`, which then stringifies into the ORDER BY
+  // and 500s the page. hasOwn only matches the whitelist's own keys.
+  if (sort && Object.hasOwn(allowed, sort)) {
     return { column: allowed[sort], ascending: dir !== "desc" };
   }
   return fallback;

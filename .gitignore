@@ -40,3 +40,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Claude Code — machine-local (permission allowlists, dev-server paths/ports,
+# task lock); never committed to the shared repo.
+.claude/
+
+# Local working assets (design mockups, team headshots) — not part of the app
+# build; keep out of the shared repo.
+Assets/

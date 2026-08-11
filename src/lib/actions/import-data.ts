@@ -389,30 +389,42 @@ export async function importEntityCsv(
   }
 
   let inserted = 0;
+  // The neon HTTP driver's sql.transaction() only batches a static array of
+  // queries — it can't wrap these multi-step create* calls in one atomic unit
+  // without switching to a pooled connection. So instead of risking a mid-loop
+  // throw that commits rows 1..N-1 and then 500s the whole action, isolate each
+  // row: a failure is recorded and skipped, the rest still import. The result
+  // message reports the skips (same pattern as the parse-time `errors`).
+  async function insertEach<T>(
+    records: T[],
+    insert: (rec: T) => Promise<unknown>,
+  ): Promise<void> {
+    for (const rec of records) {
+      try {
+        await insert(rec);
+        inserted++;
+      } catch (e) {
+        errors.push(e instanceof Error ? e.message : "row failed to import");
+      }
+    }
+  }
+
   if (entity === "companies") {
     const geos = await geocodeAll(companyRecords);
-    for (const rec of companyRecords) {
-      const geo = geos.get(rec) ?? { lat: null, lng: null };
-      await createCompany(agencyId, userId, rec.fields, geo);
-      inserted++;
-    }
+    await insertEach(companyRecords, (rec) =>
+      createCompany(agencyId, userId, rec.fields, geos.get(rec) ?? { lat: null, lng: null }),
+    );
   } else if (entity === "contacts") {
     const geos = await geocodeAll(contactRecords);
-    for (const rec of contactRecords) {
-      const geo = geos.get(rec) ?? { lat: null, lng: null };
-      await createContact(agencyId, userId, rec.fields, geo);
-      inserted++;
-    }
+    await insertEach(contactRecords, (rec) =>
+      createContact(agencyId, userId, rec.fields, geos.get(rec) ?? { lat: null, lng: null }),
+    );
   } else if (entity === "requirements") {
-    for (const rec of requirementRecords) {
-      await createRequirement(agencyId, userId, rec);
-      inserted++;
-    }
+    await insertEach(requirementRecords, (rec) => createRequirement(agencyId, userId, rec));
   } else {
-    for (const rec of listingRecords) {
-      await createDisposal(agencyId, userId, rec, { lat: null, lng: null }, "import");
-      inserted++;
-    }
+    await insertEach(listingRecords, (rec) =>
+      createDisposal(agencyId, userId, rec, { lat: null, lng: null }, "import"),
+    );
   }
 
   const path = `/${entity}`;

@@ -67,10 +67,17 @@ export async function POST(request: Request): Promise<NextResponse> {
           if (!pathname.startsWith("avatars/")) {
             throw new Error("Invalid upload path.");
           }
+          // The avatar pathname is chosen entirely client-side and is not
+          // scoped to the caller (an admin may set a teammate's avatar, so we
+          // can't require it match the caller's own id). Forcing a random
+          // suffix + no overwrite means an upload can never overwrite/deface an
+          // existing avatar at a known path — the worst a caller can do is
+          // create a fresh orphan blob, and the resulting URL is only ever
+          // wired to a member by the separately-authorized updateAgent action.
           return {
             allowedContentTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
-            addRandomSuffix: false,
-            allowOverwrite: true,
+            addRandomSuffix: true,
+            allowOverwrite: false,
             maximumSizeInBytes: 5 * 1024 * 1024,
             tokenPayload: clientPayload,
           };

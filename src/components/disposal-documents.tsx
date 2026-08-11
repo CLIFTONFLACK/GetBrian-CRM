@@ -22,12 +22,16 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   other: "Document",
 };
 
+// Note: the raw Blob URL (`file_path`) is deliberately NOT part of this
+// client-facing type. It is the private, never-expiring, unsigned URL of the
+// document; only the signed proxy link (`url`) crosses to the client. The
+// delete action re-reads file_path from the agency-scoped DB row, so the
+// client never needs it. (See src/lib/disposal-docs.ts.)
 export type DisposalDoc = {
   id: string;
   name: string;
   doc_type: string;
   size_bytes: number | null;
-  file_path: string;
   url: string | null;
 };
 
@@ -121,7 +125,6 @@ export function DisposalDocuments({
                 <form action={deleteDisposalDocument}>
                   <input type="hidden" name="id" value={doc.id} />
                   <input type="hidden" name="disposal_id" value={disposalId} />
-                  <input type="hidden" name="file_path" value={doc.file_path} />
                   <ConfirmSubmitButton
                     confirmMessage={`Delete "${doc.name}"? The file is permanently removed.`}
                     variant="ghost"

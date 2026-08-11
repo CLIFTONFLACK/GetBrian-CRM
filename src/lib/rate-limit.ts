@@ -32,6 +32,11 @@ const LIMITS = {
   // this is on top of — not instead of — the existing honeypot + timing
   // check in submitPublicRequirement.
   intake: { requests: 3, window: "10 m" as const },
+  // Anti-abuse on public /sign-up. Each call creates a user + a new agency +
+  // an admin membership row and runs a cost-12 bcrypt hash, so an unthrottled
+  // endpoint is a resource-exhaustion / junk-tenant vector. A handful per IP
+  // per hour covers genuine retries; anything past that is abuse.
+  signup: { requests: 5, window: "1 h" as const },
 } satisfies Record<string, { requests: number; window: `${number} ${"s" | "m" | "h"}` }>;
 
 export type RateLimitBucket = keyof typeof LIMITS;
@@ -66,11 +71,25 @@ function limiterFor(bucket: RateLimitBucket): Ratelimit {
  * isDbConfigured-style graceful degradation elsewhere in this codebase. Rate
  * limiting is defense-in-depth, not something login/intake should hard-depend on.
  */
+let warnedUnconfigured = false;
+
 export async function checkRateLimit(
   bucket: RateLimitBucket,
   identifier: string,
 ): Promise<{ success: boolean }> {
-  if (!isRateLimitConfigured) return { success: true };
+  if (!isRateLimitConfigured) {
+    // Failing open is intended for local dev, but if it happens in production
+    // it means login + intake are silently unthrottled — surface that loudly
+    // (once) rather than letting it pass unnoticed.
+    if (process.env.NODE_ENV === "production" && !warnedUnconfigured) {
+      warnedUnconfigured = true;
+      console.warn(
+        "[rate-limit] KV_REST_API_URL/KV_REST_API_TOKEN are unset in production — " +
+          "rate limiting is DISABLED (failing open). /login and /submit-requirement are unthrottled.",
+      );
+    }
+    return { success: true };
+  }
 
   const { success } = await limiterFor(bucket).limit(identifier);
   return { success };
@@ -84,10 +103,17 @@ const UNKNOWN_IP = "unknown";
  * headers only — never from anything client-supplied (e.g. a form field),
  * since that would let a caller pick their own rate-limit bucket.
  *
- * `x-forwarded-for` (set by Vercel's edge network; first entry is the
- * original client) first, then `x-real-ip`, then a constant fallback so
- * rate limiting still runs (just bucketed together) when neither header is
- * present, as in local dev without a proxy in front.
+ * `x-forwarded-for` (first entry) first, then `x-real-ip`, then a constant
+ * fallback so rate limiting still runs (just bucketed together) when neither
+ * header is present, as in local dev without a proxy in front.
+ *
+ * SECURITY DEPENDENCY: this is only trustworthy behind a proxy that OVERWRITES
+ * these headers with the true client IP — which Vercel's edge network does (it
+ * replaces any client-sent x-forwarded-for). This app runs on Vercel, so the
+ * value can't be spoofed here. If it is ever deployed behind an ingress that
+ * merely appends to x-forwarded-for, an attacker could rotate the header per
+ * request to evade the login/intake limits — derive the IP from a
+ * platform-trusted header there instead.
  */
 export async function getClientIp(): Promise<string> {
   const h = await headers();

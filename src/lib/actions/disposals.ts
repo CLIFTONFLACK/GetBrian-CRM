@@ -1,5 +1,6 @@
 "use server";
 
+import { del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -254,7 +255,18 @@ export async function deleteDisposal(formData: FormData): Promise<void> {
     const session = await auth();
     const agencyId = session?.user ? await currentAgencyId(session.user.id) : null;
     if (agencyId) {
-      await deleteDisposalRow(agencyId, id);
+      const blobUrls = await deleteDisposalRow(agencyId, id);
+      // Remove the orphaned Blob objects the FK cascade left behind — but only
+      // ones we host (scraped rows may point at third-party URLs). Best-effort:
+      // the DB rows are already gone regardless.
+      const ours = blobUrls.filter((u) => {
+        try {
+          return new URL(u).hostname.endsWith(".public.blob.vercel-storage.com");
+        } catch {
+          return false;
+        }
+      });
+      if (ours.length > 0) await del(ours).catch(() => {});
       revalidatePath("/listings");
     }
   }

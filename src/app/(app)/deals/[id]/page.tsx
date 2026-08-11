@@ -19,21 +19,33 @@ import { dealStageBadge } from "@/lib/badges";
 import { deleteDeal } from "@/lib/actions/deals";
 import { isPast } from "@/lib/time";
 import { getCompanyTypes } from "@/lib/company-types";
-import { getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { listActivitiesForEntity } from "@/lib/db/queries/activities";
+import { getCompanyName, listCompanyOptions } from "@/lib/db/queries/companies";
+import { listContactOptions } from "@/lib/db/queries/contacts";
+import {
+  getDealAgentIds,
+  getDealById,
+  getDealListingSummary,
+  listDealReminders,
+} from "@/lib/db/queries/deals";
+import { getLinkedCompany, getLinkedContact, getUserNames } from "@/lib/db/queries/disposals";
+import { getRequirementTitle } from "@/lib/db/queries/requirements";
 
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
+  if (!isDbConfigured) return { title: "Deal" };
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: deal } = await supabase
-    .from("deals")
-    .select("title")
-    .eq("id", id)
-    .maybeSingle();
+  const session = await auth();
+  if (!session?.user) return { title: "Deal" };
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return { title: "Deal" };
+  const deal = await getDealById(agencyId, id);
   return { title: deal?.title ?? "Deal" };
 }
 
@@ -44,119 +56,62 @@ export default async function DealDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ existing?: string; renamed?: string }>;
 }) {
+  if (!isDbConfigured) notFound();
   const { id } = await params;
   const { existing, renamed } = await searchParams;
-  const supabase = await createClient();
+  const session = await auth();
+  if (!session?.user) notFound();
+  const userId = session.user.id;
+  const agencyId = await currentAgencyId(userId);
+  if (!agencyId) notFound();
 
-  const { data: deal } = await supabase
-    .from("deals")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const deal = await getDealById(agencyId, id);
   if (!deal) notFound();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const members = await getAgencyMembers(supabase, deal.agency_id);
+  const members = await getAgencyMembers(agencyId);
   const memberNames = Object.fromEntries(members.map((m) => [m.id, m.name]));
 
-  const [{ data: listing }, { data: requirement }, { data: company }] =
-    await Promise.all([
-      deal.listing_id
-        ? supabase
-            .from("disposals")
-            .select("id, title, city, company_id, contact_id")
-            .eq("id", deal.listing_id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-      deal.requirement_id
-        ? supabase
-            .from("requirements")
-            .select("id, title")
-            .eq("id", deal.requirement_id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-      deal.company_id
-        ? supabase
-            .from("companies")
-            .select("id, name")
-            .eq("id", deal.company_id)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-    ]);
+  const [listing, requirementTitle, companyName] = await Promise.all([
+    deal.listing_id ? getDealListingSummary(agencyId, deal.listing_id) : Promise.resolve(null),
+    deal.requirement_id ? getRequirementTitle(agencyId, deal.requirement_id) : Promise.resolve(null),
+    deal.company_id ? getCompanyName(agencyId, deal.company_id) : Promise.resolve(null),
+  ]);
+  const requirement =
+    deal.requirement_id && requirementTitle ? { id: deal.requirement_id, title: requirementTitle } : null;
+  const company = deal.company_id && companyName ? { id: deal.company_id, name: companyName } : null;
 
   // #6: pull the listing's own linked company + point-of-contact so the deal
   // shows every party's details with links.
-  const [{ data: listingCompany }, { data: listingContact }] = await Promise.all([
-    listing?.company_id
-      ? supabase
-          .from("companies")
-          .select("id, name")
-          .eq("id", listing.company_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    listing?.contact_id
-      ? supabase
-          .from("contacts")
-          .select("id, first_name, last_name, email, phone")
-          .eq("id", listing.contact_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+  const [listingCompany, listingContact] = await Promise.all([
+    listing?.company_id ? getLinkedCompany(agencyId, listing.company_id) : Promise.resolve(null),
+    listing?.contact_id ? getLinkedContact(agencyId, listing.contact_id) : Promise.resolve(null),
   ]);
 
   // Deal lead + additional agents (for the assignment fields + summary).
-  const { data: dealAgentRows } = await supabase
-    .from("deal_agents")
-    .select("user_id")
-    .eq("deal_id", id);
-  const additionalAgentIds = (dealAgentRows ?? []).map((r) => r.user_id);
+  const additionalAgentIds = await getDealAgentIds(agencyId, id);
 
   const sb = dealStageBadge(deal.stage);
 
   let ownerName: string | null = null;
   if (deal.created_by) {
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("full_name, email")
-      .eq("id", deal.created_by)
-      .maybeSingle();
-    ownerName = prof?.full_name ?? prof?.email ?? null;
+    const names = await getUserNames([deal.created_by]);
+    ownerName = names.get(deal.created_by) ?? null;
   }
 
-  const { data: reminderRows } = await supabase
-    .from("deal_reminders")
-    .select("id, title, due_at, done")
-    .eq("deal_id", id)
-    .order("due_at");
-  const reminders = (reminderRows ?? []).map((r) => ({
+  const reminderRows = await listDealReminders(agencyId, id);
+  const reminders = reminderRows.map((r) => ({
     ...r,
     overdue: isPast(r.due_at),
   }));
 
-  const { data: activities } = await supabase
-    .from("activities")
-    .select("id, type, subject, body, occurred_at, created_by")
-    .eq("entity_type", "deal")
-    .eq("entity_id", id)
-    .order("occurred_at", { ascending: false })
-    .limit(30);
+  const activities = await listActivitiesForEntity(agencyId, "deal", id, 30);
 
   // Pickers for the Send Deal wizard's external step — only needed when the
   // deal is linked to a requirement and/or listing (otherwise nothing to send).
   const canSendDeal = Boolean(deal.requirement_id || deal.listing_id);
-  const [{ data: companyRows }, { data: contactRows }, companyTypes] = canSendDeal
-    ? await Promise.all([
-        supabase.from("companies").select("id, name").order("name"),
-        supabase.from("contacts").select("id, first_name, last_name").order("first_name"),
-        getCompanyTypes(),
-      ])
-    : [{ data: null }, { data: null }, []];
-  const companyOptions = companyRows ?? [];
-  const contactOptions = (contactRows ?? []).map((c) => ({
-    id: c.id,
-    name: [c.first_name, c.last_name].filter(Boolean).join(" ") || "Unnamed contact",
-  }));
+  const [companyOptions, contactOptions, companyTypes] = canSendDeal
+    ? await Promise.all([listCompanyOptions(agencyId), listContactOptions(agencyId), getCompanyTypes()])
+    : [[], [], []];
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -199,12 +154,12 @@ export default async function DealDetailPage({
             link={`/deals/${deal.id}`}
             subject={deal.title}
             agents={members}
-            meId={user?.id}
+            meId={userId}
           />
           {canSendDeal ? (
             <SendDealModal
               agents={members}
-              meId={user?.id}
+              meId={userId}
               companies={companyOptions}
               contacts={contactOptions}
               companyTypes={companyTypes}
@@ -364,7 +319,7 @@ export default async function DealDetailPage({
         </CardHeader>
         <CardContent className="space-y-5">
           <LogActivityForm entityType="deal" entityId={deal.id} />
-          <ActivityTimeline activities={activities ?? []} actorNames={memberNames} />
+          <ActivityTimeline activities={activities} actorNames={memberNames} />
         </CardContent>
       </Card>
     </div>

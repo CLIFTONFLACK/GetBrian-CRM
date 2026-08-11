@@ -1,32 +1,32 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { CompanyForm } from "@/components/company-form";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
+import { auth } from "@/lib/auth";
 import { createCompany } from "@/lib/actions/companies";
 import { getCompanyTypes } from "@/lib/company-types";
 import { getContactRoles } from "@/lib/contact-roles";
-import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { listContactOptions } from "@/lib/db/queries/contacts";
+import { isDbConfigured } from "@/lib/db/client";
 
 export const metadata: Metadata = { title: "New company" };
 
 export default async function NewCompanyPage() {
-  const supabase = await createClient();
-  const agencyId = await currentAgencyId(supabase);
-  const agents = agencyId ? await getAgencyMembers(supabase, agencyId) : [];
-  const types = await getCompanyTypes();
-  // Feeds the full "+ New contact" form inside the company form's modal.
-  const contactRoles = await getContactRoles();
+  if (!isDbConfigured) redirect("/login");
+  const session = await auth();
+  if (!session?.user) redirect("/login");
 
-  const { data: contactRows } = await supabase
-    .from("contacts")
-    .select("id, first_name, last_name")
-    .order("first_name");
-  const contacts = (contactRows ?? []).map((c) => ({
-    id: c.id,
-    name: [c.first_name, c.last_name].filter(Boolean).join(" "),
-  }));
+  const agencyId = await currentAgencyId(session.user.id);
+  const [agents, types, contactRoles, contacts] = await Promise.all([
+    agencyId ? getAgencyMembers(agencyId) : Promise.resolve([]),
+    getCompanyTypes(),
+    // Feeds the full "+ New contact" form inside the company form's modal.
+    getContactRoles(),
+    agencyId ? listContactOptions(agencyId) : Promise.resolve([]),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl">

@@ -1,33 +1,36 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { CompanyForm } from "@/components/company-form";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
+import { auth } from "@/lib/auth";
 import { updateCompany } from "@/lib/actions/companies";
 import { getCompanyTypes } from "@/lib/company-types";
-import { getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { getCompanyAgentIds, getCompanyById } from "@/lib/db/queries/companies";
 
 export default async function EditCompanyPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  if (!isDbConfigured) redirect("/login");
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: company } = await supabase
-    .from("companies")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) notFound();
+
+  const company = await getCompanyById(agencyId, id);
   if (!company) notFound();
 
-  const [agents, { data: agentRows }, types] = await Promise.all([
-    getAgencyMembers(supabase, company.agency_id),
-    supabase.from("company_agents").select("user_id").eq("company_id", id),
+  const [agents, agentIds, types] = await Promise.all([
+    getAgencyMembers(agencyId),
+    getCompanyAgentIds(agencyId, id),
     getCompanyTypes(),
   ]);
-  const additionalAgentIds = (agentRows ?? []).map((r) => r.user_id);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -38,7 +41,7 @@ export default async function EditCompanyPage({
             action={updateCompany}
             company={company}
             agents={agents}
-            additionalAgentIds={additionalAgentIds}
+            additionalAgentIds={agentIds}
             types={types}
           />
         </CardContent>

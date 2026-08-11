@@ -15,7 +15,7 @@ import { Select } from "@/components/ui/select";
 import { quickCreateCompany } from "@/lib/actions/companies";
 import { quickCreateContact } from "@/lib/actions/contacts";
 import type { FormState } from "@/lib/actions/types";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 import { cn } from "@/lib/utils";
 
 export type EntityOption = { id: string; name: string };

@@ -1,6 +1,6 @@
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 
 /**
  * Lead agent (single owner) + additional agents (collaborators) inputs, shared

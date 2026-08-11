@@ -9,8 +9,8 @@ import { ContactFormFields } from "@/components/contact-form-fields";
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { FormState } from "@/lib/actions/types";
-import type { Tables } from "@/lib/database.types";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { Contact } from "@/lib/db/queries/contacts";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 import { cn } from "@/lib/utils";
 
 export function ContactForm({
@@ -24,7 +24,7 @@ export function ContactForm({
   companyTypes,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>;
-  contact?: Tables<"contacts">;
+  contact?: Contact;
   companies: { id: string; name: string }[];
   defaultCompanyId?: string;
   agents: AgentOption[];

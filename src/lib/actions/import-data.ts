@@ -2,8 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 
-import { currentAgencyId } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { createCompany, type CompanyWriteInput } from "@/lib/db/queries/companies";
+import { createContact, type ContactWriteInput } from "@/lib/db/queries/contacts";
+import { createDisposal, type DisposalWriteInput } from "@/lib/db/queries/disposals";
+import { listCompanyNameMap, listContactEmailMap } from "@/lib/db/queries/import";
+import { listCompanyTypes, listContactRoles } from "@/lib/db/queries/lookups";
+import { createRequirement, type RequirementWriteInput } from "@/lib/db/queries/requirements";
 import { deriveCounty } from "@/lib/locations";
 import { addressQuery, geocodeAddress } from "@/lib/maps/geocode";
 import { Constants } from "@/lib/database.types";
@@ -16,14 +23,16 @@ import {
 } from "@/lib/use-classes";
 import type { FormState } from "@/lib/actions/types";
 
+// Reuses each domain's existing create* DAO function
+// (createCompany/createContact/createRequirement/createDisposal) rather than
+// duplicating insert logic — see AGENTS.md. Every insert here runs one row at
+// a time (N sequential round trips for an N-row CSV) rather than a single
+// bulk statement: admin CSV import isn't a hot path, and reusing the
+// per-domain DAOs (each with its own validation-free insert shape) is worth
+// more than the extra round trips.
+
 const ENTITIES: ImportEntity[] = ["companies", "contacts", "requirements", "listings"];
 const LISTING_TYPES = ["cdg", "intel"];
-const TABLE: Record<ImportEntity, string> = {
-  companies: "companies",
-  contacts: "contacts",
-  requirements: "requirements",
-  listings: "disposals",
-};
 
 const list = (v: string) =>
   v.split(";").map((s) => s.trim()).filter(Boolean);
@@ -39,19 +48,33 @@ const oneOf = (v: string, allowed: readonly string[], fb: string) =>
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const emailOrNull = (v: string) => (v && EMAIL_RE.test(v) ? v : null);
 
+type ParsedAddress = {
+  address_line: string | null;
+  city: string | null;
+  postcode: string | null;
+  county: string | null;
+};
+
+/** Resolves the signed-in caller's user id + agency id, or an error message. */
+async function requireCaller(): Promise<
+  { userId: string; agencyId: string } | { error: string }
+> {
+  if (!isDbConfigured) return { error: "The database isn't configured yet." };
+  const session = await auth();
+  if (!session?.user) return { error: "You must be signed in." };
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return { error: "No agency is linked to your account." };
+  return { userId: session.user.id, agencyId };
+}
+
 /** Bulk-import CSV rows into companies / contacts / requirements / listings (#8). */
 export async function importEntityCsv(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
-
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { userId, agencyId } = caller;
 
   const entity = String(formData.get("entity") ?? "") as ImportEntity;
   const csv = String(formData.get("csv") ?? "");
@@ -67,41 +90,41 @@ export async function importEntityCsv(
 
   // Contact roles + company types are editable data now — validate imported
   // values against the live slug lists (fallbacks "other") rather than a fixed enum.
-  const { data: roleRows } = await supabase.from("contact_roles").select("slug");
-  const roleSlugs = (roleRows ?? []).map((r) => r.slug);
-  const { data: typeRows } = await supabase.from("company_types").select("slug");
-  const typeSlugs = (typeRows ?? []).map((t) => t.slug);
+  // Both are system-wide lookups (not agency-scoped — see lookups.ts).
+  const roleSlugs = (await listContactRoles()).map((r) => r.slug);
+  const typeSlugs = (await listCompanyTypes()).map((t) => t.slug);
 
   // Every listing and requirement MUST have a contact (mirrors the UI actions).
   // CSV rows carry a `contact_email` that we resolve to an agency contact; rows
   // whose contact_email is missing or unknown are reported and skipped.
-  const { data: contactRows } = await supabase.from("contacts").select("id, email");
-  const contactByEmail = new Map<string, string>();
-  for (const c of contactRows ?? []) {
-    if (c.email) contactByEmail.set(c.email.trim().toLowerCase(), c.id);
-  }
+  const contactByEmail = await listContactEmailMap(agencyId);
   const resolveContact = (email: string) =>
     email ? contactByEmail.get(email.trim().toLowerCase()) : undefined;
 
-  // Existing companies (RLS-scoped to the agency) — used to dedupe company
-  // imports and to resolve contacts' `company_name` links.
-  const companyIdByName = new Map<string, string>();
-  if (entity === "companies" || entity === "contacts") {
-    const { data: companyRows } = await supabase.from("companies").select("id, name");
-    for (const c of companyRows ?? []) {
-      companyIdByName.set(c.name.trim().toLowerCase(), c.id);
-    }
-  }
+  // Existing companies (agency-scoped) — used to dedupe company imports and to
+  // resolve contacts' `company_name` links.
+  const companyIdByName =
+    entity === "companies" || entity === "contacts"
+      ? await listCompanyNameMap(agencyId)
+      : new Map<string, string>();
 
-  const base = { agency_id: agencyId, created_by: user.id };
-  const records: Record<string, unknown>[] = [];
+  type CompanyRecord = { address: ParsedAddress; fields: CompanyWriteInput };
+  type ContactRecord = {
+    address: ParsedAddress;
+    fields: ContactWriteInput;
+    companyName: string | null;
+  };
+  type RequirementRecord = RequirementWriteInput;
+  type ListingRecord = DisposalWriteInput;
+
+  const companyRecords: CompanyRecord[] = [];
+  const contactRecords: ContactRecord[] = [];
+  const requirementRecords: RequirementRecord[] = [];
+  const listingRecords: ListingRecord[] = [];
   const errors: string[] = [];
   // Case-insensitive dedupe keys (contact emails / company names) seen earlier
   // in this file, so a row duplicated within the CSV itself is skipped too.
   const seenInFile = new Set<string>();
-  // Contacts only: raw company_name per record (parallel to `records`), resolved
-  // to a company_id — creating minimal companies where needed — after parsing.
-  const pendingCompanyNames: (string | null)[] = [];
 
   rows.slice(1).forEach((r, n) => {
     const get = (name: string) => {
@@ -118,25 +141,36 @@ export async function importEntityCsv(
         if (seenInFile.has(key))
           throw new Error(`skipped — duplicate of an earlier row in this file`);
         seenInFile.add(key);
-        records.push({
-          ...base,
-          name,
-          type: oneOf(get("type"), typeSlugs, "other"),
-          // Recognised words become use-class slugs so they show in the picker;
-          // anything else ("brewery") is kept verbatim as a free tag.
-          sector_tags: (() => {
-            const { slugs, extra } = partitionSectorTags(list(get("sector_tags")));
-            return [...new Set([...slugs, ...extra])];
-          })(),
-          website: get("website") || null,
-          phone: get("phone") || null,
+        const address: ParsedAddress = {
           address_line: get("address_line") || null,
           city: get("city") || null,
           postcode: get("postcode") || null,
           county:
             get("county") ||
             deriveCounty({ postcode: get("postcode"), city: get("city") }),
-          notes: get("notes") || null,
+        };
+        companyRecords.push({
+          address,
+          fields: {
+            name,
+            type: oneOf(get("type"), typeSlugs, "other"),
+            // Recognised words become use-class slugs so they show in the picker;
+            // anything else ("brewery") is kept verbatim as a free tag.
+            sectorTags: (() => {
+              const { slugs, extra } = partitionSectorTags(list(get("sector_tags")));
+              return [...new Set([...slugs, ...extra])];
+            })(),
+            website: get("website") || null,
+            phone: get("phone") || null,
+            addressLine: address.address_line,
+            city: address.city,
+            postcode: address.postcode,
+            county: address.county,
+            notes: get("notes") || null,
+            companyNumber: null,
+            vatNumber: null,
+            leadAgentId: null,
+          },
         });
       } else if (entity === "contacts") {
         if (!get("first_name")) throw new Error("first_name is required");
@@ -149,54 +183,69 @@ export async function importEntityCsv(
             throw new Error(`skipped — duplicate of an earlier row in this file`);
           seenInFile.add(key);
         }
-        records.push({
-          ...base,
-          first_name: get("first_name"),
-          last_name: get("last_name") || null,
-          email,
-          phone: get("phone") || null,
-          role: oneOf(get("role"), roleSlugs, "other"),
+        const address: ParsedAddress = {
           address_line: get("address_line") || null,
           city: get("city") || null,
           postcode: get("postcode") || null,
           county:
             get("county") ||
             deriveCounty({ postcode: get("postcode"), city: get("city") }),
-          marketing_opt_in: boolOf(get("marketing_opt_in")),
-          notes: get("notes") || null,
+        };
+        contactRecords.push({
+          address,
+          companyName: get("company_name") || null,
+          fields: {
+            firstName: get("first_name"),
+            lastName: get("last_name") || null,
+            email,
+            phone: get("phone") || null,
+            role: oneOf(get("role"), roleSlugs, "other"),
+            companyId: null, // resolved after companies are created, below
+            county: address.county,
+            notes: get("notes") || null,
+            leadAgentId: null,
+            marketingOptIn: boolOf(get("marketing_opt_in")),
+            addressLine: address.address_line,
+            city: address.city,
+            postcode: address.postcode,
+          },
         });
-        pendingCompanyNames.push(get("company_name") || null);
       } else if (entity === "requirements") {
         if (!get("title")) throw new Error("title is required");
         const contactId = resolveContact(get("contact_email"));
         if (!contactId)
           throw new Error("contact_email is required and must match an existing contact");
-        records.push({
-          ...base,
+        requirementRecords.push({
           title: get("title"),
-          contact_id: contactId,
-          status: oneOf(get("status"), Constants.public.Enums.requirement_status, "active"),
-          target_towns: list(get("target_towns")),
-          target_regions: list(get("target_regions")),
-          target_counties: list(get("target_counties")),
-          target_postcode_districts: list(get("target_postcode_districts")).map((s) =>
+          companyId: null,
+          contactId,
+          status: oneOf(
+            get("status"),
+            Constants.public.Enums.requirement_status,
+            "active",
+          ) as RequirementRecord["status"],
+          targetTowns: list(get("target_towns")),
+          targetRegions: list(get("target_regions")),
+          targetCounties: list(get("target_counties")),
+          targetPostcodeDistricts: list(get("target_postcode_districts")).map((s) =>
             s.toUpperCase(),
           ),
-          target_neighbourhoods: list(get("target_neighbourhoods")),
-          target_london_zones: list(get("target_london_zones")),
+          targetNeighbourhoods: list(get("target_neighbourhoods")),
+          targetLondonZones: list(get("target_london_zones")),
           // Cells carry ordinary words ("Bar;Nightclub"), not slugs.
-          use_classes: parseUseClasses(get("use_classes")),
-          tenure_prefs: list(get("tenure_prefs")).filter((t) =>
+          useClasses: parseUseClasses(get("use_classes")) as RequirementRecord["useClasses"],
+          tenurePrefs: list(get("tenure_prefs")).filter((t) =>
             (Constants.public.Enums.tenure_type as readonly string[]).includes(t),
-          ),
-          min_sqft: numOrNull(get("min_sqft")),
-          max_sqft: numOrNull(get("max_sqft")),
-          min_covers: numOrNull(get("min_covers")),
-          max_covers: numOrNull(get("max_covers")),
-          max_rent: numOrNull(get("max_rent")),
-          max_premium: numOrNull(get("max_premium")),
-          max_guide_price: numOrNull(get("max_guide_price")),
+          ) as RequirementRecord["tenurePrefs"],
+          minSqft: numOrNull(get("min_sqft")),
+          maxSqft: numOrNull(get("max_sqft")),
+          minCovers: numOrNull(get("min_covers")),
+          maxCovers: numOrNull(get("max_covers")),
+          maxRent: numOrNull(get("max_rent")),
+          maxPremium: numOrNull(get("max_premium")),
+          maxGuidePrice: numOrNull(get("max_guide_price")),
           notes: get("notes") || null,
+          leadAgentId: null,
         });
       } else {
         if (!get("title")) throw new Error("title is required");
@@ -209,31 +258,63 @@ export async function importEntityCsv(
         // `use_class` is still read as a fallback so an older template that
         // carried "Sui Generis" in that column still lands somewhere sensible.
         const useClasses = parseUseClasses(get("use_classes"), get("use_class"));
-        records.push({
-          ...base,
-          source: "import",
+        listingRecords.push({
           title: get("title"),
-          contact_id: contactId,
-          listing_type: LISTING_TYPES.includes(lt) ? lt : "cdg",
+          listingType: LISTING_TYPES.includes(lt) ? lt : "cdg",
           status: get("status") || null,
-          disposal_type: ["freehold", "new_lease", "lease_assignment", "sublease", "unknown"].includes(dt)
+          disposalType: [
+            "freehold",
+            "new_lease",
+            "lease_assignment",
+            "sublease",
+            "unknown",
+          ].includes(dt)
             ? dt
             : "unknown",
-          address_line: get("address_line") || null,
+          toLet: false,
+          forSale: false,
+          addressLine: get("address_line") || null,
           area: get("area") || null,
           city: get("city") || null,
           postcode: get("postcode") || null,
           county:
             get("county") ||
             deriveCounty({ postcode: get("postcode"), city: get("city") }),
-          property_type: useClasses.length > 0 ? formatUseClasses(useClasses) : null,
-          use_class: useClasses.length > 0 ? planningClassFor(useClasses) : get("use_class") || null,
-          size_sqft: numOrNull(get("size_sqft")),
-          covers_internal: numOrNull(get("covers_internal")),
-          rent_pa: numOrNull(get("rent_pa")),
+          propertyType: useClasses.length > 0 ? formatUseClasses(useClasses) : null,
+          useClass:
+            useClasses.length > 0 ? planningClassFor(useClasses) : get("use_class") || null,
+          sizeSqft: numOrNull(get("size_sqft")),
+          sizeSqm: null,
+          coversInternal: numOrNull(get("covers_internal")),
+          coversExternal: null,
+          fitOutState: null,
+          epcRating: null,
+          tenureRaw: null,
+          rentPa: numOrNull(get("rent_pa")),
           premium: numOrNull(get("premium")),
-          guide_price: numOrNull(get("guide_price")),
+          guidePrice: numOrNull(get("guide_price")),
+          rateableValue: null,
+          serviceCharge: null,
+          keyFeatures: [],
           description: get("description") || null,
+          leadAgentId: null,
+          companyId: null,
+          contactId,
+          summary: null,
+          locationDescription: null,
+          licensingNotes: null,
+          vatApplicable: false,
+          businessRates: null,
+          estateCharge: null,
+          parkingCharge: null,
+          leaseTermYears: null,
+          leaseExpiry: null,
+          rentReviewBasis: null,
+          nextRentReview: null,
+          inside1954Act: false,
+          rentPeriod: null,
+          priceQualifier: null,
+          brochureUrl: null,
         });
       }
     } catch (e) {
@@ -243,90 +324,95 @@ export async function importEntityCsv(
 
   // Contacts: resolve company_name → company_id, creating minimal companies
   // (case-insensitively de-duped) for names not already in the agency.
-  if (entity === "contacts" && records.length) {
+  if (entity === "contacts" && contactRecords.length) {
     const newNames = new Map<string, string>();
-    for (const nm of pendingCompanyNames) {
+    for (const c of contactRecords) {
+      const nm = c.companyName;
       if (!nm) continue;
       const key = nm.toLowerCase();
       if (!companyIdByName.has(key) && !newNames.has(key)) newNames.set(key, nm);
     }
     if (newNames.size > 0) {
-      const { data: createdCompanies, error } = await supabase
-        .from("companies")
-        .insert(
-          [...newNames.values()].map((name) => ({
-            ...base,
+      for (const name of newNames.values()) {
+        const created = await createCompany(
+          agencyId,
+          userId,
+          {
             name,
             type: "other",
-          })) as never,
-        )
-        .select("id, name");
-      if (error) {
-        return { error: `Could not create companies for company_name: ${error.message}` };
-      }
-      for (const c of (createdCompanies ?? []) as { id: string; name: string }[]) {
-        companyIdByName.set(c.name.trim().toLowerCase(), c.id);
+            sectorTags: [],
+            website: null,
+            phone: null,
+            notes: null,
+            companyNumber: null,
+            vatNumber: null,
+            leadAgentId: null,
+            addressLine: null,
+            city: null,
+            postcode: null,
+            county: null,
+          },
+          { lat: null, lng: null },
+        );
+        companyIdByName.set(name.trim().toLowerCase(), created.id);
       }
       revalidatePath("/companies");
     }
-    records.forEach((rec, i) => {
-      const nm = pendingCompanyNames[i];
-      if (nm) rec.company_id = companyIdByName.get(nm.toLowerCase()) ?? null;
-    });
-  }
-
-  type InsertedRow = {
-    id: string;
-    address_line: string | null;
-    city: string | null;
-    postcode: string | null;
-  };
-
-  let inserted = 0;
-  let insertedRows: InsertedRow[] = [];
-  if (records.length) {
-    if (entity === "companies" || entity === "contacts") {
-      // Return address parts so imported rows can be geocoded below.
-      const { data: ins, error } = await supabase
-        .from(TABLE[entity] as never)
-        .insert(records as never)
-        .select("id, address_line, city, postcode");
-      if (error) return { error: error.message };
-      insertedRows = (ins ?? []) as unknown as InsertedRow[];
-    } else {
-      const { error } = await supabase
-        .from(TABLE[entity] as never)
-        .insert(records as never);
-      if (error) return { error: error.message };
+    for (const c of contactRecords) {
+      if (c.companyName) c.fields.companyId = companyIdByName.get(c.companyName.toLowerCase()) ?? null;
     }
-    inserted = records.length;
   }
 
   // Best-effort geocoding of imported companies/contacts that carry an address
   // (≤5 concurrent lookups; failures are ignored — rows still import, they just
-  // won't appear on maps until edited).
-  const geoTargets = insertedRows.filter((row) => addressQuery(row));
-  if (geoTargets.length > 0) {
+  // won't appear on maps until edited). Runs BEFORE insert since the create*
+  // DAOs take lat/lng as part of the write, not a follow-up update.
+  async function geocodeAll<T extends { address: ParsedAddress }>(
+    records: T[],
+  ): Promise<Map<T, { lat: number | null; lng: number | null }>> {
+    const geos = new Map<T, { lat: number | null; lng: number | null }>();
+    const targets = records.filter((r) => addressQuery(r.address));
     let next = 0;
     const worker = async () => {
-      while (next < geoTargets.length) {
-        const row = geoTargets[next++];
+      while (next < targets.length) {
+        const record = targets[next++];
         try {
-          const geo = await geocodeAddress(row);
-          if (geo) {
-            await supabase
-              .from(TABLE[entity] as never)
-              .update(geo as never)
-              .eq("id", row.id);
-          }
+          const geo = await geocodeAddress(record.address);
+          if (geo) geos.set(record, geo);
         } catch {
           // best-effort only
         }
       }
     };
-    await Promise.all(
-      Array.from({ length: Math.min(5, geoTargets.length) }, () => worker()),
-    );
+    await Promise.all(Array.from({ length: Math.min(5, targets.length) }, () => worker()));
+    return geos;
+  }
+
+  let inserted = 0;
+  if (entity === "companies") {
+    const geos = await geocodeAll(companyRecords);
+    for (const rec of companyRecords) {
+      const geo = geos.get(rec) ?? { lat: null, lng: null };
+      await createCompany(agencyId, userId, rec.fields, geo);
+      inserted++;
+    }
+  } else if (entity === "contacts") {
+    const geos = await geocodeAll(contactRecords);
+    for (const rec of contactRecords) {
+      const geo = geos.get(rec) ?? { lat: null, lng: null };
+      await createContact(agencyId, userId, rec.fields, geo);
+      inserted++;
+    }
+  } else if (entity === "requirements") {
+    for (const rec of requirementRecords) {
+      await createRequirement(agencyId, userId, rec);
+      inserted++;
+    }
+  } else {
+    for (const rec of listingRecords) {
+      await createDisposal(agencyId, userId, rec, { lat: null, lng: null }, "import");
+      inserted++;
+    }
   }
 
   const path = `/${entity}`;

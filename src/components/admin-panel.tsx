@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useState } from "react";
+import { upload } from "@vercel/blob/client";
 import {
   CalendarDays,
   ChevronDown,
@@ -38,7 +39,6 @@ import {
   deleteCompanyType,
   renameCompanyType,
 } from "@/lib/actions/company-types";
-import { createClient } from "@/lib/supabase/client";
 import type { FormState } from "@/lib/actions/types";
 import { cn } from "@/lib/utils";
 
@@ -284,7 +284,6 @@ function Connections() {
 }
 
 function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
-  const supabase = useMemo(() => createClient(), []);
   const [open, setOpen] = useState(false);
   const [editState, editAction, editPending] = useActionState<FormState, FormData>(
     updateAgent,
@@ -298,23 +297,28 @@ function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // Uploads straight to Vercel Blob client-side via a short-lived token from
+  // src/app/api/blob/client-upload/route.ts — BLOB_READ_WRITE_TOKEN never
+  // reaches the browser (see AGENTS.md's "Known traps" note on this path).
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
     setUploadError(null);
     const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-    const path = `${member.id}-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage
-      .from("avatars")
-      .upload(path, file, { upsert: true, cacheControl: "3600" });
-    if (error) {
-      setUploadError(error.message);
-    } else {
-      const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-      setAvatarUrl(data.publicUrl);
+    const path = `avatars/${member.id}-${Date.now()}.${ext}`;
+    try {
+      const blob = await upload(path, file, {
+        access: "public",
+        handleUploadUrl: "/api/blob/client-upload",
+        clientPayload: JSON.stringify({ kind: "avatar" }),
+      });
+      setAvatarUrl(blob.url);
+    } catch (err) {
+      setUploadError((err as Error).message);
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   }
 
   const roleTone =

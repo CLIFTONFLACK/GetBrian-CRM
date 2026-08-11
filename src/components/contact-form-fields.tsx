@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { LocationSelect } from "@/components/location-select";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Tables } from "@/lib/database.types";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { Contact } from "@/lib/db/queries/contacts";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 
 /**
  * Every field of the contact record, with no `<form>` of its own — shared by
@@ -25,7 +25,7 @@ export function ContactFormFields({
   companyPicker,
   idPrefix = "",
 }: {
-  contact?: Tables<"contacts">;
+  contact?: Contact;
   agents: AgentOption[];
   additionalAgentIds?: string[];
   roles: { slug: string; label: string }[];

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Plus, Store } from "lucide-react";
 
 import { ConcentrationMap } from "@/components/concentration-map-lazy";
@@ -14,13 +15,14 @@ import { Pagination, resolvePage } from "@/components/pagination";
 import { SiloTabs } from "@/components/silo-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
-import { getMapLayers } from "@/lib/supabase/map-points";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { getDisposalsByIds, listDisposalFacetRows } from "@/lib/db/queries/disposals";
+import { getMapLayers } from "@/lib/db/queries/map-points";
 import { intelSourceById } from "@/lib/intel/sources";
 import { deriveCounty, HOME_COUNTIES } from "@/lib/locations";
-import { ilikeTerm } from "@/lib/search";
 import { filterHref, resolveSort } from "@/lib/sort";
-import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Listings" };
@@ -58,7 +60,11 @@ export default async function ListingsPage({
     silo,
     page: pageParam,
   } = await searchParams;
-  const supabase = await createClient();
+
+  if (!isDbConfigured) redirect("/login");
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const agencyId = await currentAgencyId(session.user.id);
 
   const { column, ascending } = resolveSort(
     sort,
@@ -79,30 +85,33 @@ export default async function ListingsPage({
   // facet dropdowns and the source-label sort need (plus the id, which the
   // paginated row fetch keys off). Ordered here so the page slice below is
   // taken from the fully sorted set.
-  let query = supabase
-    .from("disposals")
-    .select("id, city, postcode, county, status, listing_type, source")
-    .order(column, { ascending });
-  if (q) {
-    // Sanitised: commas/parens are structural in `.or()` and would break the query.
-    const term = ilikeTerm(q);
-    if (term) query = query.or(`title.ilike.%${term}%,city.ilike.%${term}%`);
-  }
-  if (disposal_type) query = query.eq("disposal_type", disposal_type);
-  const [{ data }, mapLayers, agencyId] = await Promise.all([
-    query,
-    getMapLayers(supabase, { include: ["listing"] }),
-    currentAgencyId(supabase),
+  const [facetRows, mapLayers, agents] = await Promise.all([
+    agencyId
+      ? listDisposalFacetRows(agencyId, {
+          q,
+          disposalType: disposal_type,
+          column: column as
+            | "title"
+            | "city"
+            | "use_class"
+            | "source"
+            | "size_sqft"
+            | "rent_pa"
+            | "status"
+            | "created_at",
+          ascending,
+        })
+      : Promise.resolve([]),
+    agencyId ? getMapLayers(agencyId, { include: ["listing"] }) : Promise.resolve({ listings: [], companies: [], contacts: [] }),
+    agencyId ? getAgencyMembers(agencyId) : Promise.resolve([]),
   ]);
-  // Agency roster for the bulk "Assign lead agent…" action.
-  const agents = agencyId ? await getAgencyMembers(supabase, agencyId) : [];
   // `rows` is the heatmap base (q + type filtered). The town/status facets that
   // the heatmap controls are applied to the table in memory, so the grid keeps
   // showing the full distribution for re-slicing.
   // County is stored on new saves and derived from postcode/town for legacy rows.
   // Source label: only registered intel partners get their own label — every
   // other source (manual entries, our own CDG scrape) is CDG Leisure's book.
-  const rows = (data ?? []).map((r) => ({
+  const rows = facetRows.map((r) => ({
     ...r,
     county: r.county ?? deriveCounty({ postcode: r.postcode, city: r.city }),
     source_label: intelSourceById.get(r.source)?.label ?? "CDG Leisure",
@@ -224,16 +233,9 @@ export default async function ListingsPage({
   const pageState = resolvePage(pageParam, total, PAGE_SIZE);
   const pageIds = listRows.slice(pageState.from, pageState.to).map((r) => r.id);
 
-  const { data: detail } = pageIds.length
-    ? await supabase
-        .from("disposals")
-        .select(
-          "id, title, city, use_class, source, size_sqft, rent_pa, premium, status, listing_type",
-        )
-        .in("id", pageIds)
-    : { data: [] };
-  // `.in()` does not preserve the requested order — re-apply the sorted slice.
-  const byId = new Map((detail ?? []).map((r) => [r.id, r]));
+  const detail = agencyId && pageIds.length ? await getDisposalsByIds(agencyId, pageIds) : [];
+  // `= ANY()` does not preserve the requested order — re-apply the sorted slice.
+  const byId = new Map(detail.map((r) => [r.id, r]));
   const pageRows = pageIds
     .map((id) => byId.get(id))
     .filter((r): r is NonNullable<typeof r> => r != null);

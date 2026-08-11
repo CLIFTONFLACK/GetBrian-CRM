@@ -1,13 +1,16 @@
 /**
  * Orchestrates a single CDG URL → persisted `disposals` row:
- *   fetch + extract + map  →  (optional) re-host media to Storage  →  upsert.
+ *   fetch + extract + map  →  (optional) re-host media to Blob  →  upsert.
  *
- * Framework-agnostic: takes a Supabase client so it can be driven from a Server
- * Action, a Route Handler, or a script. Directive-free, so it may also export the
- * shared action-state type (a "use server" module can only export async functions).
+ * Framework-agnostic: no client object to thread through (`rehostMedia`
+ * needs only `BLOB_READ_WRITE_TOKEN` from `process.env` — see storage.ts),
+ * so this can be driven from a Server Action, a Route Handler, or a script.
+ * The DB write itself goes through the Neon DAO (disposals.ts's
+ * `upsertDisposalFromSource`). Directive-free, so it may also export the
+ * shared action-state type (a "use server" module can only export async
+ * functions).
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
-
+import { upsertDisposalFromSource } from "@/lib/db/queries/disposals";
 import { fetchAndExtractCdg, type DisposalInsert } from "./cdg";
 import { rehostMedia, type RehostResult } from "./storage";
 
@@ -58,7 +61,6 @@ export function isCdgPropertyUrl(url: string): boolean {
  */
 export async function importDisposalFromUrl(
   url: string,
-  supabase: SupabaseClient,
   agencyId: string,
   opts: ImportOptions = {},
 ): Promise<ImportResult> {
@@ -68,23 +70,18 @@ export async function importDisposalFromUrl(
 
   let rehost: RehostResult | undefined;
   if (shouldRehost && row.images.length > 0) {
-    rehost = await rehostMedia(row, supabase, {
+    rehost = await rehostMedia(row, {
       includeBrochure: opts.includeBrochure,
       signal: opts.signal,
     });
     row = rehost.row;
   }
 
-  const { data, error } = await supabase
-    .from(DISPOSALS_TABLE)
-    .upsert(
-      { ...row, agency_id: agencyId, created_by: opts.createdBy ?? null },
-      { onConflict: "agency_id,source,source_ref" },
-    )
-    .select("id")
-    .single();
-
-  if (error) throw new Error(`Upsert failed: ${error.message}`);
-  if (!data) throw new Error("Upsert returned no data");
-  return { id: (data as { id: string }).id, row, rehost };
+  const { id } = await upsertDisposalFromSource(
+    agencyId,
+    opts.createdBy ?? null,
+    "cdg",
+    row,
+  );
+  return { id, row, rehost };
 }

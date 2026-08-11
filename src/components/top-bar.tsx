@@ -33,7 +33,7 @@ export function TopBar({
       <div className="ml-auto flex items-center gap-2">
         {demo ? (
           <span className="hidden rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 sm:inline dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
-            Demo — Supabase not configured
+            Demo — database not configured
           </span>
         ) : null}
         <Link

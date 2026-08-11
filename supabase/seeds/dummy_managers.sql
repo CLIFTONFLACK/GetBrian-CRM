@@ -2,10 +2,13 @@
 -- Dummy data — 2 MANAGER-role users for the shared "CDG demo" agency.   NOT a
 -- migration — run on demand AFTER 0011_manager_role.sql has committed (the
 -- 'manager' enum value must already exist):
---   Supabase MCP execute_sql, or psql -f supabase/seeds/dummy_managers.sql
+--   psql "$STORAGE_CRM_DATABASE_URL" -f supabase/seeds/dummy_managers.sql
 --
 -- Logins:  agent4@slc.test (Daniel Goldberg) · agent5@slc.test (Rachel Stein)
 --          password: Demo!2026   ·   role: manager
+--
+-- ADAPTED FROM SUPABASE: same auth.users/auth.identities → public.users fix as
+-- dummy_data.sql — see that file's header note for the full rationale.
 --
 -- Idempotent + tenant-isolated: only touches the demo agency and these 2 users.
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -24,30 +27,16 @@ begin
   end if;
 
   for i in 1..2 loop
-    select id into uid from auth.users where email = emails[i];
+    select id into uid from public.users where email = emails[i];
     if uid is null then
       uid := gen_random_uuid();
-      insert into auth.users (
-        instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-        raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
-        confirmation_token, recovery_token, email_change, email_change_token_new
-      ) values (
-        '00000000-0000-0000-0000-000000000000', uid, 'authenticated', 'authenticated',
-        emails[i], crypt(pw, gen_salt('bf')), now(),
-        '{"provider":"email","providers":["email"]}'::jsonb,
-        jsonb_build_object('full_name', fulln[i]), now(), now(),
-        '', '', '', ''
-      );
-      insert into auth.identities (
-        id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
-      ) values (
-        gen_random_uuid(), uid, uid::text,
-        jsonb_build_object('sub', uid::text, 'email', emails[i]), 'email', now(), now(), now()
-      );
+      insert into public.users (id, email, password_hash, full_name)
+        values (uid, emails[i], crypt(pw, gen_salt('bf')), fulln[i]);
     end if;
 
-    -- The signup trigger spins up a personal agency per new user; drop it so each
-    -- manager belongs only to the demo agency.
+    -- Safety net: no signup trigger creates a personal agency anymore (see
+    -- dummy_data.sql's header note) — this only matters if a stray membership
+    -- was created some other way.
     delete from public.agencies a
      where a.id <> demo_agency
        and a.id in (select agency_id from public.agency_members where user_id = uid);

@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { sendMessage } from "@/lib/actions/messages";
 import type { FormState } from "@/lib/actions/types";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 
 /** The message a composer is replying to (threads via parent_id). */
 export type ReplyTarget = {

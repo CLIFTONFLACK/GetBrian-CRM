@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
-import { currentAgencyId } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { getCompanyById } from "@/lib/db/queries/companies";
 import { getAgencyOpenRouter } from "@/lib/openrouter/config";
 import { runDeepDiveReport } from "@/lib/deep-dive/report";
 import type { FormState } from "@/lib/actions/types";
@@ -13,28 +14,21 @@ export async function runDeepDive(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
+  const session = await auth();
+  if (!session?.user) return { error: "You must be signed in." };
 
-  const agencyId = await currentAgencyId(supabase);
+  const agencyId = await currentAgencyId(session.user.id);
   if (!agencyId) return { error: "No agency is linked to your account." };
 
   const companyId = String(formData.get("company_id") ?? "").trim();
   if (!companyId) return { error: "Missing company." };
 
-  const cfg = await getAgencyOpenRouter(supabase);
+  const cfg = await getAgencyOpenRouter(agencyId);
   if (!cfg) {
     return { error: "Add an OpenRouter API key in Admin to enable Deep Dive." };
   }
 
-  const { data: company } = await supabase
-    .from("companies")
-    .select("id, name, sector_tags, website, address_line, city, postcode, company_number")
-    .eq("id", companyId)
-    .maybeSingle();
+  const company = await getCompanyById(agencyId, companyId);
   if (!company) return { error: "Company not found." };
 
   try {
@@ -49,9 +43,8 @@ export async function runDeepDive(
           .join(", "),
         company_number: company.company_number,
       },
-      supabase,
       agencyId,
-      user.id,
+      session.user.id,
       cfg,
     );
   } catch (err) {

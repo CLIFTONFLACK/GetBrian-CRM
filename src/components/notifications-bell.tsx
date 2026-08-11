@@ -3,9 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
-import { createClient } from "@/lib/supabase/client";
+import {
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationReadById,
+} from "@/lib/actions/messages";
 import { cn } from "@/lib/utils";
 
 export type Note = {
@@ -18,70 +21,35 @@ export type Note = {
 };
 
 /**
- * In-app notifications bell (#11). Initial notifications are fetched server-side
- * (in the app layout) and passed in; the bell re-reads on open and marks them
- * read in place (RLS scopes the table to user_id = auth.uid). A realtime
- * subscription on notification INSERTs for the current user bumps the list and
- * unread count live (requires `notifications` in the supabase_realtime
- * publication — migration 0028).
+ * In-app notifications bell (#11). Initial notifications are fetched
+ * server-side (in the app layout) and passed in; the bell re-reads on open and
+ * marks them read in place via the server actions in lib/actions/messages.ts.
+ *
+ * No live subscription anymore — Supabase's realtime channel (postgres_changes
+ * on INSERT) had no Neon/Auth.js equivalent shipped in this migration batch
+ * (see db/migrations/0029_tasks.sql's header note: "the notifications bell
+ * needs a different live-update mechanism going forward, out of scope here").
+ * The bell now simply re-fetches whenever it's opened.
  */
 export function NotificationsBell({ initialNotes = [] }: { initialNotes?: Note[] }) {
-  const supabase = React.useMemo(() => createClient(), []);
   const [notes, setNotes] = React.useState<Note[]>(initialNotes);
   const [open, setOpen] = React.useState(false);
 
   const load = React.useCallback(async () => {
-    const { data } = await supabase
-      .from("notifications")
-      .select("id, title, body, link, read_at, created_at")
-      .order("created_at", { ascending: false })
-      .limit(20);
-    setNotes(data ?? []);
-  }, [supabase]);
-
-  // Live updates: refetch whenever a notification is inserted for this user.
-  React.useEffect(() => {
-    let channel: RealtimeChannel | null = null;
-    let cancelled = false;
-    void supabase.auth.getUser().then(({ data: { user } }) => {
-      if (cancelled || !user) return;
-      channel = supabase
-        .channel(`notifications-bell-${user.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => void load(),
-        )
-        .subscribe();
-    });
-    return () => {
-      cancelled = true;
-      if (channel) void supabase.removeChannel(channel);
-    };
-  }, [supabase, load]);
+    const rows = await listNotifications();
+    setNotes(rows);
+  }, []);
 
   const unread = notes.filter((n) => !n.read_at).length;
 
   async function markAll() {
-    const ids = notes.filter((n) => !n.read_at).map((n) => n.id);
-    if (!ids.length) return;
-    await supabase
-      .from("notifications")
-      .update({ read_at: new Date().toISOString() })
-      .in("id", ids);
+    if (unread === 0) return;
+    await markAllNotificationsRead();
     void load();
   }
 
   async function markOne(id: string) {
-    await supabase
-      .from("notifications")
-      .update({ read_at: new Date().toISOString() })
-      .eq("id", id);
+    await markNotificationReadById(id);
     void load();
   }
 

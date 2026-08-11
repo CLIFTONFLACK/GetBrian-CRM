@@ -1,13 +1,14 @@
 import * as React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Pencil } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { contactRoleBadge } from "@/lib/badges";
+import { auth } from "@/lib/auth";
 import { getContactRoles, roleLabel } from "@/lib/contact-roles";
 import { deleteContact } from "@/lib/actions/contacts";
 import { ActivityTimeline } from "@/components/activity-timeline";
@@ -15,8 +16,11 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { LocationMap } from "@/components/location-map";
 import { LogActivityForm } from "@/components/log-activity-form";
 import { SendToTeam } from "@/components/send-to-team";
-import { getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { getCompanyName } from "@/lib/db/queries/companies";
+import { getContactAgentIds, getContactById } from "@/lib/db/queries/contacts";
+import { listActivitiesForEntity } from "@/lib/db/queries/activities";
 import { cn } from "@/lib/utils";
 
 export async function generateMetadata({
@@ -24,14 +28,14 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
+  if (!isDbConfigured) return { title: "Contact" };
   const { id } = await params;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("contacts")
-    .select("first_name, last_name")
-    .eq("id", id)
-    .maybeSingle();
-  const name = [data?.first_name, data?.last_name].filter(Boolean).join(" ");
+  const session = await auth();
+  if (!session?.user) return { title: "Contact" };
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return { title: "Contact" };
+  const contact = await getContactById(agencyId, id);
+  const name = [contact?.first_name, contact?.last_name].filter(Boolean).join(" ");
   return { title: name || "Contact" };
 }
 
@@ -40,49 +44,32 @@ export default async function ContactDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  if (!isDbConfigured) redirect("/login");
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const userId = session.user.id;
 
-  const { data: contact } = await supabase
-    .from("contacts")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const agencyId = await currentAgencyId(userId);
+  if (!agencyId) notFound();
+
+  const contact = await getContactById(agencyId, id);
   if (!contact) notFound();
 
-  let companyName: string | null = null;
-  if (contact.company_id) {
-    const { data: c } = await supabase
-      .from("companies")
-      .select("name")
-      .eq("id", contact.company_id)
-      .maybeSingle();
-    companyName = c?.name ?? null;
-  }
+  const [companyName, agentRows, members, activities] = await Promise.all([
+    contact.company_id ? getCompanyName(agencyId, contact.company_id) : Promise.resolve(null),
+    getContactAgentIds(agencyId, id),
+    getAgencyMembers(agencyId),
+    listActivitiesForEntity(agencyId, "contact", id, 20),
+  ]);
 
-  const { data: agentRows } = await supabase
-    .from("contact_agents")
-    .select("user_id")
-    .eq("contact_id", id);
-
-  const { data: activities } = await supabase
-    .from("activities")
-    .select("id, type, subject, body, occurred_at, created_by")
-    .eq("entity_type", "contact")
-    .eq("entity_id", id)
-    .order("occurred_at", { ascending: false })
-    .limit(20);
-  const members = await getAgencyMembers(supabase, contact.agency_id);
   const nameOf = new Map(members.map((m) => [m.id, m.name]));
   const leadAgentName = contact.lead_agent_id
     ? (nameOf.get(contact.lead_agent_id) ?? "Unknown agent")
     : null;
-  const additionalAgents = (agentRows ?? []).map((row) => ({
-    id: row.user_id,
-    name: nameOf.get(row.user_id) ?? "Unknown agent",
+  const additionalAgents = agentRows.map((agentId) => ({
+    id: agentId,
+    name: nameOf.get(agentId) ?? "Unknown agent",
   }));
 
   const roles = await getContactRoles();
@@ -104,7 +91,7 @@ export default async function ContactDetailPage({
             link={`/contacts/${contact.id}`}
             subject={name}
             agents={members}
-            meId={user?.id}
+            meId={userId}
           />
           <Link
             href={`/contacts/${contact.id}/edit`}
@@ -210,7 +197,7 @@ export default async function ContactDetailPage({
         <CardContent className="space-y-5">
           <LogActivityForm entityType="contact" entityId={contact.id} />
           <ActivityTimeline
-            activities={activities ?? []}
+            activities={activities}
             actorNames={Object.fromEntries(nameOf)}
           />
         </CardContent>

@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { DisposalForm } from "@/components/disposal-form";
 import { PageHeader } from "@/components/page-header";
@@ -6,37 +6,40 @@ import { Card, CardContent } from "@/components/ui/card";
 import { updateDisposal } from "@/lib/actions/disposals";
 import { getCompanyTypes } from "@/lib/company-types";
 import { getContactRoles } from "@/lib/contact-roles";
-import { getAgencyMembers } from "@/lib/supabase/agency";
-import { getCompanyOptions, getContactOptions } from "@/lib/supabase/pickers";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { listCompanyOptions } from "@/lib/db/queries/companies";
+import { listContactOptions } from "@/lib/db/queries/contacts";
+import {
+  getDisposalAgentIds,
+  getDisposalById,
+} from "@/lib/db/queries/disposals";
 
 export default async function EditListingPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  if (!isDbConfigured) redirect("/login");
   const { id } = await params;
-  const supabase = await createClient();
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) notFound();
 
-  const { data: disposal } = await supabase
-    .from("disposals")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const disposal = await getDisposalById(agencyId, id);
   if (!disposal) notFound();
 
-  const { data: agentRows } = await supabase
-    .from("disposal_agents")
-    .select("user_id")
-    .eq("disposal_id", id);
-  const [agents, companies, contacts, companyTypes, contactRoles] = await Promise.all([
-    getAgencyMembers(supabase, disposal.agency_id),
-    getCompanyOptions(supabase, disposal.agency_id),
-    getContactOptions(supabase, disposal.agency_id),
-    getCompanyTypes(),
-    getContactRoles(),
-  ]);
-  const additionalAgentIds = (agentRows ?? []).map((r) => r.user_id);
+  const [agentIds, agents, companies, contacts, companyTypes, contactRoles] =
+    await Promise.all([
+      getDisposalAgentIds(agencyId, id),
+      getAgencyMembers(agencyId),
+      listCompanyOptions(agencyId),
+      listContactOptions(agencyId),
+      getCompanyTypes(),
+      getContactRoles(),
+    ]);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -47,7 +50,7 @@ export default async function EditListingPage({
             action={updateDisposal}
             disposal={disposal}
             agents={agents}
-            additionalAgentIds={additionalAgentIds}
+            additionalAgentIds={agentIds}
             companies={companies}
             contacts={contacts}
             companyTypes={companyTypes}

@@ -19,8 +19,8 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { UseClassCheckboxes } from "@/components/use-class-checkboxes";
 import type { FormState } from "@/lib/actions/types";
-import type { Tables } from "@/lib/database.types";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { Disposal } from "@/lib/db/queries/disposals";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 import { parseUseClasses } from "@/lib/use-classes";
 import { cn } from "@/lib/utils";
 
@@ -73,7 +73,7 @@ export function DisposalForm({
   defaultContactId,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>;
-  disposal?: Tables<"disposals">;
+  disposal?: Disposal;
   agents: AgentOption[];
   additionalAgentIds?: string[];
   companies?: PickOption[];
@@ -310,7 +310,7 @@ export function DisposalForm({
  * previously only reachable via scrapes (lease terms, 1954 Act, VAT, rates,
  * licensing, marketing extras). Opens automatically when any field has data.
  */
-function LeaseStatutorySection({ d }: { d?: Tables<"disposals"> }) {
+function LeaseStatutorySection({ d }: { d?: Disposal }) {
   const hasData = Boolean(
     d &&
       (d.summary ||

@@ -1,24 +1,21 @@
 /**
- * Re-host CDG property media into our own Supabase Storage bucket.
+ * Re-host CDG property media into our own Vercel Blob store.
  *
  * Why: the extractor returns imgix/S3 URLs that (a) carry CDG's watermark and
  * (b) live on a third party's CDN that can rotate or expire. For the CRM we
- * download the clean original and upload it to our `disposals` bucket, then point
- * the row's `images[].url` at our public URL — keeping `source_url` for provenance.
+ * download the clean original and upload it to Blob, then point the row's
+ * `images[].url` at our own URL — keeping `source_url` for provenance.
  *
- * Runs with whatever Supabase client is passed in. With no service-role key in this
- * project, that's the authenticated SSR client, so the `disposals` bucket's RLS
- * policies must allow the signed-in user to upload (see the migration).
+ * `put()` needs only `BLOB_READ_WRITE_TOKEN` from `process.env` — no client
+ * object to thread through (see AGENTS.md's note on this function's old
+ * Supabase-client parameter, dropped here).
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { put } from "@vercel/blob";
 
 import type { DisposalInsert } from "./cdg";
 import { cleanImageUrl, contentTypeFromName, filenameFromUrl } from "./image";
 
-export const DISPOSALS_BUCKET = "disposals";
-
 export interface RehostOptions {
-  bucket?: string;
   /** Strip the imgix watermark before downloading (default true). */
   clean?: boolean;
   /** Also re-host the marketing brochure PDF (default false). */
@@ -39,16 +36,14 @@ const DEFAULT_UA =
 
 /**
  * Downloads each property image (and optionally the brochure) and uploads it to
- * Storage, returning a new row whose media URLs point at the bucket. Individual
+ * Blob, returning a new row whose media URLs point at our own store. Individual
  * download/upload failures are collected, not thrown — the original URL is kept for
  * any asset that fails so the import still succeeds with partial media.
  */
 export async function rehostMedia(
   row: DisposalInsert,
-  supabase: SupabaseClient,
   opts: RehostOptions = {},
 ): Promise<RehostResult> {
-  const bucket = opts.bucket ?? DISPOSALS_BUCKET;
   const clean = opts.clean ?? true;
   const ua = opts.userAgent ?? DEFAULT_UA;
   const failures: { url: string; error: string }[] = [];
@@ -69,16 +64,19 @@ export async function rehostMedia(
         signal: opts.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-      const bytes = new Uint8Array(await res.arrayBuffer());
+      const bytes = Buffer.from(await res.arrayBuffer());
       const path = `${prefix}/${objectName}`;
-      const { error } = await supabase.storage.from(bucket).upload(path, bytes, {
+      // Deterministic path + upsert semantics (mirrors the old bucket's
+      // `upsert: true`): no random suffix, and overwriting the same path on
+      // a re-import is expected, not an error.
+      const blob = await put(path, bytes, {
+        access: "public",
         contentType: contentTypeFromName(objectName),
-        upsert: true,
+        addRandomSuffix: false,
+        allowOverwrite: true,
       });
-      if (error) throw new Error(error.message);
-      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
       uploaded++;
-      return data.publicUrl;
+      return blob.url;
     } catch (err) {
       failures.push({ url: fetchUrl, error: (err as Error).message });
       return null;

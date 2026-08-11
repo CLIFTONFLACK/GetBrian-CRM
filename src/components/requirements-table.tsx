@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import { requirementStatusBadge } from "@/lib/badges";
 import type { EntityOption } from "@/components/creatable-select";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 
 export type RequirementRow = {
   id: string;

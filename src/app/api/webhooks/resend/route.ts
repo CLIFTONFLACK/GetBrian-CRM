@@ -1,8 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
-import type { Database } from "@/lib/database.types";
-import { createServiceClient } from "@/lib/supabase/service";
+import { isDbConfigured } from "@/lib/db/client";
+import { updateExternalSendTrackingByProviderId } from "@/lib/db/queries/deals";
 
 /**
  * POST /api/webhooks/resend — email engagement tracking.
@@ -95,27 +95,29 @@ export async function POST(request: Request): Promise<Response> {
   // Acknowledge anything we don't track (email.sent, delivery_delayed, …).
   if (!column || !emailId) return NextResponse.json({ ok: true, ignored: type });
 
-  const supabase = createServiceClient();
-  if (!supabase) {
+  if (!isDbConfigured) {
     return NextResponse.json(
-      { error: "SUPABASE_SERVICE_ROLE_KEY not configured." },
+      { error: "STORAGE_CRM_DATABASE_URL not configured." },
       { status: 503 },
     );
   }
 
   const at = event.created_at ?? event.data?.created_at ?? new Date().toISOString();
-  const patch: Database["public"]["Tables"]["external_sends"]["Update"] = {
-    status: type.replace(/^email\./, ""),
-  };
-  patch[column] = at;
+  const status = type.replace(/^email\./, "");
 
-  const { error } = await supabase
-    .from("external_sends")
-    .update(patch)
-    .eq("provider_id", emailId);
-  if (error) {
-    // 500 → Resend retries; the row may simply not be written yet.
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  // provider_id (Resend's own message id) is the sole correlation key and is
+  // globally unique — no caller agencyId to scope by here (see AGENTS.md);
+  // the DAO resolves the row purely from this id.
+  let updated: boolean;
+  try {
+    updated = await updateExternalSendTrackingByProviderId(emailId, { status, column, at });
+  } catch (err) {
+    // 500 → Resend retries.
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  }
+  if (!updated) {
+    // Row may simply not be written yet — 500 so Resend retries.
+    return NextResponse.json({ error: "No external_sends row for this provider id yet." }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   CalendarClock,
   CheckCircle2,
@@ -17,7 +18,11 @@ import { buttonVariants } from "@/components/ui/button";
 import { DealStageSelect } from "@/components/deal-stage-select";
 import { NewDealButton } from "@/components/new-deal-button";
 import { dealStageBadge } from "@/lib/badges";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { listDealAgentRows, listDealsForBoard, listLatestStageEventPerDeal } from "@/lib/db/queries/deals";
+import { getUserNames } from "@/lib/db/queries/disposals";
 import { daysSince, isPast } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -39,47 +44,26 @@ const STUCK_AFTER_DAYS = 14;
 const money = (v: number | null) =>
   v != null ? `£${v.toLocaleString("en-GB")}` : null;
 
-type DealRow = {
-  id: string;
-  title: string;
-  stage: string;
-  value: number | null;
-  created_at: string;
-  updated_at: string;
-  created_by: string | null;
-  lead_agent_id: string | null;
-  expected_close: string | null;
-  listing_id: string | null;
-  requirement_id: string | null;
-  company_id: string | null;
-  listing: { title: string | null; city: string | null } | null;
-  requirement: { title: string } | null;
-  company: { name: string } | null;
-};
-
 export default async function DealsPage({
   searchParams,
 }: {
   searchParams: Promise<{ agent?: string }>;
 }) {
-  const { agent } = await searchParams;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("deals")
-    .select(
-      "id, title, stage, value, created_at, updated_at, created_by, lead_agent_id, expected_close, listing_id, requirement_id, company_id, listing:disposals(title, city), requirement:requirements(title), company:companies(name)",
-    )
-    .order("updated_at", { ascending: false });
+  if (!isDbConfigured) redirect("/login");
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) redirect("/login");
 
-  const allDeals = (data ?? []) as unknown as DealRow[];
+  const { agent } = await searchParams;
+
+  const allDeals = await listDealsForBoard(agencyId);
 
   // Additional-agent collaborators (deal_agents) — the agent filter matches a
   // deal when the agent created it, leads it, OR collaborates on it.
-  const { data: dealAgentRows } = await supabase
-    .from("deal_agents")
-    .select("deal_id, user_id");
+  const dealAgentRows = await listDealAgentRows(agencyId);
   const collaboratorsByDeal = new Map<string, Set<string>>();
-  for (const r of dealAgentRows ?? []) {
+  for (const r of dealAgentRows) {
     const set = collaboratorsByDeal.get(r.deal_id) ?? new Set<string>();
     set.add(r.user_id);
     collaboratorsByDeal.set(r.deal_id, set);
@@ -89,19 +73,10 @@ export default async function DealsPage({
     ...new Set([
       ...allDeals.map((d) => d.created_by),
       ...allDeals.map((d) => d.lead_agent_id),
-      ...(dealAgentRows ?? []).map((r) => r.user_id),
+      ...dealAgentRows.map((r) => r.user_id),
     ]),
   ].filter((v): v is string => Boolean(v));
-  const agentName = new Map<string, string>();
-  if (agentIds.length) {
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("id, full_name, email")
-      .in("id", agentIds);
-    (profs ?? []).forEach((p) =>
-      agentName.set(p.id, p.full_name ?? p.email ?? "Agent"),
-    );
-  }
+  const agentName = agentIds.length ? await getUserNames(agentIds) : new Map<string, string>();
 
   if (allDeals.length === 0) {
     return (
@@ -134,15 +109,10 @@ export default async function DealsPage({
 
   // Latest stage event per deal → "in stage Xd" + Stuck badges. Falls back to
   // updated_at for deals created before stage history existed.
-  const { data: stageEvents } = await supabase
-    .from("deal_stage_events")
-    .select("deal_id, created_at")
-    .order("created_at", { ascending: false });
-  const stageSince = new Map<string, string>();
-  for (const e of stageEvents ?? []) {
-    if (!stageSince.has(e.deal_id)) stageSince.set(e.deal_id, e.created_at);
-  }
-  const daysInStage = (d: DealRow) => daysSince(stageSince.get(d.id) ?? d.updated_at);
+  const stageEvents = await listLatestStageEventPerDeal(agencyId);
+  const stageSince = new Map(stageEvents.map((e) => [e.deal_id, e.created_at]));
+  const daysInStage = (d: (typeof deals)[number]) =>
+    daysSince(stageSince.get(d.id) ?? d.updated_at);
 
   // Key pipeline stats (respect the agent filter).
   const openDeals = deals.filter((d) => !CLOSED.has(d.stage));
@@ -160,7 +130,7 @@ export default async function DealsPage({
     { label: "Won", value: wonCount, icon: CheckCircle2 },
   ];
 
-  const byStage = new Map<string, DealRow[]>();
+  const byStage = new Map<string, typeof deals>();
   for (const s of STAGE_ORDER) byStage.set(s, []);
   for (const d of deals) (byStage.get(d.stage) ?? byStage.set(d.stage, []).get(d.stage)!).push(d);
 
@@ -247,8 +217,8 @@ export default async function DealsPage({
                           className="text-sm font-medium leading-snug text-foreground hover:text-info hover:underline"
                         />
                         <dl className="mt-2 space-y-1 text-xs text-muted-foreground">
-                          {d.company?.name ? (
-                            <div className="truncate">{d.company.name}</div>
+                          {d.company_name ? (
+                            <div className="truncate">{d.company_name}</div>
                           ) : null}
                           {money(d.value) ? (
                             <div className="font-mono tabular-nums text-foreground">

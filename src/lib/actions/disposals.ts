@@ -3,8 +3,22 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { currentAgencyId } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import {
+  bulkAssignDisposalLead as bulkAssignDisposalLeadRows,
+  bulkUpdateDisposalStatus as bulkUpdateDisposalStatusRows,
+  createDisposal as createDisposalRow,
+  deleteDisposal as deleteDisposalRow,
+  getDisposalForUpdate,
+  isAgencyMember,
+  syncDisposalAgents,
+  updateDisposal as updateDisposalRow,
+  updateDisposalLeadAgent,
+  updateDisposalStatusOnly,
+  type DisposalWriteInput,
+} from "@/lib/db/queries/disposals";
 import { deriveCounty } from "@/lib/locations";
 import { geocodeForSave } from "@/lib/maps/geocode";
 import {
@@ -13,7 +27,6 @@ import {
   formatUseClasses,
 } from "@/lib/use-classes";
 import { refreshMatchesForListing, refreshMatchesForListings } from "@/lib/actions/matches";
-import type { TablesInsert } from "@/lib/database.types";
 import type { FormState } from "@/lib/actions/types";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
@@ -42,8 +55,8 @@ const CANONICAL_LISTING_STATUSES = [
   "Withdrawn",
 ];
 
-/** Map the disposal form fields onto an insert/update payload (shared by create + edit). */
-function disposalFieldsFromForm(fd: FormData): Omit<TablesInsert<"disposals">, "agency_id"> {
+/** Map the disposal form fields onto a write payload (shared by create + edit). */
+function disposalFieldsFromForm(fd: FormData): DisposalWriteInput {
   const disposalType = str(fd, "disposal_type");
   const fitOut = str(fd, "fit_out_state");
   const useClasses = sortUseClasses(
@@ -56,14 +69,12 @@ function disposalFieldsFromForm(fd: FormData): Omit<TablesInsert<"disposals">, "
     .filter(Boolean);
   return {
     title: str(fd, "title") || "Untitled listing",
-    listing_type: LISTING_TYPES.includes(listingType) ? listingType : "cdg",
+    listingType: LISTING_TYPES.includes(listingType) ? listingType : "cdg",
     status: textOrNull(fd, "status"),
-    disposal_type: DISPOSAL_TYPES.includes(disposalType)
-      ? (disposalType as TablesInsert<"disposals">["disposal_type"])
-      : "unknown",
-    to_let: boolOf(fd, "to_let"),
-    for_sale: boolOf(fd, "for_sale"),
-    address_line: textOrNull(fd, "address_line"),
+    disposalType: DISPOSAL_TYPES.includes(disposalType) ? disposalType : "unknown",
+    toLet: boolOf(fd, "to_let"),
+    forSale: boolOf(fd, "for_sale"),
+    addressLine: textOrNull(fd, "address_line"),
     area: textOrNull(fd, "area"),
     city: textOrNull(fd, "city"),
     postcode: textOrNull(fd, "postcode"),
@@ -80,71 +91,69 @@ function disposalFieldsFromForm(fd: FormData): Omit<TablesInsert<"disposals">, "
     // no property_type). There's nothing to tick for those, so the form carries
     // the original through: saving one untouched must not cost it the
     // planning-only credit it earns in the matcher.
-    property_type: useClasses.length > 0 ? formatUseClasses(useClasses) : null,
-    use_class:
+    propertyType: useClasses.length > 0 ? formatUseClasses(useClasses) : null,
+    useClass:
       useClasses.length > 0
         ? planningClassFor(useClasses)
         : textOrNull(fd, "use_class_carried"),
-    size_sqft: numOrNull(fd, "size_sqft"),
-    size_sqm: numOrNull(fd, "size_sqm"),
-    covers_internal: numOrNull(fd, "covers_internal"),
-    covers_external: numOrNull(fd, "covers_external"),
-    fit_out_state: FIT_OUT_STATES.includes(fitOut) ? fitOut : null,
-    epc_rating: textOrNull(fd, "epc_rating"),
-    tenure_raw: textOrNull(fd, "tenure_raw"),
-    rent_pa: numOrNull(fd, "rent_pa"),
+    sizeSqft: numOrNull(fd, "size_sqft"),
+    sizeSqm: numOrNull(fd, "size_sqm"),
+    coversInternal: numOrNull(fd, "covers_internal"),
+    coversExternal: numOrNull(fd, "covers_external"),
+    fitOutState: FIT_OUT_STATES.includes(fitOut) ? fitOut : null,
+    epcRating: textOrNull(fd, "epc_rating"),
+    tenureRaw: textOrNull(fd, "tenure_raw"),
+    rentPa: numOrNull(fd, "rent_pa"),
     premium: numOrNull(fd, "premium"),
-    guide_price: numOrNull(fd, "guide_price"),
-    rateable_value: numOrNull(fd, "rateable_value"),
-    service_charge: numOrNull(fd, "service_charge"),
-    key_features: features,
+    guidePrice: numOrNull(fd, "guide_price"),
+    rateableValue: numOrNull(fd, "rateable_value"),
+    serviceCharge: numOrNull(fd, "service_charge"),
+    keyFeatures: features,
     description: textOrNull(fd, "description"),
-    lead_agent_id: textOrNull(fd, "lead_agent_id"),
+    leadAgentId: textOrNull(fd, "lead_agent_id"),
     // #1/#4: optional links to a Company (landlord/vendor) and a point-of-contact.
-    company_id: textOrNull(fd, "company_id"),
-    contact_id: textOrNull(fd, "contact_id"),
+    companyId: textOrNull(fd, "company_id"),
+    contactId: textOrNull(fd, "contact_id"),
     // "Lease & statutory" section — previously unreachable DB columns.
     summary: textOrNull(fd, "summary"),
-    location_description: textOrNull(fd, "location_description"),
-    licensing_notes: textOrNull(fd, "licensing_notes"),
-    vat_applicable: boolOf(fd, "vat_applicable"),
-    business_rates: numOrNull(fd, "business_rates"),
-    estate_charge: numOrNull(fd, "estate_charge"),
-    parking_charge: numOrNull(fd, "parking_charge"),
-    lease_term_years: numOrNull(fd, "lease_term_years"),
-    lease_expiry: textOrNull(fd, "lease_expiry"),
-    rent_review_basis: textOrNull(fd, "rent_review_basis"),
-    next_rent_review: numOrNull(fd, "next_rent_review"),
-    inside_1954_act: boolOf(fd, "inside_1954_act"),
-    rent_period: textOrNull(fd, "rent_period"),
-    price_qualifier: PRICE_QUALIFIERS.includes(str(fd, "price_qualifier"))
+    locationDescription: textOrNull(fd, "location_description"),
+    licensingNotes: textOrNull(fd, "licensing_notes"),
+    vatApplicable: boolOf(fd, "vat_applicable"),
+    businessRates: numOrNull(fd, "business_rates"),
+    estateCharge: numOrNull(fd, "estate_charge"),
+    parkingCharge: numOrNull(fd, "parking_charge"),
+    leaseTermYears: numOrNull(fd, "lease_term_years"),
+    leaseExpiry: textOrNull(fd, "lease_expiry"),
+    rentReviewBasis: textOrNull(fd, "rent_review_basis"),
+    nextRentReview: numOrNull(fd, "next_rent_review"),
+    inside1954Act: boolOf(fd, "inside_1954_act"),
+    rentPeriod: textOrNull(fd, "rent_period"),
+    priceQualifier: PRICE_QUALIFIERS.includes(str(fd, "price_qualifier"))
       ? str(fd, "price_qualifier")
       : null,
-    brochure_url: textOrNull(fd, "brochure_url"),
+    brochureUrl: textOrNull(fd, "brochure_url"),
   };
 }
 
-/** Replace a disposal's additional-agent collaborators (lead is dropped from the set). */
-async function syncDisposalAgents(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  agencyId: string,
-  disposalId: string,
-  lead: string | null,
-  fd: FormData,
-) {
+/** Lead agent + additional agents (de-duped, lead excluded from extras). */
+function agentsFromForm(fd: FormData) {
+  const lead = textOrNull(fd, "lead_agent_id");
   const extra = Array.from(
     new Set(fd.getAll("additional_agents").map((v) => String(v)).filter(Boolean)),
   ).filter((u) => u !== lead);
-  await supabase
-    .from("disposal_agents")
-    .delete()
-    .eq("disposal_id", disposalId)
-    .eq("agency_id", agencyId);
-  if (extra.length > 0) {
-    await supabase.from("disposal_agents").insert(
-      extra.map((user_id) => ({ agency_id: agencyId, disposal_id: disposalId, user_id })),
-    );
-  }
+  return { lead, extra };
+}
+
+/** Resolves the signed-in caller's user id + agency id, or an error message. */
+async function requireCaller(): Promise<
+  { userId: string; agencyId: string } | { error: string }
+> {
+  if (!isDbConfigured) return { error: "The database isn't configured yet." };
+  const session = await auth();
+  if (!session?.user) return { error: "You must be signed in." };
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return { error: "No agency is linked to your account." };
+  return { userId: session.user.id, agencyId };
 }
 
 /** Create a manually-entered listing (#15). */
@@ -152,14 +161,9 @@ export async function createDisposal(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
-
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { userId, agencyId } = caller;
 
   if (!str(formData, "title")) return { error: "Title is required." };
   if (!str(formData, "contact_id"))
@@ -167,25 +171,19 @@ export async function createDisposal(
 
   const fields = disposalFieldsFromForm(formData);
   // Geocode the address → lat/lng (no-op when no address or no server key).
-  const geo = await geocodeForSave(fields);
-  const { data, error } = await supabase
-    .from("disposals")
-    .insert({
-      ...fields,
-      ...(geo ?? {}),
-      agency_id: agencyId,
-      source: "manual",
-      created_by: user.id,
-    })
-    .select("id")
-    .single();
-  if (error || !data) return { error: error?.message ?? "Could not create the listing." };
+  const geo = await geocodeForSave({
+    address_line: fields.addressLine,
+    city: fields.city,
+    postcode: fields.postcode,
+  });
+  const { id } = await createDisposalRow(agencyId, userId, fields, geo ?? { lat: null, lng: null });
 
-  await syncDisposalAgents(supabase, agencyId, data.id, fields.lead_agent_id ?? null, formData);
-  await refreshMatchesForListing(data.id);
+  const { extra } = agentsFromForm(formData);
+  await syncDisposalAgents(agencyId, id, extra);
+  await refreshMatchesForListing(id);
 
   revalidatePath("/listings");
-  redirect(`/listings/${data.id}`);
+  redirect(`/listings/${id}`);
 }
 
 /** Update an existing listing (#1). */
@@ -193,14 +191,9 @@ export async function updateDisposal(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
-
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { agencyId } = caller;
 
   const id = str(formData, "id");
   if (!id) return { error: "Missing listing id." };
@@ -209,13 +202,7 @@ export async function updateDisposal(
   const fields = disposalFieldsFromForm(formData);
   // Existing row: drives re-geocoding, the manual-only contact rule and the
   // stale-scrape-text cleanup below.
-  const { data: existing } = await supabase
-    .from("disposals")
-    .select(
-      "address_line, city, postcode, lat, lng, updated_at, source, rent_pa, rent_period, premium",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const existing = await getDisposalForUpdate(agencyId, id);
   if (!existing) return { error: "This listing no longer exists." };
 
   // A contact is only mandatory for CDG's own manual entries — scraped/intel
@@ -225,35 +212,34 @@ export async function updateDisposal(
 
   // When the numeric commercials change, drop the raw scraped text so the PDF
   // stops preferring the stale "£X pa" string over the edited figure.
-  const clearRaw: { rent_raw?: null; rent_period?: null; premium_raw?: null } = {};
-  if ((fields.rent_pa ?? null) !== (existing.rent_pa ?? null)) {
-    clearRaw.rent_raw = null;
-    // Keep a rent_period the user deliberately changed in this same edit.
-    if ((fields.rent_period ?? null) === (existing.rent_period ?? null)) {
-      clearRaw.rent_period = null;
-    }
-  }
-  if ((fields.premium ?? null) !== (existing.premium ?? null)) {
-    clearRaw.premium_raw = null;
+  const clearRentRaw = (fields.rentPa ?? null) !== (existing.rent_pa ?? null);
+  const clearPremiumRaw = (fields.premium ?? null) !== (existing.premium ?? null);
+  // Keep a rent_period the user deliberately changed in this same edit.
+  if (clearRentRaw && (fields.rentPeriod ?? null) === (existing.rent_period ?? null)) {
+    fields.rentPeriod = null;
   }
 
-  const geo = await geocodeForSave(fields, existing);
-  const { data: updated, error } = await supabase
-    .from("disposals")
-    .update({ ...fields, ...clearRaw, ...(geo ?? {}) })
-    .eq("id", id)
-    .eq("agency_id", agencyId)
-    .eq("updated_at", existing.updated_at)
-    .select("id");
-  if (error) return { error: error.message };
-  if (!updated || updated.length === 0) {
+  const geo = await geocodeForSave(
+    { address_line: fields.addressLine, city: fields.city, postcode: fields.postcode },
+    existing,
+  );
+  const updated = await updateDisposalRow(
+    agencyId,
+    id,
+    existing.updated_at,
+    fields,
+    { clearRentRaw, clearPremiumRaw },
+    geo,
+  );
+  if (!updated) {
     return {
       error:
         "This listing was changed by someone else while you were editing. Reload the page and try again.",
     };
   }
 
-  await syncDisposalAgents(supabase, agencyId, id, fields.lead_agent_id ?? null, formData);
+  const { extra } = agentsFromForm(formData);
+  await syncDisposalAgents(agencyId, id, extra);
   await refreshMatchesForListing(id);
 
   revalidatePath("/listings");
@@ -261,18 +247,16 @@ export async function updateDisposal(
   redirect(`/listings/${id}`);
 }
 
-/** Delete a disposal (agency-scoped, with RLS as a second layer). */
+/** Delete a disposal (agency-scoped — the tenant boundary, see AGENTS.md). */
 export async function deleteDisposal(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const agencyId = await currentAgencyId(supabase);
   const id = String(formData.get("id") ?? "");
-  if (id && agencyId) {
-    await supabase
-      .from("disposals")
-      .delete()
-      .eq("id", id)
-      .eq("agency_id", agencyId);
-    revalidatePath("/listings");
+  if (isDbConfigured && id) {
+    const session = await auth();
+    const agencyId = session?.user ? await currentAgencyId(session.user.id) : null;
+    if (agencyId) {
+      await deleteDisposalRow(agencyId, id);
+      revalidatePath("/listings");
+    }
   }
   redirect("/listings");
 }
@@ -282,40 +266,19 @@ export async function updateDisposalAssignment(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { agencyId } = caller;
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "Missing disposal id." };
 
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
+  const { lead, extra } = agentsFromForm(formData);
 
-  const lead = String(formData.get("lead_agent_id") ?? "").trim() || null;
-  const extra = Array.from(
-    new Set(formData.getAll("additional_agents").map((v) => String(v)).filter(Boolean)),
-  ).filter((u) => u !== lead);
+  const ok = await updateDisposalLeadAgent(agencyId, id, lead);
+  if (!ok) return { error: "This listing no longer exists." };
 
-  const { error } = await supabase
-    .from("disposals")
-    .update({ lead_agent_id: lead })
-    .eq("id", id)
-    .eq("agency_id", agencyId);
-  if (error) return { error: error.message };
-
-  await supabase
-    .from("disposal_agents")
-    .delete()
-    .eq("disposal_id", id)
-    .eq("agency_id", agencyId);
-  if (extra.length > 0) {
-    await supabase.from("disposal_agents").insert(
-      extra.map((user_id) => ({ agency_id: agencyId, disposal_id: id, user_id })),
-    );
-  }
+  await syncDisposalAgents(agencyId, id, extra);
 
   revalidatePath("/listings");
   revalidatePath(`/listings/${id}`);
@@ -330,16 +293,14 @@ export async function updateDisposalStatus(formData: FormData): Promise<void> {
   const id = str(formData, "id");
   const status = str(formData, "status");
   if (!id || !CANONICAL_LISTING_STATUSES.includes(status)) return;
+  if (!isDbConfigured) return;
 
-  const supabase = await createClient();
-  const agencyId = await currentAgencyId(supabase);
+  const session = await auth();
+  if (!session?.user) return;
+  const agencyId = await currentAgencyId(session.user.id);
   if (!agencyId) return;
 
-  await supabase
-    .from("disposals")
-    .update({ status })
-    .eq("id", id)
-    .eq("agency_id", agencyId);
+  await updateDisposalStatusOnly(agencyId, id, status);
 
   // Stock coming back to market re-enters matching (and leaving it prunes the
   // suggestions) — refresh is best-effort and never blocks the status change.
@@ -362,32 +323,22 @@ export async function bulkUpdateDisposalStatus(
   ids: string[],
   status: string,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
-
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { agencyId } = caller;
 
   const targets = cleanIds(ids);
   if (targets.length === 0) return { error: "No listings selected." };
   if (!CANONICAL_LISTING_STATUSES.includes(status))
     return { error: "Unknown listing status." };
 
-  const { error, count } = await supabase
-    .from("disposals")
-    .update({ status }, { count: "exact" })
-    .in("id", targets)
-    .eq("agency_id", agencyId);
-  if (error) return { error: error.message };
+  const count = await bulkUpdateDisposalStatusRows(agencyId, targets, status);
 
   await refreshMatchesForListings(targets);
 
   revalidatePath("/listings");
   return {
-    message: `Set ${count ?? targets.length} listing${(count ?? targets.length) === 1 ? "" : "s"} to ${status}.`,
+    message: `Set ${count} listing${count === 1 ? "" : "s"} to ${status}.`,
   };
 }
 
@@ -396,14 +347,9 @@ export async function bulkAssignDisposalLead(
   ids: string[],
   leadAgentId: string,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
-
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { agencyId } = caller;
 
   const targets = cleanIds(ids);
   if (targets.length === 0) return { error: "No listings selected." };
@@ -412,23 +358,13 @@ export async function bulkAssignDisposalLead(
   if (!lead) return { error: "Pick an agent to assign." };
 
   // The new lead must be a member of the caller's agency.
-  const { data: member } = await supabase
-    .from("agency_members")
-    .select("user_id")
-    .eq("agency_id", agencyId)
-    .eq("user_id", lead)
-    .maybeSingle();
-  if (!member) return { error: "That agent isn't a member of your agency." };
+  const isMember = await isAgencyMember(agencyId, lead);
+  if (!isMember) return { error: "That agent isn't a member of your agency." };
 
-  const { error, count } = await supabase
-    .from("disposals")
-    .update({ lead_agent_id: lead }, { count: "exact" })
-    .in("id", targets)
-    .eq("agency_id", agencyId);
-  if (error) return { error: error.message };
+  const count = await bulkAssignDisposalLeadRows(agencyId, targets, lead);
 
   revalidatePath("/listings");
   return {
-    message: `Assigned ${count ?? targets.length} listing${(count ?? targets.length) === 1 ? "" : "s"}.`,
+    message: `Assigned ${count} listing${count === 1 ? "" : "s"}.`,
   };
 }

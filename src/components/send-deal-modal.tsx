@@ -18,7 +18,7 @@ import {
 import { listContactEmails, sendDealExternal } from "@/lib/actions/deal-send";
 import { sendMessage } from "@/lib/actions/messages";
 import type { FormState } from "@/lib/actions/types";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 
 type Step = "choose" | "internal" | "external";
 

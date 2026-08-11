@@ -9,8 +9,9 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { deleteTask, toggleTaskStatus } from "@/lib/actions/tasks";
-import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { listMyTasks } from "@/lib/db/queries/tasks";
 import { isPast } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -147,26 +148,16 @@ function TaskList({
 }
 
 export default async function TasksPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user?.id ?? "";
+  const session = await auth();
+  const me = session?.user?.id ?? "";
 
-  const agencyId = await currentAgencyId(supabase);
-  const teammates = agencyId ? await getAgencyMembers(supabase, agencyId) : [];
+  const agencyId = me ? await currentAgencyId(me) : null;
+  const teammates = agencyId ? await getAgencyMembers(agencyId) : [];
   const nameOf = new Map(teammates.map((a) => [a.id, a.name]));
 
-  // "My tasks" — assigned to me, or created by me and not yet assigned.
-  const { data: taskRows } = await supabase
-    .from("tasks")
-    .select(
-      "id, title, details, due_at, assignee_id, entity_type, entity_id, status, created_by",
-    )
-    .or(`assignee_id.eq.${me},and(created_by.eq.${me},assignee_id.is.null)`)
-    .order("due_at", { ascending: true, nullsFirst: false })
-    .limit(200);
-  const tasks: TaskRow[] = taskRows ?? [];
+  // "My tasks" — assigned to me, or created by me and not yet assigned
+  // (filtered server-side in listMyTasks).
+  const tasks: TaskRow[] = agencyId ? await listMyTasks(agencyId, me) : [];
   const openTasks = tasks.filter((t) => t.status === "open");
   const doneTasks = tasks.filter((t) => t.status === "done");
 

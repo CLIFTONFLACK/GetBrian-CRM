@@ -1,6 +1,7 @@
 import type * as React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Gauge, RotateCcw, Sparkles, Star, Store, Target, X } from "lucide-react";
 
 import { CreateDealButton } from "@/components/create-deal-button";
@@ -22,8 +23,15 @@ import { DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
 import { getCompanyTypes } from "@/lib/company-types";
 import { getPairSendHistory } from "@/lib/send-history";
 import { filterHref } from "@/lib/sort";
-import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { listCompanyOptions } from "@/lib/db/queries/companies";
+import { listContactOptions } from "@/lib/db/queries/contacts";
+import { listDealPairs } from "@/lib/db/queries/deals";
+import { listDisposalsForMatching } from "@/lib/db/queries/disposals";
+import { listMatches } from "@/lib/db/queries/matches";
+import { listActiveRequirementsForMatching } from "@/lib/db/queries/requirements";
 import { cn } from "@/lib/utils";
 
 type MatchStatus = Database["public"]["Enums"]["match_status"];
@@ -79,32 +87,22 @@ export default async function MatchesPage({
     Math.max(0, Number.isFinite(flexParsed) ? flexParsed : DEFAULT_LOCATION_FLEX),
   );
 
-  const supabase = await createClient();
-  const [
-    {
-      data: { user },
-    },
-    { data: reqs },
-    { data: disposals },
-  ] = await Promise.all([
-    supabase.auth.getUser(),
-    supabase
-      .from("requirements")
-      .select(
-        "id, title, company_id, target_towns, target_regions, target_counties, target_postcode_districts, target_neighbourhoods, target_london_zones, min_sqft, max_sqft, min_covers, max_covers, use_classes, tenure_prefs, max_rent, max_premium, max_guide_price",
-      )
-      .eq("status", "active"),
-    supabase
-      .from("disposals")
-      .select(
-        "id, title, status, listing_type, city, area, postcode, address_line, county, lat, lng, size_sqft, covers_internal, use_class, property_type, disposal_type, rent_pa, premium, guide_price, fit_out_state",
-      ),
-  ]);
-  const requirements = reqs ?? [];
+  if (!isDbConfigured) redirect("/login");
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const user = session.user;
+  const agencyId = await currentAgencyId(user.id);
+
+  const [requirements, disposals] = agencyId
+    ? await Promise.all([
+        listActiveRequirementsForMatching(agencyId),
+        listDisposalsForMatching(agencyId),
+      ])
+    : [[], []];
   // Only pitch live stock — never surface let/sold/withdrawn listings as matches.
   // The silo tabs split CDG's own instructions from scraped Market Intel stock;
   // `matchable` (unscoped) powers the tab counts, `supply` is what's shown.
-  const matchable = (disposals ?? []).filter((d) => isListingMatchable(d.status));
+  const matchable = disposals.filter((d) => isListingMatchable(d.status));
   const supply = matchable.filter((d) => !silo || (d.listing_type ?? "cdg") === silo);
   const siloCounts = {
     all: matchable.length,
@@ -112,38 +110,27 @@ export default async function MatchesPage({
     intel: matchable.filter((d) => d.listing_type === "intel").length,
   };
 
-  const agencyId = await currentAgencyId(supabase);
-  const [members, { data: companyRows }, { data: contactRows }, companyTypes] =
-    await Promise.all([
-      agencyId ? getAgencyMembers(supabase, agencyId) : Promise.resolve([]),
-      supabase.from("companies").select("id, name").order("name"),
-      supabase.from("contacts").select("id, first_name, last_name").order("first_name"),
-      getCompanyTypes(),
-    ]);
-  const companies = companyRows ?? [];
+  const [members, companies, contacts, companyTypes] = await Promise.all([
+    agencyId ? getAgencyMembers(agencyId) : Promise.resolve([]),
+    agencyId ? listCompanyOptions(agencyId) : Promise.resolve([]),
+    agencyId ? listContactOptions(agencyId) : Promise.resolve([]),
+    getCompanyTypes(),
+  ]);
   const operatorName = new Map(companies.map((c) => [c.id, c.name]));
-  const contacts = (contactRows ?? []).map((c) => ({
-    id: c.id,
-    name: [c.first_name, c.last_name].filter(Boolean).join(" ") || "Unnamed contact",
-  }));
 
   // Persisted decisions. Scores stay live (cheap and always current); the
   // `matches` table only carries what a human decided about a pair. A pair that
   // already has a deal counts as converted whether or not its row says so —
   // deal creation lives in another action that doesn't write here.
-  const [{ data: matchRows }, { data: dealPairs }] = await Promise.all([
-    supabase.from("matches").select("requirement_id, listing_id, status"),
-    supabase
-      .from("deals")
-      .select("requirement_id, listing_id")
-      .not("requirement_id", "is", null)
-      .not("listing_id", "is", null),
+  const [matchRows, dealPairs] = await Promise.all([
+    agencyId ? listMatches(agencyId) : Promise.resolve([]),
+    agencyId ? listDealPairs(agencyId) : Promise.resolve([]),
   ]);
   const statusByPair = new Map<string, MatchStatus>(
-    (matchRows ?? []).map((m) => [`${m.requirement_id}:${m.listing_id}`, m.status]),
+    matchRows.map((m) => [`${m.requirement_id}:${m.listing_id}`, m.status]),
   );
   const convertedPairs = new Set(
-    (dealPairs ?? []).map((d) => `${d.requirement_id}:${d.listing_id}`),
+    dealPairs.map((d) => `${d.requirement_id}:${d.listing_id}`),
   );
 
   const term = (q ?? "").trim().toLowerCase();
@@ -187,10 +174,12 @@ export default async function MatchesPage({
   // Prior external sends — powers the "Sent" chip and the wizard's double-send
   // warning. Looked up for exactly the pairs on screen, so the counts stay
   // correct however much send history the agency accumulates.
-  const sentByPair = await getPairSendHistory(
-    supabase,
-    shown.map((p) => ({ requirementId: p.rq.id, listingId: p.d.id })),
-  );
+  const sentByPair = agencyId
+    ? await getPairSendHistory(
+        agencyId,
+        shown.map((p) => ({ requirementId: p.rq.id, listingId: p.d.id })),
+      )
+    : new Map<string, { name: string; at: string }[]>();
 
   const params = { q, min, use_class, flex, silo, rejected, shortlisted };
 

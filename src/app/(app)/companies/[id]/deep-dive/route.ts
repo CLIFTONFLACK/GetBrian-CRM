@@ -2,7 +2,10 @@ import { createElement, type ReactElement } from "react";
 
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { getCompanyName } from "@/lib/db/queries/companies";
+import { getLatestCompleteDeepDive } from "@/lib/db/queries/deep-dive";
 import { registerBrandFonts } from "@/lib/pdf/fonts";
 import { DeepDiveDocument } from "@/lib/pdf/deep-dive-document";
 
@@ -17,32 +20,20 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return new Response("Unauthorized", { status: 401 });
+  const session = await auth();
+  if (!session?.user) return new Response("Unauthorized", { status: 401 });
 
-  const { data: company } = await supabase
-    .from("companies")
-    .select("name")
-    .eq("id", id)
-    .maybeSingle();
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return new Response("Unauthorized", { status: 401 });
 
-  const { data: report } = await supabase
-    .from("deep_dive_reports")
-    .select("markdown, created_at")
-    .eq("company_id", id)
-    .eq("status", "complete")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const name = await getCompanyName(agencyId, id);
+  const report = await getLatestCompleteDeepDive(agencyId, id);
 
   if (!report?.markdown) return new Response("No Deep Dive report yet", { status: 404 });
 
   registerBrandFonts();
-  const title = company?.name ?? "Company";
+  const title = name ?? "Company";
   const element = createElement(DeepDiveDocument, {
     title,
     markdown: report.markdown,

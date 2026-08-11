@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Bell, Clock, CornerUpLeft, Inbox, Send } from "lucide-react";
 
 import { ComposeMessage } from "@/components/compose-message";
@@ -12,8 +13,17 @@ import {
   markMessageRead,
   markNotificationRead,
 } from "@/lib/actions/messages";
-import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { listDealIdsLedBy, listOpenDealReminders } from "@/lib/db/queries/deals";
+import { getUserNames } from "@/lib/db/queries/disposals";
+import {
+  getMessagesByIds,
+  listInboxMessages,
+  listNotifications,
+  listSentMessages,
+} from "@/lib/db/queries/messages";
 import { isPast } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -26,55 +36,30 @@ export default async function MessagesPage({
 }: {
   searchParams: Promise<{ view?: string }>;
 }) {
+  if (!isDbConfigured) redirect("/login");
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const me = session.user.id;
+  const agencyId = await currentAgencyId(me);
+  if (!agencyId) redirect("/login");
+
   const { view } = await searchParams;
   const showSent = view === "sent";
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user?.id ?? "";
+  const [msgs, sentMsgs, notes, reminders] = await Promise.all([
+    listInboxMessages(agencyId, me, 50),
+    showSent ? listSentMessages(agencyId, me, 50) : Promise.resolve([]),
+    listNotifications(agencyId, me, 30),
+    listOpenDealReminders(agencyId, 100),
+  ]);
 
-  const [{ data: msgs }, { data: sentMsgs }, { data: notes }, { data: reminders }] =
-    await Promise.all([
-      supabase
-        .from("messages")
-        .select("id, sender_id, subject, body, link, parent_id, read_at, created_at")
-        .eq("recipient_id", me)
-        .order("created_at", { ascending: false })
-        .limit(50),
-      showSent
-        ? supabase
-            .from("messages")
-            .select("id, recipient_id, subject, body, link, parent_id, read_at, created_at")
-            .eq("sender_id", me)
-            .order("created_at", { ascending: false })
-            .limit(50)
-        : Promise.resolve({ data: null }),
-      supabase
-        .from("notifications")
-        .select("id, title, body, link, read_at, created_at")
-        .order("created_at", { ascending: false })
-        .limit(30),
-      supabase
-        .from("deal_reminders")
-        .select("id, title, due_at, deal_id, created_by")
-        .eq("done", false)
-        .order("due_at", { ascending: true })
-        .limit(100),
-    ]);
-
-  const messages = msgs ?? [];
-  const sent = sentMsgs ?? [];
-  const notifications = notes ?? [];
+  const messages = msgs;
+  const sent = sentMsgs;
+  const notifications = notes;
 
   // "My" reminders only: ones I set, or on deals where I'm the lead agent.
-  const { data: myLeadDeals } = await supabase
-    .from("deals")
-    .select("id")
-    .eq("lead_agent_id", me);
-  const leadDealIds = new Set((myLeadDeals ?? []).map((d) => d.id));
-  const dueReminders = (reminders ?? [])
+  const leadDealIds = new Set(await listDealIdsLedBy(agencyId, me));
+  const dueReminders = reminders
     .filter((r) => r.created_by === me || leadDealIds.has(r.deal_id))
     .slice(0, 30);
 
@@ -86,11 +71,8 @@ export default async function MessagesPage({
   ];
   const parentOf = new Map<string, string>();
   if (parentIds.length) {
-    const { data: parents } = await supabase
-      .from("messages")
-      .select("id, subject, body")
-      .in("id", parentIds);
-    (parents ?? []).forEach((p) =>
+    const parents = await getMessagesByIds(agencyId, parentIds);
+    parents.forEach((p) =>
       parentOf.set(p.id, p.subject ?? `${p.body.slice(0, 60)}${p.body.length > 60 ? "…" : ""}`),
     );
   }
@@ -102,19 +84,11 @@ export default async function MessagesPage({
       ...sent.map((m) => m.recipient_id),
     ]),
   ];
-  const nameOf = new Map<string, string>();
-  if (personIds.length) {
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("id, full_name, email")
-      .in("id", personIds);
-    (profs ?? []).forEach((p) => nameOf.set(p.id, p.full_name ?? p.email ?? "Teammate"));
-  }
+  const nameOf = personIds.length ? await getUserNames(personIds) : new Map<string, string>();
 
   const unreadInbox = messages.filter((m) => !m.read_at).length;
 
-  const agencyId = await currentAgencyId(supabase);
-  const teammates = agencyId ? await getAgencyMembers(supabase, agencyId) : [];
+  const teammates = await getAgencyMembers(agencyId);
 
   const tabClass = (active: boolean) =>
     cn(
@@ -133,7 +107,7 @@ export default async function MessagesPage({
             Team messages, notifications and reminders in one place.
           </p>
         </div>
-        <ComposeMessage agents={teammates} meId={user?.id} />
+        <ComposeMessage agents={teammates} meId={me} />
       </div>
 
       {/* ── Inbox / Sent ──────────────────────────────────────── */}
@@ -269,7 +243,7 @@ export default async function MessagesPage({
                     ) : null}
                     <ComposeMessage
                       agents={teammates}
-                      meId={user?.id}
+                      meId={me}
                       replyTo={{
                         messageId: m.id,
                         senderId: m.sender_id,

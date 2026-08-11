@@ -14,7 +14,14 @@ import {
 } from "@/lib/badges";
 import { getContactRoles, roleLabel } from "@/lib/contact-roles";
 import { getCompanyTypes, typeLabel } from "@/lib/company-types";
-import { createClient } from "@/lib/supabase/server";
+import { escapeLike } from "@/lib/search";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { searchCompanies } from "@/lib/db/queries/companies";
+import { listContactsByCompanyIds, searchContacts } from "@/lib/db/queries/contacts";
+import { searchDisposals } from "@/lib/db/queries/disposals";
+import { searchRequirements } from "@/lib/db/queries/requirements";
 
 export const metadata: Metadata = { title: "Search" };
 
@@ -36,59 +43,40 @@ export default async function SearchPage({
     );
   }
 
-  const supabase = await createClient();
-  const like = `%${term}%`;
-  const [companies, contactsByField, disposals, requirements] = await Promise.all([
-    supabase
-      .from("companies")
-      .select("id, name, type")
-      .or(`name.ilike.${like},phone.ilike.${like},website.ilike.${like}`)
-      .limit(10),
-    supabase
-      .from("contacts")
-      .select("id, first_name, last_name, role")
-      .or(
-        `first_name.ilike.${like},last_name.ilike.${like},email.ilike.${like},phone.ilike.${like}`,
-      )
-      .limit(10),
-    supabase
-      .from("disposals")
-      .select("id, title, city, status")
-      .or(
-        `title.ilike.${like},city.ilike.${like},postcode.ilike.${like},address_line.ilike.${like},area.ilike.${like}`,
-      )
-      .limit(10),
-    supabase
-      .from("requirements")
-      .select("id, title, status")
-      .or(`title.ilike.${like},notes.ilike.${like}`)
-      .limit(10),
-  ]);
+  if (!isDbConfigured) {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <PageHeader title="Search" description={`Results for “${term}”`} />
+        <EmptyState icon={Search} title="No results" description="Try a different term." />
+      </div>
+    );
+  }
+  const session = await auth();
+  const agencyId = session?.user ? await currentAgencyId(session.user.id) : null;
+
+  const pattern = `%${escapeLike(term)}%`;
+  const [companies, contactsByField, disposals, requirements] = agencyId
+    ? await Promise.all([
+        searchCompanies(agencyId, pattern, 10),
+        searchContacts(agencyId, pattern, 10),
+        searchDisposals(agencyId, pattern, 10),
+        searchRequirements(agencyId, pattern, 10),
+      ])
+    : [[], [], [], []];
 
   // Also surface contacts found via their firm (company name match), deduped.
-  let contactRows = contactsByField.data ?? [];
-  const companyIds = (companies.data ?? []).map((c) => c.id);
-  if (companyIds.length) {
-    const { data: byFirm } = await supabase
-      .from("contacts")
-      .select("id, first_name, last_name, role")
-      .in("company_id", companyIds)
-      .limit(10);
+  let contactRows = contactsByField;
+  const companyIds = companies.map((c) => c.id);
+  if (agencyId && companyIds.length) {
+    const byFirm = await listContactsByCompanyIds(agencyId, companyIds, 10);
     const seen = new Set(contactRows.map((c) => c.id));
-    contactRows = [...contactRows, ...(byFirm ?? []).filter((c) => !seen.has(c.id))].slice(
-      0,
-      10,
-    );
+    contactRows = [...contactRows, ...byFirm.filter((c) => !seen.has(c.id))].slice(0, 10);
   }
 
   const contactRoles = await getContactRoles();
   const companyTypes = await getCompanyTypes();
 
-  const total =
-    (companies.data?.length ?? 0) +
-    contactRows.length +
-    (disposals.data?.length ?? 0) +
-    (requirements.data?.length ?? 0);
+  const total = companies.length + contactRows.length + disposals.length + requirements.length;
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -99,7 +87,7 @@ export default async function SearchPage({
         <div className="space-y-6">
           <Group
             title="Companies"
-            items={(companies.data ?? []).map((c) => ({
+            items={companies.map((c) => ({
               href: `/companies/${c.id}`,
               label: c.name,
               badge: companyTypeBadge(c.type, typeLabel(companyTypes, c.type)),
@@ -115,7 +103,7 @@ export default async function SearchPage({
           />
           <Group
             title="Listings"
-            items={(disposals.data ?? []).map((d) => ({
+            items={disposals.map((d) => ({
               href: `/listings/${d.id}`,
               label: `${d.title ?? "Untitled listing"}${d.city ? ` · ${d.city}` : ""}`,
               badge: listingStatusBadge(d.status),
@@ -123,7 +111,7 @@ export default async function SearchPage({
           />
           <Group
             title="Requirements"
-            items={(requirements.data ?? []).map((r) => ({
+            items={requirements.map((r) => ({
               href: `/requirements/${r.id}`,
               label: r.title,
               badge: requirementStatusBadge(r.status),

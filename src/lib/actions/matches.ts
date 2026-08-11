@@ -4,11 +4,28 @@ import { revalidatePath } from "next/cache";
 
 import { isListingMatchable } from "@/lib/badges";
 import { DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
-import { currentAgencyId } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import {
+  getDisposalsForMatchingByIds,
+  listDisposalsForMatching,
+  type MatchDisposal,
+} from "@/lib/db/queries/disposals";
+import {
+  getActiveRequirementForMatching,
+  getRequirementAgentIdsForMany,
+  listActiveRequirementsForMatching,
+  type MatchRequirement,
+} from "@/lib/db/queries/requirements";
+import {
+  getExistingMatchPairs,
+  setMatchStatus as setMatchStatusRow,
+  upsertMatchScores,
+} from "@/lib/db/queries/matches";
+import { createNotificationRows } from "@/lib/db/queries/messages";
 import type { Database, Json } from "@/lib/database.types";
 
-type Supabase = Awaited<ReturnType<typeof createClient>>;
 type MatchStatus = Database["public"]["Enums"]["match_status"];
 
 /**
@@ -20,40 +37,23 @@ type MatchStatus = Database["public"]["Enums"]["match_status"];
  * agents have already been told about a new pairing.
  *
  * Rule that must never be broken: a refresh may update `score`/`reasons` on an
- * existing row, but it must NEVER write `status`. The upserts below deliberately
- * omit that column so PostgREST's ON CONFLICT DO UPDATE leaves a human's
- * shortlisted / rejected / converted decision alone; only brand-new rows take
- * the table default of 'suggested'.
+ * existing row, but it must NEVER write `status` — see matches.ts (the DAO)'s
+ * `upsertMatchScores` for where that's enforced.
  */
 
 /** Pairs scoring below this are not worth persisting or alerting on. */
 const MATCH_THRESHOLD = 50;
-/** Keep upsert payloads (and their URLs) within comfortable limits. */
-const CHUNK = 400;
 /** Never fire more than this many "new match" notifications in one refresh. */
 const MAX_NOTIFICATION_ITEMS = 3;
 
-const REQUIREMENT_COLUMNS =
-  "id, title, lead_agent_id, target_towns, target_regions, target_counties, target_postcode_districts, target_neighbourhoods, target_london_zones, min_sqft, max_sqft, min_covers, max_covers, use_classes, tenure_prefs, max_rent, max_premium, max_guide_price";
-
-const LISTING_COLUMNS =
-  "id, title, status, city, area, postcode, address_line, county, lat, lng, size_sqft, covers_internal, use_class, property_type, disposal_type, rent_pa, premium, guide_price, fit_out_state";
-
 type ScopedRequirement = { id: string; title: string; lead_agent_id: string | null };
 type ScopedListing = { id: string; title: string | null; status: string | null };
-
-function chunk<T>(rows: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size));
-  return out;
-}
 
 /**
  * Score every requirement × listing pair, persist the ones worth keeping, and
  * return the pairs that did not exist before (the ones worth alerting on).
  */
 async function persistPairs(
-  supabase: Supabase,
   agencyId: string,
   requirements: (ScopedRequirement & Parameters<typeof scoreMatch>[0])[],
   listings: (ScopedListing & Parameters<typeof scoreMatch>[1])[],
@@ -82,38 +82,21 @@ async function persistPairs(
   if (scored.length === 0) return [];
 
   // Which pairs already exist? Read on the narrower axis of the refresh.
-  const existing = supabase
-    .from("matches")
-    .select("listing_id, requirement_id")
-    .eq("agency_id", agencyId);
-  const { data: existingRows, error: readError } =
-    "listingIds" in scope
-      ? await existing.in("listing_id", scope.listingIds)
-      : await existing.in("requirement_id", scope.requirementIds);
-  if (readError) {
-    console.error("matches: could not read existing rows:", readError.message);
-    return [];
-  }
-  const known = new Set(
-    (existingRows ?? []).map((r) => `${r.requirement_id}:${r.listing_id}`),
-  );
+  const known = await getExistingMatchPairs(agencyId, scope);
 
-  const payload = scored.map((s) => ({
-    agency_id: agencyId,
-    listing_id: s.listing.id,
-    requirement_id: s.requirement.id,
-    score: s.score,
-    reasons: s.reasons,
-    // NB: no `status` — see the module comment.
-  }));
-  for (const batch of chunk(payload, CHUNK)) {
-    const { error } = await supabase
-      .from("matches")
-      .upsert(batch, { onConflict: "listing_id,requirement_id" });
-    if (error) {
-      console.error("matches: upsert failed:", error.message);
-      return [];
-    }
+  try {
+    await upsertMatchScores(
+      agencyId,
+      scored.map((s) => ({
+        listingId: s.listing.id,
+        requirementId: s.requirement.id,
+        score: s.score,
+        reasons: s.reasons,
+      })),
+    );
+  } catch (err) {
+    console.error("matches: upsert failed:", (err as Error).message);
+    return [];
   }
 
   return scored
@@ -123,11 +106,10 @@ async function persistPairs(
 
 /**
  * Tell each requirement's agents (lead + additional) about pairings that were
- * just suggested for the first time. One notification per recipient per refresh
- * — a 200-listing intel resync must not produce 200 bell rows.
+ * just suggested for the first time. One notification per recipient per
+ * refresh — a 200-listing intel resync must not produce 200 bell rows.
  */
 async function notifyNewSuggestions(
-  supabase: Supabase,
   agencyId: string,
   actorId: string | null,
   fresh: { requirement: ScopedRequirement; listing: ScopedListing; score: number }[],
@@ -135,11 +117,7 @@ async function notifyNewSuggestions(
   if (fresh.length === 0) return;
 
   const requirementIds = [...new Set(fresh.map((f) => f.requirement.id))];
-  const { data: extraAgents } = await supabase
-    .from("requirement_agents")
-    .select("requirement_id, user_id")
-    .eq("agency_id", agencyId)
-    .in("requirement_id", requirementIds);
+  const extraAgents = await getRequirementAgentIdsForMany(agencyId, requirementIds);
 
   const recipientsFor = new Map<string, Set<string>>();
   for (const id of requirementIds) recipientsFor.set(id, new Set());
@@ -148,7 +126,7 @@ async function notifyNewSuggestions(
       recipientsFor.get(f.requirement.id)?.add(f.requirement.lead_agent_id);
     }
   }
-  for (const row of extraAgents ?? []) {
+  for (const row of extraAgents) {
     recipientsFor.get(row.requirement_id)?.add(row.user_id);
   }
 
@@ -169,8 +147,8 @@ async function notifyNewSuggestions(
     const listingName = first.listing.title ?? "a new listing";
     if (items.length === 1) {
       return {
-        agency_id: agencyId,
-        user_id,
+        agencyId,
+        userId: user_id,
         title: `New match for “${first.requirement.title}”`,
         body: `${listingName} — ${first.score}% match`,
         link: `/requirements/${first.requirement.id}`,
@@ -181,8 +159,8 @@ async function notifyNewSuggestions(
       .map((i) => `${i.listing.title ?? "Untitled listing"} (${i.score}%)`)
       .join("; ");
     return {
-      agency_id: agencyId,
-      user_id,
+      agencyId,
+      userId: user_id,
       title: `${items.length} new matches for your requirements`,
       body:
         preview +
@@ -193,18 +171,20 @@ async function notifyNewSuggestions(
     };
   });
 
-  const { error } = await supabase.from("notifications").insert(rows);
-  if (error) console.error("matches: notification insert failed:", error.message);
+  try {
+    await createNotificationRows(rows);
+  } catch (err) {
+    console.error("matches: notification insert failed:", (err as Error).message);
+  }
 }
 
-async function session(supabase: Supabase) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-  const agencyId = await currentAgencyId(supabase);
+async function session(): Promise<{ userId: string; agencyId: string } | null> {
+  if (!isDbConfigured) return null;
+  const authSession = await auth();
+  if (!authSession?.user) return null;
+  const agencyId = await currentAgencyId(authSession.user.id);
   if (!agencyId) return null;
-  return { userId: user.id, agencyId };
+  return { userId: authSession.user.id, agencyId };
 }
 
 /**
@@ -218,32 +198,23 @@ export async function refreshMatchesForListings(listingIds: string[]): Promise<v
   if (ids.length === 0) return;
 
   try {
-    const supabase = await createClient();
-    const ctx = await session(supabase);
+    const ctx = await session();
     if (!ctx) return;
 
-    const [{ data: listingRows }, { data: requirementRows }] = await Promise.all([
-      supabase
-        .from("disposals")
-        .select(LISTING_COLUMNS)
-        .eq("agency_id", ctx.agencyId)
-        .in("id", ids),
-      supabase
-        .from("requirements")
-        .select(REQUIREMENT_COLUMNS)
-        .eq("agency_id", ctx.agencyId)
-        .eq("status", "active"),
+    const [listingRows, requirementRows] = await Promise.all([
+      getDisposalsForMatchingByIds(ctx.agencyId, ids),
+      listActiveRequirementsForMatching(ctx.agencyId),
     ]);
 
     // Let/sold/withdrawn stock is never pitched, so it is never persisted.
-    const listings = (listingRows ?? []).filter((l) => isListingMatchable(l.status));
-    const requirements = requirementRows ?? [];
+    const listings: MatchDisposal[] = listingRows.filter((l) => isListingMatchable(l.status));
+    const requirements: MatchRequirement[] = requirementRows;
     if (listings.length === 0 || requirements.length === 0) return;
 
-    const fresh = await persistPairs(supabase, ctx.agencyId, requirements, listings, {
+    const fresh = await persistPairs(ctx.agencyId, requirements, listings, {
       listingIds: listings.map((l) => l.id),
     });
-    await notifyNewSuggestions(supabase, ctx.agencyId, ctx.userId, fresh);
+    await notifyNewSuggestions(ctx.agencyId, ctx.userId, fresh);
     if (fresh.length > 0) revalidatePath("/matches");
   } catch (err) {
     console.error("refreshMatchesForListings failed:", (err as Error).message);
@@ -265,30 +236,20 @@ export async function refreshMatchesForRequirement(
 ): Promise<void> {
   if (!requirementId) return;
   try {
-    const supabase = await createClient();
-    const ctx = await session(supabase);
+    const ctx = await session();
     if (!ctx) return;
 
-    const { data: requirement } = await supabase
-      .from("requirements")
-      .select(REQUIREMENT_COLUMNS)
-      .eq("agency_id", ctx.agencyId)
-      .eq("id", requirementId)
-      .eq("status", "active")
-      .maybeSingle();
+    const requirement = await getActiveRequirementForMatching(ctx.agencyId, requirementId);
     if (!requirement) return; // satisfied / withdrawn briefs don't generate matches
 
-    const { data: listingRows } = await supabase
-      .from("disposals")
-      .select(LISTING_COLUMNS)
-      .eq("agency_id", ctx.agencyId);
-    const listings = (listingRows ?? []).filter((l) => isListingMatchable(l.status));
+    const listingRows = await listDisposalsForMatching(ctx.agencyId);
+    const listings = listingRows.filter((l) => isListingMatchable(l.status));
     if (listings.length === 0) return;
 
-    const fresh = await persistPairs(supabase, ctx.agencyId, [requirement], listings, {
+    const fresh = await persistPairs(ctx.agencyId, [requirement], listings, {
       requirementIds: [requirementId],
     });
-    await notifyNewSuggestions(supabase, ctx.agencyId, ctx.userId, fresh);
+    await notifyNewSuggestions(ctx.agencyId, ctx.userId, fresh);
     if (fresh.length > 0) revalidatePath("/matches");
   } catch (err) {
     console.error("refreshMatchesForRequirement failed:", (err as Error).message);
@@ -301,8 +262,7 @@ export async function refreshMatchesForRequirement(
  * the persisted row is created the moment a human first acts on it.
  */
 export async function setMatchStatus(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const ctx = await session(supabase);
+  const ctx = await session();
   if (!ctx) return;
 
   const requirementId = String(formData.get("requirement_id") ?? "").trim();
@@ -323,18 +283,10 @@ export async function setMatchStatus(formData: FormData): Promise<void> {
   const parsed = Number(formData.get("score") ?? 0);
   const score = Number.isFinite(parsed) ? Math.min(100, Math.max(0, parsed)) : 0;
 
-  const { error } = await supabase.from("matches").upsert(
-    {
-      agency_id: ctx.agencyId,
-      requirement_id: requirementId,
-      listing_id: listingId,
-      score,
-      status,
-    },
-    { onConflict: "listing_id,requirement_id" },
-  );
-  if (error) {
-    console.error("setMatchStatus failed:", error.message);
+  try {
+    await setMatchStatusRow(ctx.agencyId, requirementId, listingId, score, status);
+  } catch (err) {
+    console.error("setMatchStatus failed:", (err as Error).message);
     return;
   }
 

@@ -10,8 +10,10 @@ import { PublicFormLink } from "@/components/public-form-link";
 import { Card, CardContent } from "@/components/ui/card";
 import { ReviewActions } from "./review-actions";
 import { filterHref } from "@/lib/sort";
-import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { listIntakeSubmissions } from "@/lib/db/queries/intake";
 
 export const metadata: Metadata = { title: "Intake" };
 
@@ -179,8 +181,8 @@ export default async function IntakePage({
     ? (status as string)
     : "pending";
 
-  const supabase = await createClient();
-  const agencyId = await currentAgencyId(supabase);
+  const session = isDbConfigured ? await auth() : null;
+  const agencyId = session?.user ? await currentAgencyId(session.user.id) : null;
 
   // Absolute, shareable URL for the public form — built from the request so it
   // is right on localhost, a preview alias and production alike.
@@ -189,18 +191,11 @@ export default async function IntakePage({
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const publicFormUrl = host ? `${proto}://${host}${PUBLIC_FORM_PATH}` : PUBLIC_FORM_PATH;
 
-  const { data } = await supabase
-    .from("intake_submissions")
-    .select(
-      "id, status, company_name, first_name, last_name, email, phone, property_type, target_locations, min_sqft, max_sqft, min_covers, max_covers, max_rent, max_premium, notes, created_requirement_id, reviewed_by, reviewed_at, created_at",
-    )
-    .order("created_at", { ascending: false })
-    .limit(200);
-  const rows: SubmissionRow[] = data ?? [];
+  const rows: SubmissionRow[] = agencyId ? await listIntakeSubmissions(agencyId) : [];
   const shown = rows.filter((r) => r.status === active);
 
   // Reviewer display names (only needed on the reviewed tabs).
-  const members = agencyId ? await getAgencyMembers(supabase, agencyId) : [];
+  const members = agencyId ? await getAgencyMembers(agencyId) : [];
   const nameOf = new Map(members.map((m) => [m.id, m.name]));
 
   const tiles = STATUSES.map((s) => ({

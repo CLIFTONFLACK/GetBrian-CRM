@@ -2,7 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { isAnyAgencyAdmin } from "@/lib/db/queries/agencies";
+import {
+  companyTypeInUseCount,
+  companyTypeSlugsAndMaxSort,
+  deleteCompanyTypeById,
+  getCompanyTypeById,
+  insertCompanyType,
+  renameCompanyType as renameCompanyTypeRow,
+} from "@/lib/db/queries/lookups";
 import type { FormState } from "@/lib/actions/types";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
@@ -21,32 +31,42 @@ function revalidate() {
   revalidatePath("/companies");
 }
 
-/** Add a new company type. Writes are RLS-gated to agency admins. */
+/**
+ * Every mutation here used to be RLS-gated to agency admins
+ * (is_any_agency_admin() — see db/migrations/0026_company_types.sql's header
+ * note). That RLS is gone, so the same check is made explicitly here before
+ * any write — company_types is a system-wide list, so this deliberately
+ * checks "admin of ANY agency", not a specific one.
+ */
+async function requireAdmin(): Promise<string | null> {
+  if (!isDbConfigured) return "The database isn't configured yet.";
+  const session = await auth();
+  if (!session?.user) return "You must be signed in.";
+  const isAdmin = await isAnyAgencyAdmin(session.user.id);
+  if (!isAdmin) return "Only an agency admin can edit company types.";
+  return null;
+}
+
+/** Add a new company type. */
 export async function createCompanyType(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
+  const denied = await requireAdmin();
+  if (denied) return { error: denied };
+
   const label = str(formData, "label");
   if (!label) return { error: "A type name is required." };
 
-  const { data: existing } = await supabase
-    .from("company_types")
-    .select("slug, sort_order");
-  const slugs = new Set((existing ?? []).map((t) => t.slug));
-
+  const { slugs, maxSort } = await companyTypeSlugsAndMaxSort();
   let slug = slugify(label);
   if (slugs.has(slug)) {
     let n = 2;
     while (slugs.has(`${slug}_${n}`)) n++;
     slug = `${slug}_${n}`;
   }
-  const maxSort = (existing ?? []).reduce((m, t) => Math.max(m, t.sort_order), 0);
 
-  const { error } = await supabase
-    .from("company_types")
-    .insert({ slug, label, sort_order: maxSort + 1 });
-  if (error) return { error: error.message };
+  await insertCompanyType(slug, label, maxSort + 1);
 
   revalidate();
   return { message: `Added “${label}”.` };
@@ -58,44 +78,37 @@ export async function renameCompanyType(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
+  const denied = await requireAdmin();
+  if (denied) return { error: denied };
+
   const id = str(formData, "id");
   const label = str(formData, "label");
   if (!id) return { error: "Missing type." };
   if (!label) return { error: "A type name is required." };
 
-  const { error } = await supabase
-    .from("company_types")
-    .update({ label })
-    .eq("id", id);
-  if (error) return { error: error.message };
+  await renameCompanyTypeRow(id, label);
 
   revalidate();
   return { message: "Saved." };
 }
 
 /** Delete a type. Refuses the protected "Other" fallback and any type still in
- * use by a company (counted across all agencies via a definer helper). */
+ * use by a company (counted across all agencies via a SQL helper). */
 export async function deleteCompanyType(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
+  const denied = await requireAdmin();
+  if (denied) return { error: denied };
+
   const id = str(formData, "id");
   if (!id) return { error: "Missing type." };
 
-  const { data: type } = await supabase
-    .from("company_types")
-    .select("slug, label, is_system")
-    .eq("id", id)
-    .maybeSingle();
+  const type = await getCompanyTypeById(id);
   if (!type) return { error: "Type not found." };
   if (type.is_system) return { error: "The “Other” type can’t be deleted." };
 
-  const { data: inUse } = await supabase.rpc("company_type_in_use", {
-    p_slug: type.slug,
-  });
-  const count = inUse ?? 0;
+  const count = await companyTypeInUseCount(type.slug);
   if (count > 0) {
     return {
       error: `“${type.label}” is used by ${count} compan${
@@ -104,8 +117,7 @@ export async function deleteCompanyType(
     };
   }
 
-  const { error } = await supabase.from("company_types").delete().eq("id", id);
-  if (error) return { error: error.message };
+  await deleteCompanyTypeById(id);
 
   revalidate();
   return { message: `Deleted “${type.label}”.` };

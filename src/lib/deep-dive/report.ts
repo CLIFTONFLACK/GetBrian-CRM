@@ -1,8 +1,6 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 import { openRouterChat } from "@/lib/openrouter/client";
 import type { OpenRouterConfig } from "@/lib/openrouter/config";
-import type { Database } from "@/lib/database.types";
+import { createDeepDiveReport } from "@/lib/db/queries/deep-dive";
 
 export type DeepDiveCompany = {
   id: string;
@@ -51,7 +49,6 @@ function userPrompt(c: DeepDiveCompany): string {
  */
 export async function runDeepDiveReport(
   company: DeepDiveCompany,
-  supabase: SupabaseClient<Database>,
   agencyId: string,
   userId: string,
   cfg: OpenRouterConfig,
@@ -63,23 +60,20 @@ export async function runDeepDiveReport(
       system: SYSTEM,
       user: userPrompt(company),
     });
-    const { error } = await supabase.from("deep_dive_reports").insert({
-      agency_id: agencyId,
-      company_id: company.id,
+    await createDeepDiveReport(agencyId, {
+      companyId: company.id,
       status: "complete",
       model: cfg.model,
       markdown,
-      created_by: userId,
+      createdBy: userId,
     });
-    if (error) throw new Error(error.message);
   } catch (err) {
-    await supabase.from("deep_dive_reports").insert({
-      agency_id: agencyId,
-      company_id: company.id,
+    await createDeepDiveReport(agencyId, {
+      companyId: company.id,
       status: "failed",
       model: cfg.model,
       error: (err as Error).message,
-      created_by: userId,
+      createdBy: userId,
     });
     throw err;
   }

@@ -1,6 +1,6 @@
 import { cache } from "react";
 
-import { createClient } from "@/lib/supabase/server";
+import { listContactRoles } from "@/lib/db/queries/lookups";
 
 export type ContactRole = {
   id: string;
@@ -15,12 +15,7 @@ export type ContactRole = {
  * Cached per request so a page can call it from several spots without re-querying.
  */
 export const getContactRoles = cache(async (): Promise<ContactRole[]> => {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("contact_roles")
-    .select("id, slug, label, sort_order, is_system")
-    .order("sort_order", { ascending: true });
-  return data ?? [];
+  return listContactRoles();
 });
 
 /** Title-case a bare slug as a last-resort label for a role no longer in the list. */

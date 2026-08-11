@@ -3,9 +3,7 @@
 // risk, and persists a kyc_reports row. Mirrors the orchestration style of
 // importDisposalFromUrl: thin coordination over the provider modules.
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-import type { Database } from "@/lib/database.types";
+import { createKycReport, type KycReport } from "@/lib/db/queries/kyc";
 import { isKycConfigured } from "./config";
 import {
   getCharges,
@@ -20,8 +18,6 @@ import { scoreRisk } from "./risk";
 import { diditProvider } from "./providers/didit";
 import type { KycReportData, KycSummary } from "./types";
 
-type Supabase = SupabaseClient<Database>;
-
 type CompanyInput = {
   id: string;
   name: string;
@@ -31,10 +27,9 @@ type CompanyInput = {
 
 export async function runKycReport(
   company: CompanyInput,
-  supabase: Supabase,
   agencyId: string,
   userId: string,
-): Promise<Database["public"]["Tables"]["kyc_reports"]["Row"] | null> {
+): Promise<KycReport> {
   const sources: string[] = [];
   const notices: string[] = [];
   const num = company.company_number?.trim() || null;
@@ -126,22 +121,15 @@ export async function runKycReport(
   const { riskRating, flags } = scoreRisk(base);
   const data: KycReportData = { ...base, riskRating, flags };
 
-  const { data: row } = await supabase
-    .from("kyc_reports")
-    .insert({
-      agency_id: agencyId,
-      company_id: company.id,
-      company_number: num,
-      status: "complete",
-      risk_rating: riskRating,
-      sources,
-      flags,
-      summary: summary as unknown as Database["public"]["Tables"]["kyc_reports"]["Insert"]["summary"],
-      payload: data as unknown as Database["public"]["Tables"]["kyc_reports"]["Insert"]["payload"],
-      created_by: userId,
-    })
-    .select("*")
-    .single();
-
-  return row;
+  return createKycReport(agencyId, {
+    companyId: company.id,
+    companyNumber: num,
+    status: "complete",
+    riskRating,
+    sources,
+    flags,
+    summary,
+    payload: data,
+    createdBy: userId,
+  });
 }

@@ -24,7 +24,7 @@ import {
   bulkAssignDisposalLead,
   bulkUpdateDisposalStatus,
 } from "@/lib/actions/disposals";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 import type { MapPoint } from "@/components/concentration-map";
 
 const STATUSES = ["Available", "Under Offer", "Let", "Sold", "Withdrawn"] as const;

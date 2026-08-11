@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { DisposalForm } from "@/components/disposal-form";
 import { PageHeader } from "@/components/page-header";
@@ -6,9 +7,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { createDisposal } from "@/lib/actions/disposals";
 import { getCompanyTypes } from "@/lib/company-types";
 import { getContactRoles } from "@/lib/contact-roles";
-import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
-import { getCompanyOptions, getContactOptions } from "@/lib/supabase/pickers";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { listCompanyOptions } from "@/lib/db/queries/companies";
+import { listContactOptions } from "@/lib/db/queries/contacts";
 
 export const metadata: Metadata = { title: "New listing" };
 
@@ -18,13 +21,17 @@ export default async function NewListingPage({
   searchParams: Promise<{ company?: string }>;
 }) {
   const { company: defaultCompanyId } = await searchParams;
-  const supabase = await createClient();
-  const agencyId = await currentAgencyId(supabase);
+
+  if (!isDbConfigured) redirect("/login");
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const agencyId = await currentAgencyId(session.user.id);
+
   const [agents, companies, contacts] = agencyId
     ? await Promise.all([
-        getAgencyMembers(supabase, agencyId),
-        getCompanyOptions(supabase, agencyId),
-        getContactOptions(supabase, agencyId),
+        getAgencyMembers(agencyId),
+        listCompanyOptions(agencyId),
+        listContactOptions(agencyId),
       ])
     : [[], [], []];
   const companyTypes = await getCompanyTypes();

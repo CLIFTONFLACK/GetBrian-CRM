@@ -1,34 +1,40 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { ContactForm } from "@/components/contact-form";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
+import { auth } from "@/lib/auth";
 import { updateContact } from "@/lib/actions/contacts";
 import { getCompanyTypes } from "@/lib/company-types";
 import { getContactRoles } from "@/lib/contact-roles";
-import { getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { listCompanyOptions } from "@/lib/db/queries/companies";
+import { getContactAgentIds, getContactById } from "@/lib/db/queries/contacts";
 
 export default async function EditContactPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  if (!isDbConfigured) redirect("/login");
   const { id } = await params;
-  const supabase = await createClient();
-  const [{ data: contact }, { data: companies }] = await Promise.all([
-    supabase.from("contacts").select("*").eq("id", id).maybeSingle(),
-    supabase.from("companies").select("id, name").order("name"),
-  ]);
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) notFound();
+
+  const contact = await getContactById(agencyId, id);
   if (!contact) notFound();
 
-  const [agents, { data: agentRows }, roles, companyTypes] = await Promise.all([
-    getAgencyMembers(supabase, contact.agency_id),
-    supabase.from("contact_agents").select("user_id").eq("contact_id", id),
+  const [companies, agents, agentIds, roles, companyTypes] = await Promise.all([
+    listCompanyOptions(agencyId),
+    getAgencyMembers(agencyId),
+    getContactAgentIds(agencyId, id),
     getContactRoles(),
     getCompanyTypes(),
   ]);
-  const additionalAgentIds = (agentRows ?? []).map((r) => r.user_id);
 
   const name = [contact.first_name, contact.last_name].filter(Boolean).join(" ");
 
@@ -40,9 +46,9 @@ export default async function EditContactPage({
           <ContactForm
             action={updateContact}
             contact={contact}
-            companies={companies ?? []}
+            companies={companies}
             agents={agents}
-            additionalAgentIds={additionalAgentIds}
+            additionalAgentIds={agentIds}
             roles={roles}
             companyTypes={companyTypes}
           />

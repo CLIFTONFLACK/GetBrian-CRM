@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { upload } from "@vercel/blob/client";
 import { useRouter } from "next/navigation";
 import { Download, FileText, Trash2 } from "lucide-react";
 
@@ -12,9 +13,6 @@ import {
   addDisposalDocument,
   deleteDisposalDocument,
 } from "@/lib/actions/disposal-documents";
-import { createClient } from "@/lib/supabase/client";
-
-const BUCKET = "disposal-docs";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   floor_plan: "Floor plan",
@@ -48,11 +46,16 @@ export function DisposalDocuments({
   docs: DisposalDoc[];
 }) {
   const router = useRouter();
-  const supabase = React.useMemo(() => createClient(), []);
   const [docType, setDocType] = React.useState("floor_plan");
   const [uploading, setUploading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Uploads straight to Vercel Blob client-side, via a short-lived token
+  // from src/app/api/blob/client-upload/route.ts (see disposal-images.tsx
+  // for the identical pattern). The document stays effectively private:
+  // this component never renders the raw Blob URL — `doc.url` below is
+  // already the signed proxy link the listing page generated (see
+  // src/lib/disposal-docs.ts), not this upload's `blob.url`.
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -60,26 +63,27 @@ export function DisposalDocuments({
     setError(null);
     const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const path = `${disposalId}/${Date.now()}-${safe}`;
-    const { error: upErr } = await supabase.storage
-      .from(BUCKET)
-      .upload(path, file, { upsert: false });
-    if (upErr) {
-      setError(upErr.message);
+    try {
+      const blob = await upload(path, file, {
+        access: "public",
+        handleUploadUrl: "/api/blob/client-upload",
+        clientPayload: JSON.stringify({ kind: "disposal-doc", disposalId }),
+      });
+      const fd = new FormData();
+      fd.set("disposal_id", disposalId);
+      fd.set("file_path", blob.url);
+      fd.set("name", file.name);
+      fd.set("doc_type", docType);
+      fd.set("size_bytes", String(file.size));
+      const res = await addDisposalDocument({}, fd);
+      if (res.error) setError(res.error);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
       setUploading(false);
       e.target.value = "";
-      return;
+      router.refresh();
     }
-    const fd = new FormData();
-    fd.set("disposal_id", disposalId);
-    fd.set("file_path", path);
-    fd.set("name", file.name);
-    fd.set("doc_type", docType);
-    fd.set("size_bytes", String(file.size));
-    const res = await addDisposalDocument({}, fd);
-    if (res.error) setError(res.error);
-    setUploading(false);
-    e.target.value = "";
-    router.refresh();
   }
 
   return (

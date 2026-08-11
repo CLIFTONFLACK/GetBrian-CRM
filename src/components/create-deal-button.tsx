@@ -10,10 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
-import { createClient } from "@/lib/supabase/client";
-import { createDealFromMatch } from "@/lib/actions/deals";
+import { createDealFromMatch, getDealAgentRoster } from "@/lib/actions/deals";
 import type { FormState } from "@/lib/actions/types";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 
 /**
  * "Create a deal" from a requirement ↔ listing match. Opens a popup to name the
@@ -45,9 +44,9 @@ export function CreateDealButton({
   );
 
   // Roster + current user for the lead-agent select. The pages that render this
-  // button don't all pass the roster down, so fetch it (RLS-scoped) on open —
-  // same client-side pattern as the notifications bell.
-  const supabase = React.useMemo(() => createClient(), []);
+  // button don't all pass the roster down, so fetch it on open via a server
+  // action — Neon has no client-safe browser SDK the way Supabase's anon-key
+  // client was, so this replaces the previous direct client-side query.
   const [roster, setRoster] = React.useState<AgentOption[] | null>(agents ?? null);
   const [lead, setLead] = React.useState<string>(meId ?? "");
 
@@ -55,30 +54,15 @@ export function CreateDealButton({
     if (!open || roster !== null) return;
     let cancelled = false;
     (async () => {
-      const [{ data: auth }, { data: members }] = await Promise.all([
-        supabase.auth.getUser(),
-        supabase.from("agency_members").select("user_id"),
-      ]);
-      const ids = [...new Set((members ?? []).map((m) => m.user_id))];
-      const { data: profiles } = ids.length
-        ? await supabase.from("profiles").select("id, full_name, email").in("id", ids)
-        : { data: [] };
+      const { agents: fetched, meId: fetchedMeId } = await getDealAgentRoster();
       if (cancelled) return;
-      setRoster(
-        (profiles ?? [])
-          .map((p) => ({
-            id: p.id,
-            name: p.full_name ?? p.email ?? "Unknown agent",
-            email: p.email,
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name)),
-      );
-      setLead((prev) => prev || auth.user?.id || "");
+      setRoster(fetched);
+      setLead((prev) => prev || fetchedMeId || "");
     })();
     return () => {
       cancelled = true;
     };
-  }, [open, roster, supabase]);
+  }, [open, roster]);
 
   return (
     <>

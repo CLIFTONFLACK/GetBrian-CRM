@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 
-import { createServiceClient } from "@/lib/supabase/service";
+import { isDbConfigured } from "@/lib/db/client";
+import { getUsersByIds } from "@/lib/db/queries/agencies";
+import { getDealsByIdsAcrossAgencies, listDueDealReminders, markDealReminderNotified } from "@/lib/db/queries/deals";
+import { createNotifications } from "@/lib/db/queries/messages";
+import { listDueTasks, markTaskNotified } from "@/lib/db/queries/tasks";
 
 /**
  * GET /api/cron/due — fires notifications (and optional emails) for deal
@@ -10,6 +14,13 @@ import { createServiceClient } from "@/lib/supabase/service";
  * automatically when the env var is set. Each row fires exactly once — the
  * `notified_at` stamp is only written after its notification insert succeeds,
  * so transient failures retry on the next run.
+ *
+ * System-wide job, no user session (see AGENTS.md): the CRON_SECRET bearer
+ * check below is the entire authorization boundary, unchanged from the
+ * Supabase-era version. It reads due reminders/tasks across every agency
+ * (listDueDealReminders/listDueTasks are deliberately unscoped by agencyId),
+ * but every downstream read/write for a given row is scoped to THAT row's
+ * own agency_id — never the caller's, since there is no caller agency here.
  */
 
 const ENTITY_PATHS: Record<string, string> = {
@@ -30,13 +41,8 @@ export async function GET(request: Request): Promise<Response> {
   if (request.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
-
-  const supabase = createServiceClient();
-  if (!supabase) {
-    return NextResponse.json(
-      { error: "SUPABASE_SERVICE_ROLE_KEY not configured." },
-      { status: 503 },
-    );
+  if (!isDbConfigured) {
+    return NextResponse.json({ error: "STORAGE_CRM_DATABASE_URL not configured." }, { status: 503 });
   }
 
   const nowIso = new Date().toISOString();
@@ -46,54 +52,36 @@ export async function GET(request: Request): Promise<Response> {
   let firedTasks = 0;
 
   // ── Deal reminders ─────────────────────────────────────────────────────────
-  const { data: dueReminders } = await supabase
-    .from("deal_reminders")
-    .select("id, agency_id, deal_id, title, due_at, created_by")
-    .eq("done", false)
-    .is("notified_at", null)
-    .lte("due_at", nowIso)
-    .limit(100);
-
-  const reminderRows = dueReminders ?? [];
+  const reminderRows = await listDueDealReminders(100);
   const dealIds = [...new Set(reminderRows.map((r) => r.deal_id))];
-  const dealOf = new Map<
-    string,
-    { title: string; lead_agent_id: string | null; created_by: string | null }
-  >();
-  if (dealIds.length) {
-    const { data: deals } = await supabase
-      .from("deals")
-      .select("id, title, lead_agent_id, created_by")
-      .in("id", dealIds);
-    (deals ?? []).forEach((d) => dealOf.set(d.id, d));
-  }
+  // Cross-agency read (this job has no single caller agency) — each row
+  // carries its own agency_id, checked against the reminder's agency_id
+  // below before use, so a mismatch (which should never happen given
+  // deal_reminders.deal_id's FK) can never leak one agency's deal info onto
+  // another's notification.
+  const dealRows = dealIds.length ? await getDealsByIdsAcrossAgencies(dealIds) : [];
+  const dealOf = new Map(dealRows.map((d) => [d.id, d]));
 
   for (const r of reminderRows) {
-    const deal = dealOf.get(r.deal_id);
+    const dealRow = dealOf.get(r.deal_id);
+    const deal = dealRow && dealRow.agency_id === r.agency_id ? dealRow : undefined;
     const recipient =
       deal?.lead_agent_id ?? deal?.created_by ?? r.created_by ?? null;
     if (!recipient) {
       // Nobody to tell — stamp it so it doesn't churn every run.
-      await supabase
-        .from("deal_reminders")
-        .update({ notified_at: nowIso })
-        .eq("id", r.id);
+      await markDealReminderNotified(r.agency_id, r.id, nowIso);
       continue;
     }
-    const { error } = await supabase.from("notifications").insert({
-      agency_id: r.agency_id,
-      user_id: recipient,
-      title: `Reminder due: ${r.title}`,
-      body: deal
-        ? `On “${deal.title}” — due ${fmt(r.due_at)}`
-        : `Due ${fmt(r.due_at)}`,
-      link: `/deals/${r.deal_id}`,
-    });
-    if (error) continue; // retry next run
-    await supabase
-      .from("deal_reminders")
-      .update({ notified_at: nowIso })
-      .eq("id", r.id);
+    try {
+      await createNotifications(r.agency_id, [recipient], {
+        title: `Reminder due: ${r.title}`,
+        body: deal ? `On “${deal.title}” — due ${fmt(r.due_at)}` : `Due ${fmt(r.due_at)}`,
+        link: `/deals/${r.deal_id}`,
+      });
+    } catch {
+      continue; // retry next run
+    }
+    await markDealReminderNotified(r.agency_id, r.id, nowIso);
     firedReminders += 1;
     const lines = emailLines.get(recipient) ?? [];
     lines.push(
@@ -103,36 +91,28 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   // ── Tasks ──────────────────────────────────────────────────────────────────
-  const { data: dueTasks } = await supabase
-    .from("tasks")
-    .select(
-      "id, agency_id, title, due_at, assignee_id, created_by, entity_type, entity_id",
-    )
-    .eq("status", "open")
-    .is("notified_at", null)
-    .not("due_at", "is", null)
-    .lte("due_at", nowIso)
-    .limit(100);
+  const dueTasks = await listDueTasks(100);
 
-  for (const t of dueTasks ?? []) {
+  for (const t of dueTasks) {
     const recipient = t.assignee_id ?? t.created_by ?? null;
     if (!recipient) {
-      await supabase.from("tasks").update({ notified_at: nowIso }).eq("id", t.id);
+      await markTaskNotified(t.agency_id, t.id, nowIso);
       continue;
     }
     const link =
       t.entity_type && t.entity_id && ENTITY_PATHS[t.entity_type]
         ? `${ENTITY_PATHS[t.entity_type]}/${t.entity_id}`
         : "/tasks";
-    const { error } = await supabase.from("notifications").insert({
-      agency_id: t.agency_id,
-      user_id: recipient,
-      title: `Task due: ${t.title}`,
-      body: t.due_at ? `Due ${fmt(t.due_at)}` : null,
-      link,
-    });
-    if (error) continue; // retry next run
-    await supabase.from("tasks").update({ notified_at: nowIso }).eq("id", t.id);
+    try {
+      await createNotifications(t.agency_id, [recipient], {
+        title: `Task due: ${t.title}`,
+        body: t.due_at ? `Due ${fmt(t.due_at)}` : null,
+        link,
+      });
+    } catch {
+      continue; // retry next run
+    }
+    await markTaskNotified(t.agency_id, t.id, nowIso);
     firedTasks += 1;
     const lines = emailLines.get(recipient) ?? [];
     lines.push(`• Task due: ${t.title}${t.due_at ? ` — was due ${fmt(t.due_at)}` : ""}`);
@@ -144,12 +124,9 @@ export async function GET(request: Request): Promise<Response> {
   const from = process.env.EMAIL_FROM;
   let emailed = 0;
   if (apiKey && from && emailLines.size > 0) {
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, email, full_name")
-      .in("id", [...emailLines.keys()]);
+    const recipients = await getUsersByIds([...emailLines.keys()]);
     const resend = new Resend(apiKey);
-    for (const p of profiles ?? []) {
+    for (const p of recipients) {
       const lines = emailLines.get(p.id);
       if (!lines || !p.email) continue;
       try {

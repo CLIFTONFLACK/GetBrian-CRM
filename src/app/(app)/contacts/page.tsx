@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Plus, Users } from "lucide-react";
 
 import { ConcentrationMap } from "@/components/concentration-map-lazy";
+import type { MapPoint } from "@/components/concentration-map";
 import { EmptyState } from "@/components/empty-state";
 import { ExpandableInsights } from "@/components/expandable-insights";
 import { FilterBar, FilterSelect } from "@/components/filter-bar";
@@ -15,7 +17,6 @@ import { ViewOnMapButton } from "@/components/view-on-map-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
-import { getMapLayers } from "@/lib/supabase/map-points";
 import {
   Table,
   TableBody,
@@ -25,11 +26,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { contactRoleBadge } from "@/lib/badges";
+import { auth } from "@/lib/auth";
 import { getContactRoles, roleLabel } from "@/lib/contact-roles";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { getCompaniesByIds, listCompanyFacetRows } from "@/lib/db/queries/companies";
+import { getContactsByIds, listContactFacetRows } from "@/lib/db/queries/contacts";
 import { deriveCounty, HOME_COUNTIES } from "@/lib/locations";
-import { ilikeTerm } from "@/lib/search";
 import { filterHref, resolveSort } from "@/lib/sort";
-import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Contacts" };
@@ -51,8 +55,13 @@ export default async function ContactsPage({
     page?: string;
   }>;
 }) {
+  if (!isDbConfigured) redirect("/login");
   const { q, sort, dir, role, town, county, page: pageParam } = await searchParams;
-  const supabase = await createClient();
+
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) redirect("/login");
 
   const { column, ascending } = resolveSort(
     sort,
@@ -61,26 +70,18 @@ export default async function ContactsPage({
     { column: "first_name", ascending: true },
   );
 
-  // Aggregate pass: only the columns the tiles, heatmap and facet dropdowns
-  // need (plus the id, which is what the paginated row fetch keys off). Ordered
-  // here so the page slice below is taken from the fully sorted set.
-  let query = supabase
-    .from("contacts")
-    .select("id, role, city, postcode, county")
-    .order(column, { ascending });
-  if (q) {
-    const term = ilikeTerm(q);
-    if (term) {
-      query = query.or(
-        `first_name.ilike.%${term}%,last_name.ilike.%${term}%,email.ilike.%${term}%`,
-      );
-    }
-  }
-  const { data } = await query;
-  const mapLayers = await getMapLayers(supabase, { include: ["contact"] });
+  // Aggregate pass: only the columns the tiles, heatmap, facet dropdowns and
+  // map layer need (plus the id, which is what the paginated row fetch keys
+  // off). Ordered here so the page slice below is taken from the fully sorted
+  // set.
+  const facetRows = await listContactFacetRows(agencyId, {
+    q,
+    column: column as "first_name" | "role",
+    ascending,
+  });
   // `rows` is the tile base (q filtered). The role/town facets are applied to
   // the table in memory so the tile counts always show the full distribution.
-  const rows = (data ?? []).map((c) => ({
+  const rows = facetRows.map((c) => ({
     ...c,
     county: c.county ?? deriveCounty({ postcode: c.postcode, city: c.city }),
   }));
@@ -151,31 +152,63 @@ export default async function ContactsPage({
   const pageState = resolvePage(pageParam, total, PAGE_SIZE);
   const pageIds = listRows.slice(pageState.from, pageState.to).map((c) => c.id);
 
-  const { data: detail } = pageIds.length
-    ? await supabase
-        .from("contacts")
-        .select("id, first_name, last_name, role, email, phone, company_id")
-        .in("id", pageIds)
-    : { data: [] };
-  // `.in()` does not preserve the requested order — re-apply the sorted slice.
-  const byId = new Map((detail ?? []).map((c) => [c.id, c]));
+  const detail = await getContactsByIds(agencyId, pageIds);
+  // `= ANY()` does not preserve the requested order — re-apply the sorted slice.
+  const byId = new Map(detail.map((c) => [c.id, c]));
   const pageRows = pageIds
     .map((id) => byId.get(id))
     .filter((c): c is NonNullable<typeof c> => c != null);
 
-  const ids = [
+  const companyIds = [
     ...new Set(pageRows.map((r) => r.company_id).filter((v): v is string => Boolean(v))),
   ];
   const names = new Map<string, string>();
-  if (ids.length) {
-    const { data: comps } = await supabase
-      .from("companies")
-      .select("id, name")
-      .in("id", ids);
-    (comps ?? []).forEach((c) => names.set(c.id, c.name));
+  if (companyIds.length) {
+    const comps = await getCompaniesByIds(agencyId, companyIds);
+    comps.forEach((c) => names.set(c.id, c.name));
   }
 
-  const contactPoints = new Map(mapLayers.contacts.map((p) => [p.id, p]));
+  // Map layer: built from the agency-scoped facet rows (own coords), falling
+  // back to the linked company's pin when the contact has none of its own —
+  // mirrors src/lib/supabase/map-points.ts's contact-falls-back-to-company
+  // behavior, replicated here (agency-scoped) rather than reusing that
+  // shared, not-yet-migrated helper.
+  const companyPointIds = [
+    ...new Set(rows.map((c) => c.company_id).filter((v): v is string => Boolean(v))),
+  ];
+  const companyGeoRows =
+    companyPointIds.length > 0
+      ? await listCompanyFacetRows(agencyId, { column: "name", ascending: true })
+      : [];
+  const companyCoord = new Map(
+    companyGeoRows
+      .filter((c) => c.lat != null && c.lng != null)
+      .map((c) => [
+        c.id,
+        {
+          lat: c.lat as number,
+          lng: c.lng as number,
+          address: [c.address_line, c.city, c.postcode].filter(Boolean).join(", "),
+        },
+      ]),
+  );
+  const addressOf = (c: (typeof rows)[number]) =>
+    [c.address_line, c.city, c.postcode].filter(Boolean).join(", ");
+  const contactPoints = new Map<string, MapPoint>();
+  for (const c of rows) {
+    const own = c.lat != null && c.lng != null;
+    const fallback = !own && c.company_id ? companyCoord.get(c.company_id) : undefined;
+    if (!own && !fallback) continue;
+    contactPoints.set(c.id, {
+      id: c.id,
+      kind: "contact",
+      name: [c.first_name, c.last_name].filter(Boolean).join(" "),
+      subtitle: c.role,
+      address: own ? addressOf(c) : (fallback?.address ?? null),
+      lat: own ? (c.lat as number) : fallback!.lat,
+      lng: own ? (c.lng as number) : fallback!.lng,
+    });
+  }
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -247,7 +280,11 @@ export default async function ContactsPage({
               <CardTitle className="text-sm">Location heat-map</CardTitle>
             </CardHeader>
             <CardContent>
-              <ConcentrationMap layers={mapLayers} defaultActive="contact" compact />
+              <ConcentrationMap
+                layers={{ listings: [], companies: [], contacts: [...contactPoints.values()] }}
+                defaultActive="contact"
+                compact
+              />
             </CardContent>
           </Card>
         </ExpandableInsights>

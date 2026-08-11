@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Building2, Plus } from "lucide-react";
 
 import { ConcentrationMap } from "@/components/concentration-map-lazy";
+import type { MapPoint } from "@/components/concentration-map";
 import { EmptyState } from "@/components/empty-state";
 import { ExpandableInsights } from "@/components/expandable-insights";
 import { FilterBar, FilterSelect } from "@/components/filter-bar";
@@ -15,7 +17,6 @@ import { ViewOnMapButton } from "@/components/view-on-map-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
-import { getMapLayers } from "@/lib/supabase/map-points";
 import {
   Table,
   TableBody,
@@ -25,11 +26,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { companyTypeBadge } from "@/lib/badges";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { getCompaniesByIds, listCompanyFacetRows } from "@/lib/db/queries/companies";
 import { deriveCounty, HOME_COUNTIES } from "@/lib/locations";
 import { getCompanyTypes, typeLabel } from "@/lib/company-types";
-import { escapeLike } from "@/lib/search";
 import { filterHref, resolveSort } from "@/lib/sort";
-import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Companies" };
@@ -52,8 +55,13 @@ export default async function CompaniesPage({
     page?: string;
   }>;
 }) {
+  if (!isDbConfigured) redirect("/login");
   const { q, sort, dir, type, tag, town, county, page: pageParam } = await searchParams;
-  const supabase = await createClient();
+
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) redirect("/login");
 
   const { column, ascending } = resolveSort(
     sort,
@@ -62,21 +70,15 @@ export default async function CompaniesPage({
     { column: "name", ascending: true },
   );
 
-  // Aggregate pass: only the columns the tiles, heatmap and facet dropdowns
-  // need (plus the id, which the paginated row fetch keys off). Ordered here so
-  // the page slice below is taken from the fully sorted set.
-  let query = supabase
-    .from("companies")
-    .select("id, type, sector_tags, city, postcode, county")
-    .order(column, { ascending });
-  if (q) query = query.ilike("name", `%${escapeLike(q)}%`);
-  const { data } = await query;
-  const mapLayers = await getMapLayers(supabase, { include: ["company"] });
+  // Aggregate pass: only the columns the tiles, heatmap, facet dropdowns and
+  // map layer need (plus the id, which the paginated row fetch keys off).
+  // Ordered here so the page slice below is taken from the fully sorted set.
+  const facetRows = await listCompanyFacetRows(agencyId, { q, column: column as "name" | "type", ascending });
   const companyTypes = await getCompanyTypes();
   // `rows` is the heatmap base (q filtered). The tag/type facets that the
   // heatmap controls are applied to the table in memory so the grid keeps the
   // full distribution.
-  const rows = (data ?? []).map((c) => ({
+  const rows = facetRows.map((c) => ({
     ...c,
     county: c.county ?? deriveCounty({ postcode: c.postcode, city: c.city }),
   }));
@@ -142,19 +144,33 @@ export default async function CompaniesPage({
   const pageState = resolvePage(pageParam, total, PAGE_SIZE);
   const pageIds = listRows.slice(pageState.from, pageState.to).map((c) => c.id);
 
-  const { data: detail } = pageIds.length
-    ? await supabase
-        .from("companies")
-        .select("id, name, type, sector_tags, website")
-        .in("id", pageIds)
-    : { data: [] };
-  // `.in()` does not preserve the requested order — re-apply the sorted slice.
-  const byId = new Map((detail ?? []).map((c) => [c.id, c]));
+  const detail = await getCompaniesByIds(agencyId, pageIds);
+  // `= ANY()` does not preserve the requested order — re-apply the sorted slice.
+  const byId = new Map(detail.map((c) => [c.id, c]));
   const pageRows = pageIds
     .map((id) => byId.get(id))
     .filter((c): c is NonNullable<typeof c> => c != null);
 
-  const companyPoints = new Map(mapLayers.companies.map((p) => [p.id, p]));
+  // Map layer: built straight from the agency-scoped facet rows (address +
+  // lat/lng were already selected above), so no second query is needed.
+  const addressOf = (c: (typeof rows)[number]) =>
+    [c.address_line, c.city, c.postcode].filter(Boolean).join(", ");
+  const companyPoints = new Map<string, MapPoint>(
+    rows
+      .filter((c) => c.lat != null && c.lng != null)
+      .map((c) => [
+        c.id,
+        {
+          id: c.id,
+          kind: "company" as const,
+          name: c.name,
+          subtitle: c.type,
+          address: addressOf(c),
+          lat: c.lat as number,
+          lng: c.lng as number,
+        },
+      ]),
+  );
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -227,7 +243,11 @@ export default async function CompaniesPage({
               <CardTitle className="text-sm">Location heat-map</CardTitle>
             </CardHeader>
             <CardContent>
-              <ConcentrationMap layers={mapLayers} defaultActive="company" compact />
+              <ConcentrationMap
+                layers={{ listings: [], companies: [...companyPoints.values()], contacts: [] }}
+                defaultActive="company"
+                compact
+              />
             </CardContent>
           </Card>
         </ExpandableInsights>

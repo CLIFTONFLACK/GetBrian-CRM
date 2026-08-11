@@ -9,8 +9,8 @@ import { ContactCreatableSelect, type EntityOption } from "@/components/creatabl
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { FormState } from "@/lib/actions/types";
-import type { Tables } from "@/lib/database.types";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { Company } from "@/lib/db/queries/companies";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 import { cn } from "@/lib/utils";
 
 export function CompanyForm({
@@ -23,7 +23,7 @@ export function CompanyForm({
   contactRoles = [],
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>;
-  company?: Tables<"companies">;
+  company?: Company;
   agents: AgentOption[];
   additionalAgentIds?: string[];
   contacts?: EntityOption[];

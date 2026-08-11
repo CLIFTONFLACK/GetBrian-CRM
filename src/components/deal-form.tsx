@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { updateDeal } from "@/lib/actions/deals";
 import type { FormState } from "@/lib/actions/types";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 
 const STAGES: { value: string; label: string }[] = [
   { value: "lead", label: "Lead" },

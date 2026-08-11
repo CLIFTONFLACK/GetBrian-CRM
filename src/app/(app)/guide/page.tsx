@@ -1,28 +1,19 @@
 import type { Metadata } from "next";
 
 import { GuideJourney } from "@/components/guide-journey";
-import { isSupabaseConfigured } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { isAnyAgencyAdmin } from "@/lib/db/queries/agencies";
 
 export const metadata: Metadata = { title: "Quick Guide" };
 
 export default async function GuidePage() {
   // Mirror the layout's admin check so the Admin step only shows to admins.
   let isAdmin = false;
-  if (isSupabaseConfigured) {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) {
-      const { data: adminRow } = await supabase
-        .from("agency_members")
-        .select("agency_id")
-        .eq("user_id", user.id)
-        .eq("role", "admin")
-        .limit(1)
-        .maybeSingle();
-      isAdmin = Boolean(adminRow);
+  if (isDbConfigured) {
+    const session = await auth();
+    if (session?.user) {
+      isAdmin = await isAnyAgencyAdmin(session.user.id);
     }
   }
 

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { listingTypeBadge, matchScoreBadge } from "@/lib/badges";
 import type { EntityOption } from "@/components/creatable-select";
 import type { MatchReason } from "@/lib/matching/score";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 import { cn } from "@/lib/utils";
 
 export type Opportunity = {

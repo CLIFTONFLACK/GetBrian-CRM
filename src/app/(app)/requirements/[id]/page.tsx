@@ -1,7 +1,7 @@
 import * as React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Pencil } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
@@ -23,8 +23,18 @@ import { SendHistoryCard } from "@/components/send-history-card";
 import { SendToTeam } from "@/components/send-to-team";
 import { getSendHistory } from "@/lib/send-history";
 import { getCompanyTypes } from "@/lib/company-types";
-import { getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { getCompanyName, listCompanyOptions } from "@/lib/db/queries/companies";
+import { getContactById, listContactOptions } from "@/lib/db/queries/contacts";
+import { listDisposalsForMatching } from "@/lib/db/queries/disposals";
+import {
+  getRequirementAgentIds,
+  getRequirementById,
+  getRequirementTitle,
+} from "@/lib/db/queries/requirements";
+import { getExternalSendPairRows } from "@/lib/db/queries/deals";
 import { cn } from "@/lib/utils";
 
 function band(min: number | null, max: number | null, unit = "") {
@@ -41,14 +51,14 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
+  if (!isDbConfigured) return { title: "Requirement" };
   const { id } = await params;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("requirements")
-    .select("title")
-    .eq("id", id)
-    .maybeSingle();
-  return { title: data?.title ?? "Requirement" };
+  const session = await auth();
+  if (!session?.user) return { title: "Requirement" };
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return { title: "Requirement" };
+  const title = await getRequirementTitle(agencyId, id);
+  return { title: title ?? "Requirement" };
 }
 
 export default async function RequirementDetailPage({
@@ -58,6 +68,7 @@ export default async function RequirementDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ flex?: string; error?: string }>;
 }) {
+  if (!isDbConfigured) redirect("/login");
   const { id } = await params;
   const { flex, error: actionError } = await searchParams;
   const flexParsed = Number(flex ?? DEFAULT_LOCATION_FLEX);
@@ -65,65 +76,44 @@ export default async function RequirementDetailPage({
     100,
     Math.max(0, Number.isFinite(flexParsed) ? flexParsed : DEFAULT_LOCATION_FLEX),
   );
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const { data: r } = await supabase
-    .from("requirements")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const userId = session.user.id;
+  const agencyId = await currentAgencyId(userId);
+  if (!agencyId) notFound();
+
+  const r = await getRequirementById(agencyId, id);
   if (!r) notFound();
 
-  let companyName: string | null = null;
-  if (r.company_id) {
-    const { data: c } = await supabase
-      .from("companies")
-      .select("name")
-      .eq("id", r.company_id)
-      .maybeSingle();
-    companyName = c?.name ?? null;
-  }
-
-  let contactName: string | null = null;
-  if (r.contact_id) {
-    const { data: c } = await supabase
-      .from("contacts")
-      .select("first_name, last_name")
-      .eq("id", r.contact_id)
-      .maybeSingle();
-    contactName = c
-      ? [c.first_name, c.last_name].filter(Boolean).join(" ") || "View contact"
-      : null;
-  }
+  const [companyName, contact] = await Promise.all([
+    r.company_id ? getCompanyName(agencyId, r.company_id) : Promise.resolve(null),
+    r.contact_id ? getContactById(agencyId, r.contact_id) : Promise.resolve(null),
+  ]);
+  const contactName = contact
+    ? [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "View contact"
+    : null;
 
   const s = requirementStatusBadge(r.status);
 
-  const { data: agentRows } = await supabase
-    .from("requirement_agents")
-    .select("user_id")
-    .eq("requirement_id", id);
-  const members = await getAgencyMembers(supabase, r.agency_id);
+  const [agentIds, members] = await Promise.all([
+    getRequirementAgentIds(agencyId, id),
+    getAgencyMembers(agencyId),
+  ]);
   const nameOf = new Map(members.map((m) => [m.id, m.name]));
   const leadAgentName = r.lead_agent_id
     ? (nameOf.get(r.lead_agent_id) ?? "Unknown agent")
     : null;
-  const additionalAgents = (agentRows ?? []).map((row) => ({
-    id: row.user_id,
-    name: nameOf.get(row.user_id) ?? "Unknown agent",
+  const additionalAgents = agentIds.map((agentId) => ({
+    id: agentId,
+    name: nameOf.get(agentId) ?? "Unknown agent",
   }));
 
   // Only the columns the scorer + the match rows below actually read — a
   // `select("*")` here dragged every scraped description and image blob across
   // the wire for every listing in the agency.
-  const { data: disposals } = await supabase
-    .from("disposals")
-    .select(
-      "id, title, status, listing_type, city, area, postcode, address_line, county, lat, lng, size_sqft, covers_internal, use_class, property_type, disposal_type, rent_pa, premium, guide_price",
-    );
-  const matches = (disposals ?? [])
+  const disposals = await listDisposalsForMatching(agencyId);
+  const matches = disposals
     .filter((d) => isListingMatchable(d.status))
     .map((d) => ({ d, ...scoreMatch(r, d, { locationFlex }) }))
     .filter((m) => m.score > 0)
@@ -131,35 +121,32 @@ export default async function RequirementDetailPage({
     .slice(0, 10);
 
   // Pickers for the Send Deal wizard's external step.
-  const [{ data: companyRows }, { data: contactRows }, companyTypes] = await Promise.all([
-    supabase.from("companies").select("id, name").order("name"),
-    supabase.from("contacts").select("id, first_name, last_name").order("first_name"),
+  const [companyOptions, contactOptions, companyTypes] = await Promise.all([
+    listCompanyOptions(agencyId),
+    listContactOptions(agencyId),
     getCompanyTypes(),
   ]);
-  const companyOptions = companyRows ?? [];
-  const contactOptions = (contactRows ?? []).map((c) => ({
-    id: c.id,
-    name: [c.first_name, c.last_name].filter(Boolean).join(" ") || "Unnamed contact",
-  }));
 
-  // External send history for this requirement — history card + per-match chips.
-  const sendHistory = await getSendHistory(supabase, { requirementId: id });
-  const { data: pairSendRows } = await supabase
-    .from("external_sends")
-    .select("listing_id, contact_id, recipient_email, created_at")
-    .eq("requirement_id", id)
-    .not("listing_id", "is", null)
-    .order("created_at", { ascending: false });
-  const contactNameOf = new Map(contactOptions.map((c) => [c.id, c.name]));
+  // External send history — history card + per-match chips.
+  const sendHistory = await getSendHistory(agencyId, { requirementId: id });
+  // Scoped to the listings actually rendered below (the top-10 matches) —
+  // same "scope to what's on screen" convention as matches/page.tsx's
+  // getPairSendHistory.
+  const matchListingIds = matches.map((m) => m.d.id);
+  const pairSendRows = matchListingIds.length
+    ? await getExternalSendPairRows(agencyId, [id], matchListingIds)
+    : [];
   const sentByListing = new Map<string, { name: string; at: string }[]>();
-  for (const s of pairSendRows ?? []) {
-    const list = sentByListing.get(s.listing_id as string) ?? [];
+  for (const s of pairSendRows) {
+    if (!s.listing_id) continue;
+    const list = sentByListing.get(s.listing_id) ?? [];
     list.push({
       name:
-        (s.contact_id ? contactNameOf.get(s.contact_id) : null) ?? s.recipient_email,
+        [s.contact_first_name, s.contact_last_name].filter(Boolean).join(" ") ||
+        s.recipient_email,
       at: s.created_at,
     });
-    sentByListing.set(s.listing_id as string, list);
+    sentByListing.set(s.listing_id, list);
   }
 
   return (
@@ -203,7 +190,7 @@ export default async function RequirementDetailPage({
             link={`/requirements/${r.id}`}
             subject={r.title}
             agents={members}
-            meId={user?.id}
+            meId={userId}
           />
           <Link
             href={`/requirements/${r.id}/edit`}
@@ -341,7 +328,7 @@ export default async function RequirementDetailPage({
             requirementId={r.id}
             requirementTitle={r.title}
             agents={members}
-            meId={user?.id}
+            meId={userId}
             companies={companyOptions}
             contacts={contactOptions}
             companyTypes={companyTypes}

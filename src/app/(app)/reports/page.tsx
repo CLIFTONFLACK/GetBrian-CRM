@@ -17,8 +17,16 @@ import { StatsBar } from "@/components/stats-bar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { dealStageBadge, isListingMatchable } from "@/lib/badges";
-import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers, getMemberRole } from "@/lib/db/queries/agencies";
+import {
+  listDealsForReports,
+  listStageEventsForReports,
+  type DealReportRow,
+} from "@/lib/db/queries/deals";
+import { listRequirementsForReports } from "@/lib/db/queries/requirements";
+import { listDisposalsForReports } from "@/lib/db/queries/disposals";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Reports" };
@@ -48,26 +56,6 @@ const money = (v: number) => `£${Math.round(v).toLocaleString("en-GB")}`;
 const days = (fromIso: string, to = Date.now()) =>
   Math.max(0, Math.floor((to - new Date(fromIso).getTime()) / DAY_MS));
 
-type DealRow = {
-  id: string;
-  title: string;
-  stage: string;
-  value: number | null;
-  created_at: string;
-  updated_at: string;
-  lead_agent_id: string | null;
-  created_by: string | null;
-  requirement_id: string | null;
-};
-
-type RequirementRow = {
-  id: string;
-  title: string;
-  status: string;
-  created_at: string;
-  lead_agent_id: string | null;
-};
-
 function NotAllowed() {
   return (
     <div className="mx-auto max-w-3xl">
@@ -86,52 +74,30 @@ function NotAllowed() {
 }
 
 export default async function ReportsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const agencyId = await currentAgencyId(supabase);
+  if (!isDbConfigured) return <NotAllowed />;
+  const session = await auth();
+  const user = session?.user ?? null;
+  const agencyId = user ? await currentAgencyId(user.id) : null;
 
-  // Role gate — scope to the caller's OWN membership row (agency_members RLS
-  // can surface co-members, so an unscoped role check would leak the page).
+  // Role gate — scope to the caller's OWN membership row (no RLS backstop on
+  // this schema, see AGENTS.md — an unscoped role check would leak the page
+  // to anyone whose agency merely HAS an admin/manager).
   let elevated = false;
   if (user && agencyId) {
-    const { data: memberRow } = await supabase
-      .from("agency_members")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("agency_id", agencyId)
-      .limit(1)
-      .maybeSingle();
-    elevated = memberRow?.role === "admin" || memberRow?.role === "manager";
+    const role = await getMemberRole(agencyId, user.id);
+    elevated = role === "admin" || role === "manager";
   }
   if (!user || !agencyId || !elevated) return <NotAllowed />;
 
-  const [dealsRes, stageEventsRes, requirementsRes, listingsRes, members] =
-    await Promise.all([
-      supabase
-        .from("deals")
-        .select(
-          "id, title, stage, value, created_at, updated_at, lead_agent_id, created_by, requirement_id",
-        )
-        .order("updated_at", { ascending: false }),
-      // Empty until the stage-history migration lands and deals start moving —
-      // every derived figure falls back to "—" rather than lying.
-      supabase
-        .from("deal_stage_events")
-        .select("deal_id, from_stage, to_stage, created_at")
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("requirements")
-        .select("id, title, status, created_at, lead_agent_id"),
-      supabase.from("disposals").select("id, status, lead_agent_id"),
-      getAgencyMembers(supabase, agencyId),
-    ]);
-
-  const deals = (dealsRes.data ?? []) as DealRow[];
-  const stageEvents = stageEventsRes.data ?? [];
-  const requirements = (requirementsRes.data ?? []) as RequirementRow[];
-  const listings = listingsRes.data ?? [];
+  const [deals, stageEvents, requirements, listings, members] = await Promise.all([
+    listDealsForReports(agencyId),
+    // Empty until deals start moving — every derived figure falls back to
+    // "—" rather than lying.
+    listStageEventsForReports(agencyId),
+    listRequirementsForReports(agencyId),
+    listDisposalsForReports(agencyId),
+    getAgencyMembers(agencyId),
+  ]);
 
   const openDeals = deals.filter((d) => !CLOSED.has(d.stage));
   const wonDeals = deals.filter((d) => d.stage === "completed");
@@ -210,7 +176,7 @@ export default async function ReportsPage() {
   // ── Per-agent performance ──────────────────────────────────────
   // A deal belongs to its lead agent; unassigned deals fall back to the creator
   // so nothing silently disappears from the team totals.
-  const ownerOf = (d: DealRow) => d.lead_agent_id ?? d.created_by ?? null;
+  const ownerOf = (d: DealReportRow) => d.lead_agent_id ?? d.created_by ?? null;
   const perAgent = members.map((m) => {
     const mine = deals.filter((d) => ownerOf(d) === m.id);
     const open = mine.filter((d) => !CLOSED.has(d.stage));

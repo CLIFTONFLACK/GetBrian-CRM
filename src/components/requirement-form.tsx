@@ -18,8 +18,8 @@ import { TargetLocationsField } from "@/components/target-locations-field";
 import { UseClassCheckboxes } from "@/components/use-class-checkboxes";
 import { Textarea } from "@/components/ui/textarea";
 import type { FormState } from "@/lib/actions/types";
-import type { Tables } from "@/lib/database.types";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { Requirement } from "@/lib/db/queries/requirements";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 import { cn } from "@/lib/utils";
 
 type Option = readonly [string, string];
@@ -47,7 +47,7 @@ export function RequirementForm({
   additionalAgentIds,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>;
-  requirement?: Tables<"requirements">;
+  requirement?: Requirement;
   companies: { id: string; name: string }[];
   contacts?: { id: string; name: string }[];
   /** Editable company_types list — feeds the "+ New company" quick-create modal. */

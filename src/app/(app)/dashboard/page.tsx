@@ -18,6 +18,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { redirect } from "next/navigation";
+
 import { ConcentrationMap } from "@/components/concentration-map-lazy";
 import { EmptyState } from "@/components/empty-state";
 import { StatsBar } from "@/components/stats-bar";
@@ -30,8 +32,18 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { isListingMatchable } from "@/lib/badges";
-import { createClient } from "@/lib/supabase/server";
-import { getMapLayers } from "@/lib/supabase/map-points";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyName } from "@/lib/db/queries/agencies";
+import { countCompanies } from "@/lib/db/queries/companies";
+import { listDisposalStatuses } from "@/lib/db/queries/disposals";
+import { countActiveRequirements } from "@/lib/db/queries/requirements";
+import { listDealsForReports, listOpenDealReminders } from "@/lib/db/queries/deals";
+import { listRecentActivitiesForAgency } from "@/lib/db/queries/dashboard";
+import { countOpenAssignedTasks, countOverdueAssignedTasks } from "@/lib/db/queries/tasks";
+import { countUnreadMessages } from "@/lib/db/queries/messages";
+import { getUserNames } from "@/lib/db/queries/disposals";
+import { getMapLayers } from "@/lib/db/queries/map-points";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -81,128 +93,71 @@ const fmtWhen = (iso: string) =>
     timeStyle: "short",
   });
 
-type DealLite = {
-  id: string;
-  stage: string;
-  value: number | null;
-  lead_agent_id: string | null;
-};
-
-type ActivityLite = {
-  id: string;
-  type: string;
-  subject: string | null;
-  entity_type: string | null;
-  entity_id: string | null;
-  created_by: string | null;
-  occurred_at: string;
-};
-
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const me = user?.id ?? "";
+  if (!isDbConfigured) redirect("/login");
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const me = session.user.id;
   const nowIso = new Date().toISOString();
 
-  const [
-    companies,
-    listingRows,
-    requirements,
-    dealRows,
-    activityRows,
-    myTasks,
-    overdueTasks,
-    reminderRows,
-    unread,
-    mapLayers,
-  ] = await Promise.all([
-    supabase.from("companies").select("*", { count: "exact", head: true }),
-    // Status is free text (scraped feeds), so "matchable" can't be a SQL filter —
-    // pull the column and classify with the same helper the listings UI uses.
-    supabase.from("disposals").select("status"),
-    supabase
-      .from("requirements")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "active"),
-    supabase.from("deals").select("id, stage, value, lead_agent_id"),
-    supabase
-      .from("activities")
-      .select("id, type, subject, entity_type, entity_id, created_by, occurred_at")
-      .order("occurred_at", { ascending: false })
-      .limit(10),
-    // `tasks` may not exist yet in every environment — a failed query yields
-    // { data: null, count: null } here rather than throwing, so the tiles read 0.
-    supabase
-      .from("tasks")
-      .select("id", { count: "exact", head: true })
-      .eq("assignee_id", me)
-      .eq("status", "open"),
-    supabase
-      .from("tasks")
-      .select("id", { count: "exact", head: true })
-      .eq("assignee_id", me)
-      .eq("status", "open")
-      .lt("due_at", nowIso),
-    supabase
-      .from("deal_reminders")
-      .select("id, deal_id, created_by, due_at")
-      .eq("done", false)
-      .lt("due_at", nowIso)
-      .limit(200),
-    supabase
-      .from("messages")
-      .select("id", { count: "exact", head: true })
-      .eq("recipient_id", me)
-      .is("read_at", null),
-    getMapLayers(supabase, { include: ["listing"] }),
-  ]);
+  const agencyId = await currentAgencyId(me);
 
-  const allDeals = (dealRows.data ?? []) as DealLite[];
+  const [
+    companiesCount,
+    listingStatusRows,
+    activeRequirementsCount,
+    allDeals,
+    activities,
+    myTasksCount,
+    overdueTasksCount,
+    reminderRows,
+    unreadCount,
+    mapLayers,
+    agencyName,
+  ] = agencyId
+    ? await Promise.all([
+        countCompanies(agencyId),
+        // Status is free text (scraped feeds), so "matchable" can't be a SQL
+        // filter — pull the column and classify with the same helper the
+        // listings UI uses.
+        listDisposalStatuses(agencyId),
+        countActiveRequirements(agencyId),
+        listDealsForReports(agencyId),
+        listRecentActivitiesForAgency(agencyId, 10),
+        countOpenAssignedTasks(agencyId, me),
+        countOverdueAssignedTasks(agencyId, me, nowIso),
+        listOpenDealReminders(agencyId, 200),
+        countUnreadMessages(agencyId, me),
+        getMapLayers(agencyId, { include: ["listing"] }),
+        getAgencyName(agencyId),
+      ])
+    : [0, [], 0, [], [], 0, 0, [], 0, { listings: [], companies: [], contacts: [] }, null];
+
   const openDeals = allDeals.filter((d) => !CLOSED_STAGES.has(d.stage));
   const wonDeals = allDeals.filter((d) => d.stage === "completed");
   const pipelineValue = openDeals.reduce((sum, d) => sum + (d.value ?? 0), 0);
   const wonValue = wonDeals.reduce((sum, d) => sum + (d.value ?? 0), 0);
 
-  const activeListings = (listingRows.data ?? []).filter((l) =>
-    isListingMatchable(l.status),
-  ).length;
+  const activeListings = listingStatusRows.filter((l) => isListingMatchable(l.status)).length;
 
   // Overdue = my open tasks past due + open reminders past due that are mine
-  // (set by me, or sitting on a deal I lead).
+  // (set by me, or sitting on a deal I lead). listOpenDealReminders returns
+  // every not-done reminder sorted by due_at asc (agencies.ts's convention);
+  // the due-date filter is applied here rather than in SQL.
   const myLeadDealIds = new Set(
     allDeals.filter((d) => d.lead_agent_id === me).map((d) => d.id),
   );
-  const myOverdueReminders = (reminderRows.data ?? []).filter(
-    (r) => r.created_by === me || myLeadDealIds.has(r.deal_id),
+  const myOverdueReminders = reminderRows.filter(
+    (r) => r.due_at < nowIso && (r.created_by === me || myLeadDealIds.has(r.deal_id)),
   ).length;
-  const overdueCount = (overdueTasks.count ?? 0) + myOverdueReminders;
+  const overdueCount = overdueTasksCount + myOverdueReminders;
 
-  const { data: membership } = await supabase
-    .from("agency_members")
-    .select("agencies(name)")
-    .limit(1)
-    .maybeSingle();
-  const agencyName =
-    (membership?.agencies as { name: string } | null)?.name ?? "Your agency";
-
-  // Actor names for the activity feed (resolved through profiles — the client
-  // cannot read auth.users). Same lookup the messages inbox uses.
-  const activities = (activityRows.data ?? []) as ActivityLite[];
+  // Actor names for the activity feed (resolved through public.users — the
+  // merged profiles+auth.users table, see db/migrations/0001_init.sql).
   const actorIds = [
     ...new Set(activities.map((a) => a.created_by).filter((v): v is string => !!v)),
   ];
-  const actorName = new Map<string, string>();
-  if (actorIds.length) {
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("id, full_name, email")
-      .in("id", actorIds);
-    (profs ?? []).forEach((p) =>
-      actorName.set(p.id, p.full_name ?? p.email ?? "Teammate"),
-    );
-  }
+  const actorName = actorIds.length ? await getUserNames(actorIds) : new Map<string, string>();
 
   const kpis: {
     label: string;
@@ -211,7 +166,7 @@ export default async function DashboardPage() {
     icon: LucideIcon;
     href: string;
   }[] = [
-    { label: "Companies", value: companies.count ?? 0, icon: Building2, href: "/companies" },
+    { label: "Companies", value: companiesCount, icon: Building2, href: "/companies" },
     {
       label: "Active listings",
       value: activeListings,
@@ -219,7 +174,7 @@ export default async function DashboardPage() {
       icon: Store,
       href: "/listings",
     },
-    { label: "Live requirements", value: requirements.count ?? 0, icon: Target, href: "/requirements" },
+    { label: "Live requirements", value: activeRequirementsCount, icon: Target, href: "/requirements" },
     {
       label: "Open deals",
       value: openDeals.length,
@@ -246,7 +201,7 @@ export default async function DashboardPage() {
   const myWork = [
     {
       label: "My open tasks",
-      value: myTasks.count ?? 0,
+      value: myTasksCount,
       icon: ListTodo,
       href: "/tasks",
     },
@@ -259,7 +214,7 @@ export default async function DashboardPage() {
     },
     {
       label: "Unread messages",
-      value: unread.count ?? 0,
+      value: unreadCount,
       icon: MessageSquare,
       href: "/messages",
     },
@@ -276,7 +231,9 @@ export default async function DashboardPage() {
           className="h-10 w-auto shrink-0"
         />
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{agencyName}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {agencyName ?? "Your agency"}
+          </h1>
           <p className="text-sm text-muted-foreground">
             Your agency at a glance.
           </p>

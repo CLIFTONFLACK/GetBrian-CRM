@@ -2,10 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 
-import { escapeLike } from "@/lib/search";
 import { classifyLocation, type LocationKind } from "@/lib/locations/options";
-import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { createCompany } from "@/lib/db/queries/companies";
+import { createContact } from "@/lib/db/queries/contacts";
+import {
+  approveIntakeSubmission,
+  findCompanyIdByExactName,
+  findContactIdByExactEmail,
+  getPendingIntakeSubmission,
+  rejectIntakeSubmission,
+} from "@/lib/db/queries/intake";
+import { createRequirement } from "@/lib/db/queries/requirements";
 import type { Database } from "@/lib/database.types";
 import type { FormState } from "@/lib/actions/types";
 
@@ -17,6 +27,18 @@ const defaultAgentEmail = () =>
   (process.env.INTAKE_DEFAULT_AGENT_EMAIL || "morris@cdgleisure.com").toLowerCase();
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
+
+/** Resolves the signed-in caller's user id + agency id, or an error message. */
+async function requireCaller(): Promise<
+  { userId: string; agencyId: string } | { error: string }
+> {
+  if (!isDbConfigured) return { error: "The database isn't configured yet." };
+  const session = await auth();
+  if (!session?.user) return { error: "You must be signed in." };
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return { error: "No agency is linked to your account." };
+  return { userId: session.user.id, agencyId };
+}
 
 /** Split the submitted comma-joined locations into the requirement's target arrays. */
 function partitionLocations(raw: string | null) {
@@ -63,36 +85,23 @@ const intakeUseClasses = (propertyType: string | null): UseClass[] =>
  * the submitting contact (exact, wildcard-escaped name/email lookups), create
  * the requirement, then stamp the submission approved and link the record it
  * produced. Nothing here runs until an agent has read the submission — the
- * public form only ever writes `intake_submissions`.
+ * public form only ever writes `intake_submissions`
+ * (src/lib/actions/public-intake.ts).
  */
 export async function approveSubmission(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
-
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { userId, agencyId } = caller;
 
   const id = str(formData, "id");
   if (!id) return { error: "Missing submission id." };
 
-  const { data: sub } = await supabase
-    .from("intake_submissions")
-    .select(
-      "id, status, company_name, first_name, last_name, email, phone, property_type, target_locations, min_sqft, max_sqft, min_covers, max_covers, max_rent, max_premium, notes",
-    )
-    .eq("id", id)
-    .eq("agency_id", agencyId)
-    .maybeSingle();
-  if (!sub) return { error: "Submission not found." };
-  if (sub.status !== "pending") {
-    return { error: "That submission has already been reviewed." };
-  }
+  const sub = await getPendingIntakeSubmission(agencyId, id);
+  if (!sub) return { error: "Submission not found, or it's already been reviewed." };
+
   // The public form marks these required, but the columns are nullable — a
   // submission missing either can't become a company/contact, so say so rather
   // than creating a nameless record.
@@ -107,59 +116,61 @@ export async function approveSubmission(
   }
 
   // Lead agent = the configured intake owner, falling back to the reviewer.
-  const members = await getAgencyMembers(supabase, agencyId);
+  const members = await getAgencyMembers(agencyId);
   const leadAgentId =
     members.find((m) => (m.email ?? "").toLowerCase() === defaultAgentEmail())?.id ??
-    user.id;
+    userId;
 
   // ── Find-or-create the operator company (exact name, wildcards escaped) ────
-  const { data: existingCompany } = await supabase
-    .from("companies")
-    .select("id")
-    .eq("agency_id", agencyId)
-    .ilike("name", escapeLike(companyName))
-    .limit(1)
-    .maybeSingle();
-  let companyId = existingCompany?.id ?? null;
+  let companyId = await findCompanyIdByExactName(agencyId, companyName);
   if (!companyId) {
-    const { data: newCompany, error: companyError } = await supabase
-      .from("companies")
-      .insert({
-        agency_id: agencyId,
+    const created = await createCompany(
+      agencyId,
+      leadAgentId,
+      {
         name: companyName,
         type: "operator",
-        created_by: leadAgentId,
-      })
-      .select("id")
-      .single();
-    if (companyError) return { error: `Company create failed: ${companyError.message}` };
-    companyId = newCompany.id;
+        sectorTags: [],
+        website: null,
+        phone: null,
+        notes: null,
+        companyNumber: null,
+        vatNumber: null,
+        leadAgentId: null,
+        addressLine: null,
+        city: null,
+        postcode: null,
+        county: null,
+      },
+      { lat: null, lng: null },
+    );
+    companyId = created.id;
   }
 
   // ── Find-or-create the submitting contact (exact email, wildcards escaped) ─
-  const { data: existingContact } = await supabase
-    .from("contacts")
-    .select("id")
-    .eq("agency_id", agencyId)
-    .ilike("email", escapeLike(contactEmail))
-    .limit(1)
-    .maybeSingle();
-  let contactId = existingContact?.id ?? null;
+  let contactId = await findContactIdByExactEmail(agencyId, contactEmail);
   if (!contactId) {
-    const { data: newContact, error: contactError } = await supabase
-      .from("contacts")
-      .insert({
-        agency_id: agencyId,
-        company_id: companyId,
-        first_name: firstName,
-        last_name: sub.last_name || null,
+    const created = await createContact(
+      agencyId,
+      leadAgentId,
+      {
+        firstName,
+        lastName: sub.last_name || null,
         email: contactEmail,
         phone: sub.phone || null,
-      })
-      .select("id")
-      .single();
-    if (contactError) return { error: `Contact create failed: ${contactError.message}` };
-    contactId = newContact.id;
+        role: "other",
+        companyId,
+        county: null,
+        notes: null,
+        leadAgentId: null,
+        marketingOptIn: false,
+        addressLine: null,
+        city: null,
+        postcode: null,
+      },
+      { lat: null, lng: null },
+    );
+    contactId = created.id;
   }
 
   // ── Create the requirement ────────────────────────────────────────────────
@@ -167,60 +178,46 @@ export async function approveSubmission(
   const who = [sub.first_name, sub.last_name].filter(Boolean).join(" ");
   const title = `${sub.company_name} — ${sub.property_type || "property"} requirement`;
 
-  const { data: requirement, error: reqError } = await supabase
-    .from("requirements")
-    .insert({
-      agency_id: agencyId,
-      created_by: user.id,
-      lead_agent_id: leadAgentId,
-      company_id: companyId,
-      contact_id: contactId,
-      title,
-      status: "active",
-      target_towns: locations.town,
-      target_counties: locations.county,
-      target_regions: locations.region,
-      target_postcode_districts: locations.district,
-      target_neighbourhoods: locations.neighbourhood,
-      target_london_zones: locations.zone,
-      use_classes: intakeUseClasses(sub.property_type),
-      min_sqft: sub.min_sqft,
-      max_sqft: sub.max_sqft,
-      min_covers: sub.min_covers,
-      max_covers: sub.max_covers,
-      max_rent: sub.max_rent,
-      max_premium: sub.max_premium,
-      notes: [
-        sub.notes || null,
-        `Submitted via the public requirement form by ${who}` +
-          ` (${sub.email}${sub.phone ? `, ${sub.phone}` : ""}).`,
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
-    })
-    .select("id")
-    .single();
-  if (reqError) return { error: `Requirement create failed: ${reqError.message}` };
+  const requirement = await createRequirement(agencyId, userId, {
+    title,
+    companyId,
+    contactId,
+    status: "active",
+    targetTowns: locations.town,
+    targetRegions: locations.region,
+    targetCounties: locations.county,
+    targetPostcodeDistricts: locations.district,
+    targetNeighbourhoods: locations.neighbourhood,
+    targetLondonZones: locations.zone,
+    useClasses: intakeUseClasses(sub.property_type),
+    tenurePrefs: [],
+    minSqft: sub.min_sqft,
+    maxSqft: sub.max_sqft,
+    minCovers: sub.min_covers,
+    maxCovers: sub.max_covers,
+    maxRent: sub.max_rent,
+    maxPremium: sub.max_premium,
+    maxGuidePrice: null,
+    notes: [
+      sub.notes || null,
+      `Submitted via the public requirement form by ${who}` +
+        ` (${sub.email}${sub.phone ? `, ${sub.phone}` : ""}).`,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    leadAgentId,
+  });
 
-  const { error: stampError } = await supabase
-    .from("intake_submissions")
-    .update({
-      status: "approved",
-      created_requirement_id: requirement.id,
-      reviewed_by: user.id,
-      reviewed_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .eq("agency_id", agencyId);
-  if (stampError) {
+  const stamped = await approveIntakeSubmission(agencyId, id, requirement.id, userId);
+  if (!stamped) {
     return {
-      message: `Requirement created, but the submission couldn't be marked approved (${stampError.message}).`,
+      message: `Requirement created, but the submission couldn't be marked approved — it may have already been reviewed by someone else.`,
     };
   }
 
   revalidatePath("/intake");
   revalidatePath("/requirements");
-  return { message: `Approved — “${title}” created.` };
+  return { message: `Approved — "${title}" created.` };
 }
 
 /** Reject a pending submission — nothing is written to the CRM. */
@@ -228,29 +225,15 @@ export async function rejectSubmission(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
-
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { userId, agencyId } = caller;
 
   const id = str(formData, "id");
   if (!id) return { error: "Missing submission id." };
 
-  const { error } = await supabase
-    .from("intake_submissions")
-    .update({
-      status: "rejected",
-      reviewed_by: user.id,
-      reviewed_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .eq("agency_id", agencyId)
-    .eq("status", "pending");
-  if (error) return { error: error.message };
+  const ok = await rejectIntakeSubmission(agencyId, id, userId);
+  if (!ok) return { error: "Submission not found, or it's already been reviewed." };
 
   revalidatePath("/intake");
   return { message: "Submission rejected." };

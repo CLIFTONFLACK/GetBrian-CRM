@@ -2,25 +2,41 @@
 
 import { revalidatePath } from "next/cache";
 
-import { currentAgencyId } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { createActivity } from "@/lib/db/queries/activities";
+import {
+  createDealReminder as createDealReminderRow,
+  deleteDealReminder as deleteDealReminderRow,
+  getDealOwnerInfo,
+  setDealReminderDone,
+} from "@/lib/db/queries/deals";
+import { createNotifications } from "@/lib/db/queries/messages";
 import type { FormState } from "@/lib/actions/types";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
+
+/** Resolves the signed-in caller's user id + agency id, or an error message. */
+async function requireCaller(): Promise<
+  { userId: string; agencyId: string } | { error: string }
+> {
+  if (!isDbConfigured) return { error: "The database isn't configured yet." };
+  const session = await auth();
+  if (!session?.user) return { error: "You must be signed in." };
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return { error: "No agency is linked to your account." };
+  return { userId: session.user.id, agencyId };
+}
 
 /** Add a deadline / reminder to a deal (#11) and notify the deal owner. */
 export async function addDealReminder(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
-
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { userId, agencyId } = caller;
 
   const dealId = str(formData, "deal_id");
   const title = str(formData, "title");
@@ -29,29 +45,17 @@ export async function addDealReminder(
   if (!title) return { error: "A reminder title is required." };
   if (!dueAt) return { error: "A due date is required." };
 
-  const { error } = await supabase.from("deal_reminders").insert({
-    agency_id: agencyId,
-    deal_id: dealId,
-    title,
-    due_at: new Date(dueAt).toISOString(),
-    created_by: user.id,
-  });
-  if (error) return { error: error.message };
+  const dueAtIso = new Date(dueAt).toISOString();
+  await createDealReminderRow(agencyId, userId, dealId, { title, dueAt: dueAtIso });
 
   // Notify whoever owns the deal today — the lead agent, falling back to the
   // creator (if someone else set the reminder).
-  const { data: deal } = await supabase
-    .from("deals")
-    .select("title, created_by, lead_agent_id")
-    .eq("id", dealId)
-    .maybeSingle();
+  const deal = await getDealOwnerInfo(agencyId, dealId);
   const owner = deal?.lead_agent_id ?? deal?.created_by ?? null;
-  if (deal && owner && owner !== user.id) {
-    await supabase.from("notifications").insert({
-      agency_id: agencyId,
-      user_id: owner,
+  if (deal && owner && owner !== userId) {
+    await createNotifications(agencyId, [owner], {
       title: `Reminder set on “${deal.title}”`,
-      body: `${title} — due ${new Date(dueAt).toLocaleString("en-GB")}`,
+      body: `${title} — due ${new Date(dueAtIso).toLocaleString("en-GB")}`,
       link: `/deals/${dealId}`,
     });
   }
@@ -66,33 +70,29 @@ export async function addDealReminder(
  * current value — so two people clicking "done" can't re-open it.
  */
 export async function toggleDealReminder(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const agencyId = await currentAgencyId(supabase);
+  if (!isDbConfigured) return;
+  const session = await auth();
+  if (!session?.user) return;
+  const agencyId = await currentAgencyId(session.user.id);
   const id = str(formData, "id");
   const dealId = str(formData, "deal_id");
   const intent = str(formData, "intent");
   if (!id || !agencyId) return;
   if (intent !== "mark_done" && intent !== "mark_open") return;
-  await supabase
-    .from("deal_reminders")
-    .update({ done: intent === "mark_done" })
-    .eq("id", id)
-    .eq("agency_id", agencyId);
+  await setDealReminderDone(agencyId, id, intent === "mark_done");
   if (dealId) revalidatePath(`/deals/${dealId}`);
 }
 
 /** Delete a reminder. */
 export async function deleteDealReminder(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const agencyId = await currentAgencyId(supabase);
+  if (!isDbConfigured) return;
+  const session = await auth();
+  if (!session?.user) return;
+  const agencyId = await currentAgencyId(session.user.id);
   const id = str(formData, "id");
   const dealId = str(formData, "deal_id");
   if (!id || !agencyId) return;
-  await supabase
-    .from("deal_reminders")
-    .delete()
-    .eq("id", id)
-    .eq("agency_id", agencyId);
+  await deleteDealReminderRow(agencyId, id);
   if (dealId) revalidatePath(`/deals/${dealId}`);
 }
 
@@ -104,26 +104,21 @@ export async function logDealShare(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
-
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { userId, agencyId } = caller;
 
   const dealId = str(formData, "deal_id");
   const channel = str(formData, "channel");
   if (!dealId) return { error: "Missing deal." };
 
-  await supabase.from("activities").insert({
-    agency_id: agencyId,
-    created_by: user.id,
+  await createActivity(agencyId, userId, {
     type: "note",
     subject: `Update shared via ${channel || "link"}`,
-    entity_type: "deal",
-    entity_id: dealId,
+    body: null,
+    entityType: "deal",
+    entityId: dealId,
+    occurredAt: null,
   });
 
   revalidatePath(`/deals/${dealId}`);

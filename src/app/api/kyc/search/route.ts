@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
+import { auth } from "@/lib/auth";
 import { isKycConfigured } from "@/lib/kyc/config";
 import { searchCompanies } from "@/lib/kyc/companies-house";
-import { createClient } from "@/lib/supabase/server";
 
 /**
  * GET /api/kyc/search?q=acme  → Companies House name search (CRN picker).
@@ -17,11 +17,8 @@ export async function GET(request: Request): Promise<Response> {
     );
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const session = await auth();
+  if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 

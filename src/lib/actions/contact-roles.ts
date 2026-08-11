@@ -2,7 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { isAnyAgencyAdmin } from "@/lib/db/queries/agencies";
+import {
+  contactRoleInUseCount,
+  contactRoleSlugsAndMaxSort,
+  deleteContactRoleById,
+  getContactRoleById,
+  insertContactRole,
+  renameContactRole as renameContactRoleRow,
+} from "@/lib/db/queries/lookups";
 import type { FormState } from "@/lib/actions/types";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
@@ -21,32 +31,42 @@ function revalidate() {
   revalidatePath("/contacts");
 }
 
-/** Add a new contact role. Writes are RLS-gated to agency admins. */
+/**
+ * Every mutation here used to be RLS-gated to agency admins
+ * (is_any_agency_admin() — see db/migrations/0023_contact_roles.sql's header
+ * note). That RLS is gone, so the same check is made explicitly here before
+ * any write — contact_roles is a system-wide list, so this deliberately
+ * checks "admin of ANY agency", not a specific one.
+ */
+async function requireAdmin(): Promise<string | null> {
+  if (!isDbConfigured) return "The database isn't configured yet.";
+  const session = await auth();
+  if (!session?.user) return "You must be signed in.";
+  const isAdmin = await isAnyAgencyAdmin(session.user.id);
+  if (!isAdmin) return "Only an agency admin can edit contact roles.";
+  return null;
+}
+
+/** Add a new contact role. */
 export async function createContactRole(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
+  const denied = await requireAdmin();
+  if (denied) return { error: denied };
+
   const label = str(formData, "label");
   if (!label) return { error: "A role name is required." };
 
-  const { data: existing } = await supabase
-    .from("contact_roles")
-    .select("slug, sort_order");
-  const slugs = new Set((existing ?? []).map((r) => r.slug));
-
+  const { slugs, maxSort } = await contactRoleSlugsAndMaxSort();
   let slug = slugify(label);
   if (slugs.has(slug)) {
     let n = 2;
     while (slugs.has(`${slug}_${n}`)) n++;
     slug = `${slug}_${n}`;
   }
-  const maxSort = (existing ?? []).reduce((m, r) => Math.max(m, r.sort_order), 0);
 
-  const { error } = await supabase
-    .from("contact_roles")
-    .insert({ slug, label, sort_order: maxSort + 1 });
-  if (error) return { error: error.message };
+  await insertContactRole(slug, label, maxSort + 1);
 
   revalidate();
   return { message: `Added “${label}”.` };
@@ -58,44 +78,37 @@ export async function renameContactRole(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
+  const denied = await requireAdmin();
+  if (denied) return { error: denied };
+
   const id = str(formData, "id");
   const label = str(formData, "label");
   if (!id) return { error: "Missing role." };
   if (!label) return { error: "A role name is required." };
 
-  const { error } = await supabase
-    .from("contact_roles")
-    .update({ label })
-    .eq("id", id);
-  if (error) return { error: error.message };
+  await renameContactRoleRow(id, label);
 
   revalidate();
   return { message: "Saved." };
 }
 
 /** Delete a role. Refuses the protected "Other" fallback and any role still in
- * use by a contact (counted across all agencies via a definer helper). */
+ * use by a contact (counted across all agencies via a SQL helper). */
 export async function deleteContactRole(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
+  const denied = await requireAdmin();
+  if (denied) return { error: denied };
+
   const id = str(formData, "id");
   if (!id) return { error: "Missing role." };
 
-  const { data: role } = await supabase
-    .from("contact_roles")
-    .select("slug, label, is_system")
-    .eq("id", id)
-    .maybeSingle();
+  const role = await getContactRoleById(id);
   if (!role) return { error: "Role not found." };
   if (role.is_system) return { error: "The “Other” role can’t be deleted." };
 
-  const { data: inUse } = await supabase.rpc("contact_role_in_use", {
-    p_slug: role.slug,
-  });
-  const count = inUse ?? 0;
+  const count = await contactRoleInUseCount(role.slug);
   if (count > 0) {
     return {
       error: `“${role.label}” is used by ${count} contact${
@@ -104,8 +117,7 @@ export async function deleteContactRole(
     };
   }
 
-  const { error } = await supabase.from("contact_roles").delete().eq("id", id);
-  if (error) return { error: error.message };
+  await deleteContactRoleById(id);
 
   revalidate();
   return { message: `Deleted “${role.label}”.` };

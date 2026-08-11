@@ -5,8 +5,7 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { kycRiskBadge } from "@/lib/badges";
-import type { Tables } from "@/lib/database.types";
-import type { KycReportData } from "@/lib/kyc/types";
+import type { KycReport } from "@/lib/db/queries/kyc";
 
 const SOURCE_LABELS: Record<string, string> = {
   companies_house: "Companies House",
@@ -57,12 +56,8 @@ function fmtDate(d: string | null | undefined): string {
       });
 }
 
-export function KycReportView({
-  report,
-}: {
-  report: Tables<"kyc_reports">;
-}) {
-  const data = (report.payload as unknown as KycReportData) ?? null;
+export function KycReportView({ report }: { report: KycReport }) {
+  const data = report.payload;
   const risk = kycRiskBadge(report.risk_rating);
   const profile = data?.profile ?? null;
   const flags = report.flags ?? [];

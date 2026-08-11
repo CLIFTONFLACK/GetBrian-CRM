@@ -2,6 +2,12 @@ import { createElement, type ReactElement } from "react";
 
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 
+import {
+  getDisposalById,
+  getDisposalAgentIds,
+  getUserNames,
+  listDisposalAreas,
+} from "@/lib/db/queries/disposals";
 import { staticMapUrl } from "@/lib/maps/static-map";
 import { registerBrandFonts } from "@/lib/pdf/fonts";
 import {
@@ -10,9 +16,6 @@ import {
   type DocSection,
   type FloorRow,
 } from "@/lib/pdf/particulars-document";
-import type { createClient } from "@/lib/supabase/server";
-
-type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 type ImageItem = { url: string; alt?: string | null };
 
@@ -162,37 +165,26 @@ const slug = (s: string) =>
 /**
  * Renders the particulars PDF for a disposal. Branded for CDG listings,
  * unbranded when `listing_type = 'intel'` (handled inside ParticularsDocument).
- * Returns null when the disposal doesn't exist (or isn't visible to `supabase`).
+ * Returns null when the disposal doesn't exist in this agency — `agencyId`
+ * IS the visibility check now that there's no RLS backstop (see AGENTS.md).
  */
 export async function renderParticularsPdf(
+  agencyId: string,
   disposalId: string,
-  supabase: Supabase,
 ): Promise<{ buffer: Buffer; filename: string; isIntel: boolean } | null> {
-  const { data: row } = await supabase
-    .from("disposals")
-    .select("*")
-    .eq("id", disposalId)
-    .maybeSingle();
+  const row = await getDisposalById(agencyId, disposalId);
   if (!row) return null;
 
   // Internal CDG team assigned to this listing (lead first, then collaborators).
-  const { data: agentRows } = await supabase
-    .from("disposal_agents")
-    .select("user_id")
-    .eq("disposal_id", disposalId);
-  const orderedIds = [
-    row.lead_agent_id,
-    ...(agentRows ?? []).map((a) => a.user_id),
-  ].filter((v): v is string => Boolean(v));
+  const agentUserIds = await getDisposalAgentIds(agencyId, disposalId);
+  const orderedIds = [row.lead_agent_id, ...agentUserIds].filter(
+    (v): v is string => Boolean(v),
+  );
   let agentNames: string[] = [];
   if (orderedIds.length) {
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("id, full_name, email")
-      .in("id", [...new Set(orderedIds)]);
-    const nameOf = new Map(
-      (profs ?? []).map((p) => [p.id, p.full_name ?? p.email ?? "Agent"]),
-    );
+    // `public.users` replaces the old `profiles` table (merged in
+    // db/migrations/0001_init.sql) — see getUserNames's own doc comment.
+    const nameOf = await getUserNames([...new Set(orderedIds)]);
     const seen = new Set<string>();
     agentNames = orderedIds
       .filter((uid) => !seen.has(uid) && seen.add(uid))
@@ -201,24 +193,19 @@ export async function renderParticularsPdf(
 
   registerBrandFonts();
   const images = (Array.isArray(row.images) ? row.images : []) as ImageItem[];
-  const [hero, map, { data: areaRows }] = await Promise.all([
+  const [hero, map, areaRows] = await Promise.all([
     fetchHero(images),
     fetchStaticMap(row.lat, row.lng),
     // Manually-maintained area schedule — the accommodation-table fallback
     // when the row carries no scraped `floors`.
-    supabase
-      .from("disposal_areas")
-      .select("name, size_sqft, size_sqm")
-      .eq("disposal_id", disposalId)
-      .order("sort_order")
-      .order("created_at"),
+    listDisposalAreas(agencyId, disposalId),
   ]);
   const data = buildData(
-    row as Record<string, unknown>,
+    row as unknown as Record<string, unknown>,
     hero,
     map,
     agentNames,
-    areaRows ?? [],
+    areaRows,
   );
 
   // ParticularsDocument renders a <Document> at runtime; createElement loses

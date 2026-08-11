@@ -1,6 +1,18 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Dummy data for manual/QA testing.   NOT a migration — run on demand:
---   Supabase MCP execute_sql, or psql -f supabase/seeds/dummy_data.sql
+--   psql "$STORAGE_CRM_DATABASE_URL" -f supabase/seeds/dummy_data.sql
+--
+-- ADAPTED FROM SUPABASE: the original wrote auth.users + auth.identities (a
+-- Supabase-Auth-schema-specific insert) and then a separate public.profiles
+-- upsert for full_name/phone/linkedin_url. Plain Postgres has neither —
+-- public.users (db/migrations/0001_init.sql) already merges auth.users and
+-- profiles into one table, so this version does one insert (or update) into
+-- public.users per agent, with password_hash written via pgcrypto's
+-- crypt()/gen_salt('bf') (bcrypt — verifiable by bcryptjs's compare(), same
+-- as an Auth.js-written hash). There is also no signup trigger anymore (the
+-- old "spin up a personal agency per new user" behavior was a DB trigger on
+-- auth.users; it's now explicit code in the sign-up Server Action, which this
+-- script never calls), so step 3 below is a no-op safety net, not a real fixup.
 --
 -- Creates ONE shared demo agency ("CDG demo") with 6 login-capable agents —
 -- the real CDG Leisure team (Morris Greenberg, Sammy Weinbaum, Salvatore Di
@@ -83,45 +95,34 @@ begin
   end if;
 
   -- 2. Six login-capable agents (the real CDG team) ───────────────────────────
-  -- (The signup trigger fires on insert and spins up a personal agency per user;
-  --  we delete those in step 3 so each agent belongs only to the demo agency.)
   for i in 1..6 loop
-    select id into uid from auth.users where email = emails[i];
+    select id into uid from public.users where email = emails[i];
     if uid is null then
       uid := gen_random_uuid();
-      insert into auth.users (
-        instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-        raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
-        confirmation_token, recovery_token, email_change, email_change_token_new
-      ) values (
-        '00000000-0000-0000-0000-000000000000', uid, 'authenticated', 'authenticated',
-        emails[i], crypt(pw, gen_salt('bf')), now(),
-        '{"provider":"email","providers":["email"]}'::jsonb,
-        jsonb_build_object('full_name', fulln[i]), now(), now(),
-        '', '', '', ''
-      );
-      insert into auth.identities (
-        id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
-      ) values (
-        gen_random_uuid(), uid, uid::text,
-        jsonb_build_object('sub', uid::text, 'email', emails[i]), 'email', now(), now(), now()
-      );
+      insert into public.users (id, email, password_hash, full_name, phone, linkedin_url)
+        values (uid, emails[i], crypt(pw, gen_salt('bf')), fulln[i], phones[i], linkedins[i]);
+    else
+      -- Reseed also re-asserts password_hash (not just contact details): this
+      -- file's own contract is "log in with Demo!2026", and an email can
+      -- already exist from an unrelated manual sign-up test with some other
+      -- password (seen live for morris@cdgleisure.com) — a reseed must still
+      -- leave the documented demo credentials working.
+      update public.users
+         set password_hash = crypt(pw, gen_salt('bf')),
+             full_name = fulln[i], phone = phones[i], linkedin_url = linkedins[i], updated_at = now()
+       where id = uid;
     end if;
     agent_ids := array_append(agent_ids, uid);
 
     insert into public.agency_members (agency_id, user_id, role)
       values (demo_agency, uid, (case when i = 1 then 'admin' else 'agent' end)::public.member_role)
       on conflict (agency_id, user_id) do nothing;
-
-    -- Real contact details (phone + LinkedIn) so a reseed reproduces live state.
-    insert into public.profiles (id, email, full_name, phone, linkedin_url)
-      values (uid, emails[i], fulln[i], phones[i], linkedins[i])
-      on conflict (id) do update set
-        email = excluded.email, full_name = excluded.full_name,
-        phone = excluded.phone, linkedin_url = excluded.linkedin_url, updated_at = now();
   end loop;
 
-  -- 3. Drop any non-demo (trigger-seeded personal) agencies for these agents ──
+  -- 3. Safety net: drop any stray non-demo agency for these agents (no signup
+  --    trigger creates these anymore — see header note — but keep this so a
+  --    manually-created stray membership doesn't leak the agent into another
+  --    agency on reseed) ─────────────────────────────────────────────────────
   delete from public.agencies a
    where a.id <> demo_agency
      and a.id in (select agency_id from public.agency_members where user_id = any(agent_ids));

@@ -3,11 +3,22 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { currentAgencyId } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import {
+  createContact as createContactRow,
+  createContactReturningName,
+  deleteContact as deleteContactRow,
+  findDuplicateContactByEmail,
+  getContactForUpdate,
+  syncContactAgents,
+  updateContact as updateContactRow,
+  type ContactWriteInput,
+} from "@/lib/db/queries/contacts";
+import { contactRoleSlugExists } from "@/lib/db/queries/lookups";
 import { deriveCounty } from "@/lib/locations";
 import { geocodeForSave } from "@/lib/maps/geocode";
-import { escapeLike } from "@/lib/search";
 import type { FormState } from "@/lib/actions/types";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
@@ -22,102 +33,64 @@ const agents = (fd: FormData) => {
   return { lead, extra };
 };
 
-function payload(fd: FormData) {
+function writeInput(fd: FormData, role: string): ContactWriteInput {
   return {
-    first_name: str(fd, "first_name"),
-    last_name: nullable(fd, "last_name"),
+    firstName: str(fd, "first_name"),
+    lastName: nullable(fd, "last_name"),
     email: nullable(fd, "email"),
     phone: nullable(fd, "phone"),
-    role: str(fd, "role") || "other",
-    company_id: nullable(fd, "company_id"),
-    address_line: nullable(fd, "address_line"),
+    role,
+    companyId: nullable(fd, "company_id"),
+    addressLine: nullable(fd, "address_line"),
     city: nullable(fd, "city"),
     postcode: nullable(fd, "postcode"),
     county:
       nullable(fd, "county") ??
       deriveCounty({ postcode: str(fd, "postcode"), city: str(fd, "city") }),
     notes: nullable(fd, "notes"),
-    lead_agent_id: nullable(fd, "lead_agent_id"),
-    marketing_opt_in: fd.get("marketing_opt_in") != null,
+    leadAgentId: nullable(fd, "lead_agent_id"),
+    marketingOptIn: fd.get("marketing_opt_in") != null,
   };
 }
 
-type Supabase = Awaited<ReturnType<typeof createClient>>;
+function addressParts(input: ContactWriteInput) {
+  return { address_line: input.addressLine, city: input.city, postcode: input.postcode };
+}
 
 /** Coerce a submitted role to a real contact_roles slug (defaults to "other"). */
-async function validRole(supabase: Supabase, value: string): Promise<string> {
+async function validRole(value: string): Promise<string> {
   if (!value || value === "other") return "other";
-  const { data } = await supabase
-    .from("contact_roles")
-    .select("slug")
-    .eq("slug", value)
-    .maybeSingle();
-  return data ? value : "other";
+  return (await contactRoleSlugExists(value)) ? value : "other";
 }
 
-/**
- * Case-insensitive pre-insert duplicate lookup on email. Returns the existing
- * contact's display name, or null when there is no duplicate (or no email).
- */
-async function findDuplicateContact(
-  supabase: Supabase,
-  agencyId: string,
-  email: string | null,
-): Promise<string | null> {
-  if (!email) return null;
-  const { data } = await supabase
-    .from("contacts")
-    .select("first_name, last_name")
-    .eq("agency_id", agencyId)
-    .ilike("email", escapeLike(email))
-    .limit(1)
-    .maybeSingle();
-  if (!data) return null;
-  return [data.first_name, data.last_name].filter(Boolean).join(" ") || "Unnamed contact";
-}
-
-/** Replace a contact's additional-agent rows. */
-async function syncContactAgents(
-  supabase: Supabase,
-  contactId: string,
-  agencyId: string,
-  extra: string[],
-) {
-  await supabase
-    .from("contact_agents")
-    .delete()
-    .eq("contact_id", contactId)
-    .eq("agency_id", agencyId);
-  if (extra.length > 0) {
-    await supabase.from("contact_agents").insert(
-      extra.map((user_id) => ({
-        agency_id: agencyId,
-        contact_id: contactId,
-        user_id,
-      })),
-    );
+/** Resolves the signed-in caller's user id + agency id, or an error message. */
+async function requireCaller(): Promise<
+  { userId: string; agencyId: string } | { error: string }
+> {
+  if (!isDbConfigured) {
+    return { error: "The database isn't configured yet." };
   }
+  const session = await auth();
+  if (!session?.user) return { error: "You must be signed in." };
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return { error: "No agency is linked to your account." };
+  return { userId: session.user.id, agencyId };
 }
 
 export async function createContact(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { userId, agencyId } = caller;
 
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
-
-  const data = payload(formData);
-  if (!data.first_name) return { error: "A first name is required." };
-  data.role = await validRole(supabase, data.role);
+  const role = await validRole(str(formData, "role") || "other");
+  const input = writeInput(formData, role);
+  if (!input.firstName) return { error: "A first name is required." };
 
   if (formData.get("allow_duplicate") == null) {
-    const dup = await findDuplicateContact(supabase, agencyId, data.email);
+    const dup = await findDuplicateContactByEmail(agencyId, input.email);
     if (dup) {
       return {
         error: `A contact with this email already exists: ${dup}. Tick "Create anyway" to proceed.`,
@@ -125,59 +98,43 @@ export async function createContact(
     }
   }
 
-  const geo = await geocodeForSave(data);
-  const { data: row, error } = await supabase
-    .from("contacts")
-    .insert({ agency_id: agencyId, created_by: user.id, ...data, ...(geo ?? {}) })
-    .select("id")
-    .single();
-  if (error) return { error: error.message };
+  const geo = await geocodeForSave(addressParts(input));
+  const { id } = await createContactRow(agencyId, userId, input, geo ?? { lat: null, lng: null });
 
-  await syncContactAgents(supabase, row.id, agencyId, agents(formData).extra);
+  await syncContactAgents(agencyId, id, agents(formData).extra);
 
   revalidatePath("/contacts");
-  redirect(`/contacts/${row.id}`);
+  redirect(`/contacts/${id}`);
 }
 
 export async function updateContact(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
   const id = str(formData, "id");
   if (!id) return { error: "Missing contact id." };
 
-  const data = payload(formData);
-  if (!data.first_name) return { error: "A first name is required." };
-  data.role = await validRole(supabase, data.role);
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { agencyId } = caller;
 
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
+  const role = await validRole(str(formData, "role") || "other");
+  const input = writeInput(formData, role);
+  if (!input.firstName) return { error: "A first name is required." };
 
-  const { data: existing } = await supabase
-    .from("contacts")
-    .select("address_line, city, postcode, lat, lng, updated_at")
-    .eq("id", id)
-    .maybeSingle();
+  const existing = await getContactForUpdate(agencyId, id);
   if (!existing) return { error: "This contact no longer exists." };
 
-  const geo = await geocodeForSave(data, existing);
-  const { data: updated, error } = await supabase
-    .from("contacts")
-    .update({ ...data, ...(geo ?? {}) })
-    .eq("id", id)
-    .eq("agency_id", agencyId)
-    .eq("updated_at", existing.updated_at)
-    .select("id");
-  if (error) return { error: error.message };
-  if (!updated || updated.length === 0) {
+  const geo = await geocodeForSave(addressParts(input), existing);
+  const updated = await updateContactRow(agencyId, id, existing.updated_at, input, geo);
+  if (!updated) {
     return {
       error:
         "This contact was changed by someone else while you were editing. Reload the page and try again.",
     };
   }
 
-  await syncContactAgents(supabase, id, agencyId, agents(formData).extra);
+  await syncContactAgents(agencyId, id, agents(formData).extra);
 
   revalidatePath("/contacts");
   revalidatePath(`/contacts/${id}`);
@@ -190,39 +147,34 @@ export async function updateContact(
  * address (geocoded), role, marketing opt-in, agents — and returns the new id +
  * display name for the caller to select instead of redirecting. Fields the
  * short variant of the modal omits are absent from the FormData and land as
- * null (`role` defaults to "other" via `payload`).
+ * null (`role` defaults to "other" via `writeInput`).
  */
 export async function quickCreateContact(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { userId, agencyId } = caller;
 
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
-
-  const data = payload(formData);
-  if (!data.first_name) return { error: "A first name is required." };
-  data.role = await validRole(supabase, data.role);
+  const role = await validRole(str(formData, "role") || "other");
+  const input = writeInput(formData, role);
+  if (!input.firstName) return { error: "A first name is required." };
 
   if (formData.get("allow_duplicate") == null) {
-    const dup = await findDuplicateContact(supabase, agencyId, data.email);
+    const dup = await findDuplicateContactByEmail(agencyId, input.email);
     if (dup) return { error: `A contact with this email already exists: ${dup}.` };
   }
 
-  const geo = await geocodeForSave(data);
-  const { data: row, error } = await supabase
-    .from("contacts")
-    .insert({ agency_id: agencyId, created_by: user.id, ...data, ...(geo ?? {}) })
-    .select("id, first_name, last_name")
-    .single();
-  if (error || !row) return { error: error?.message ?? "Could not create contact." };
+  const geo = await geocodeForSave(addressParts(input));
+  const row = await createContactReturningName(
+    agencyId,
+    userId,
+    input,
+    geo ?? { lat: null, lng: null },
+  );
 
-  await syncContactAgents(supabase, row.id, agencyId, agents(formData).extra);
+  await syncContactAgents(agencyId, row.id, agents(formData).extra);
 
   const name = [row.first_name, row.last_name].filter(Boolean).join(" ");
   revalidatePath("/contacts");
@@ -230,19 +182,14 @@ export async function quickCreateContact(
 }
 
 export async function deleteContact(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const agencyId = user ? await currentAgencyId(supabase) : null;
   const id = String(formData.get("id") ?? "");
-  if (id && agencyId) {
-    await supabase
-      .from("contacts")
-      .delete()
-      .eq("id", id)
-      .eq("agency_id", agencyId);
-    revalidatePath("/contacts");
+  if (isDbConfigured && id) {
+    const session = await auth();
+    const agencyId = session?.user ? await currentAgencyId(session.user.id) : null;
+    if (agencyId) {
+      await deleteContactRow(agencyId, id);
+      revalidatePath("/contacts");
+    }
   }
   redirect("/contacts");
 }

@@ -3,11 +3,21 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { currentAgencyId } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import {
+  createCompany as createCompanyRow,
+  findDuplicateCompanyByName,
+  getCompanyForUpdate,
+  syncCompanyAgents,
+  updateCompany as updateCompanyRow,
+  deleteCompany as deleteCompanyRow,
+  type CompanyWriteInput,
+} from "@/lib/db/queries/companies";
+import { linkContactToCompany } from "@/lib/db/queries/contacts";
 import { deriveCounty } from "@/lib/locations";
 import { geocodeForSave } from "@/lib/maps/geocode";
-import { escapeLike } from "@/lib/search";
 import type { FormState } from "@/lib/actions/types";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
@@ -36,77 +46,8 @@ const agents = (fd: FormData) => {
   return { lead, extra };
 };
 
-type Supabase = Awaited<ReturnType<typeof createClient>>;
-
-/**
- * Case-insensitive pre-insert duplicate lookup on exact company name. Returns
- * the existing company's name, or null when there is no duplicate.
- */
-async function findDuplicateCompany(
-  supabase: Supabase,
-  agencyId: string,
-  name: string,
-): Promise<string | null> {
-  const { data } = await supabase
-    .from("companies")
-    .select("name")
-    .eq("agency_id", agencyId)
-    .ilike("name", escapeLike(name))
-    .limit(1)
-    .maybeSingle();
-  return data?.name ?? null;
-}
-
-/** Replace a company's additional-agent rows. */
-async function syncCompanyAgents(
-  supabase: Supabase,
-  companyId: string,
-  agencyId: string,
-  extra: string[],
-) {
-  await supabase
-    .from("company_agents")
-    .delete()
-    .eq("company_id", companyId)
-    .eq("agency_id", agencyId);
-  if (extra.length > 0) {
-    await supabase.from("company_agents").insert(
-      extra.map((user_id) => ({
-        agency_id: agencyId,
-        company_id: companyId,
-        user_id,
-      })),
-    );
-  }
-}
-
-export async function createCompany(
-  _prev: FormState,
-  formData: FormData,
-): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
-
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
-
-  const name = str(formData, "name");
-  if (!name) return { error: "Company name is required." };
-
-  if (formData.get("allow_duplicate") == null) {
-    const dup = await findDuplicateCompany(supabase, agencyId, name);
-    if (dup) {
-      return {
-        error: `A company with this name already exists: ${dup}. Tick "Create anyway" to proceed.`,
-      };
-    }
-  }
-
-  const { lead, extra } = agents(formData);
-  const address = {
+function addressFromForm(formData: FormData) {
+  return {
     address_line: nullable(formData, "address_line"),
     city: nullable(formData, "city"),
     postcode: nullable(formData, "postcode"),
@@ -117,43 +58,81 @@ export async function createCompany(
         city: str(formData, "city"),
       }),
   };
-  const geo = await geocodeForSave(address);
-  const { data, error } = await supabase
-    .from("companies")
-    .insert({
-      agency_id: agencyId,
-      created_by: user.id,
-      name,
-      type: asType(str(formData, "type")),
-      sector_tags: sectorTags(formData),
-      website: nullable(formData, "website"),
-      phone: nullable(formData, "phone"),
-      notes: nullable(formData, "notes"),
-      company_number: nullable(formData, "company_number"),
-      vat_number: nullable(formData, "vat_number"),
-      lead_agent_id: lead,
-      ...address,
-      ...(geo ?? {}),
-    })
-    .select("id")
-    .single();
-  if (error) return { error: error.message };
+}
 
-  await syncCompanyAgents(supabase, data.id, agencyId, extra);
+function writeInput(formData: FormData): CompanyWriteInput {
+  const { lead } = agents(formData);
+  const address = addressFromForm(formData);
+  return {
+    name: str(formData, "name"),
+    type: asType(str(formData, "type")),
+    sectorTags: sectorTags(formData),
+    website: nullable(formData, "website"),
+    phone: nullable(formData, "phone"),
+    notes: nullable(formData, "notes"),
+    companyNumber: nullable(formData, "company_number"),
+    vatNumber: nullable(formData, "vat_number"),
+    leadAgentId: lead,
+    addressLine: address.address_line,
+    city: address.city,
+    postcode: address.postcode,
+    county: address.county,
+  };
+}
+
+/** Resolves the signed-in caller's user id + agency id, or an error message. */
+async function requireCaller(): Promise<
+  { userId: string; agencyId: string } | { error: string }
+> {
+  if (!isDbConfigured) {
+    return { error: "The database isn't configured yet." };
+  }
+  const session = await auth();
+  if (!session?.user) return { error: "You must be signed in." };
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return { error: "No agency is linked to your account." };
+  return { userId: session.user.id, agencyId };
+}
+
+export async function createCompany(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { userId, agencyId } = caller;
+
+  const name = str(formData, "name");
+  if (!name) return { error: "Company name is required." };
+
+  if (formData.get("allow_duplicate") == null) {
+    const dup = await findDuplicateCompanyByName(agencyId, name);
+    if (dup) {
+      return {
+        error: `A company with this name already exists: ${dup}. Tick "Create anyway" to proceed.`,
+      };
+    }
+  }
+
+  const { extra } = agents(formData);
+  const address = addressFromForm(formData);
+  const geo = await geocodeForSave(address);
+  const { id } = await createCompanyRow(agencyId, userId, writeInput(formData), geo ?? {
+    lat: null,
+    lng: null,
+  });
+
+  await syncCompanyAgents(agencyId, id, extra);
 
   // #13: optionally attach a contact chosen (or quick-created) on the form.
   const linkContact = nullable(formData, "link_contact");
   if (linkContact) {
-    await supabase
-      .from("contacts")
-      .update({ company_id: data.id })
-      .eq("id", linkContact)
-      .eq("agency_id", agencyId);
+    await linkContactToCompany(agencyId, linkContact, id);
     revalidatePath(`/contacts/${linkContact}`);
   }
 
   revalidatePath("/companies");
-  redirect(`/companies/${data.id}`);
+  redirect(`/companies/${id}`);
 }
 
 /**
@@ -167,125 +146,62 @@ export async function quickCreateCompany(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
-
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { userId, agencyId } = caller;
 
   const name = str(formData, "name");
   if (!name) return { error: "Company name is required." };
 
   if (formData.get("allow_duplicate") == null) {
-    const dup = await findDuplicateCompany(supabase, agencyId, name);
+    const dup = await findDuplicateCompanyByName(agencyId, name);
     if (dup) return { error: `A company with this name already exists: ${dup}.` };
   }
 
-  const { lead, extra } = agents(formData);
-  const address = {
-    address_line: nullable(formData, "address_line"),
-    city: nullable(formData, "city"),
-    postcode: nullable(formData, "postcode"),
-    county:
-      nullable(formData, "county") ??
-      deriveCounty({
-        postcode: str(formData, "postcode"),
-        city: str(formData, "city"),
-      }),
-  };
+  const { extra } = agents(formData);
+  const address = addressFromForm(formData);
   const geo = await geocodeForSave(address);
-  const { data, error } = await supabase
-    .from("companies")
-    .insert({
-      agency_id: agencyId,
-      created_by: user.id,
-      name,
-      type: asType(str(formData, "type")),
-      sector_tags: sectorTags(formData),
-      website: nullable(formData, "website"),
-      phone: nullable(formData, "phone"),
-      notes: nullable(formData, "notes"),
-      company_number: nullable(formData, "company_number"),
-      vat_number: nullable(formData, "vat_number"),
-      lead_agent_id: lead,
-      ...address,
-      ...(geo ?? {}),
-    })
-    .select("id, name")
-    .single();
-  if (error || !data) return { error: error?.message ?? "Could not create company." };
+  const { id } = await createCompanyRow(agencyId, userId, writeInput(formData), geo ?? {
+    lat: null,
+    lng: null,
+  });
 
-  await syncCompanyAgents(supabase, data.id, agencyId, extra);
+  await syncCompanyAgents(agencyId, id, extra);
 
   revalidatePath("/companies");
-  return { created: { id: data.id, name: data.name }, message: `Added ${data.name}.` };
+  return { created: { id, name }, message: `Added ${name}.` };
 }
 
 export async function updateCompany(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
   const id = str(formData, "id");
   if (!id) return { error: "Missing company id." };
 
   const name = str(formData, "name");
   if (!name) return { error: "Company name is required." };
 
-  const agencyId = await currentAgencyId(supabase);
-  if (!agencyId) return { error: "No agency is linked to your account." };
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { agencyId } = caller;
 
-  const { lead, extra } = agents(formData);
-  const address = {
-    address_line: nullable(formData, "address_line"),
-    city: nullable(formData, "city"),
-    postcode: nullable(formData, "postcode"),
-    county:
-      nullable(formData, "county") ??
-      deriveCounty({
-        postcode: str(formData, "postcode"),
-        city: str(formData, "city"),
-      }),
-  };
-  const { data: existing } = await supabase
-    .from("companies")
-    .select("address_line, city, postcode, lat, lng, updated_at")
-    .eq("id", id)
-    .maybeSingle();
+  const { extra } = agents(formData);
+  const address = addressFromForm(formData);
+
+  const existing = await getCompanyForUpdate(agencyId, id);
   if (!existing) return { error: "This company no longer exists." };
 
   const geo = await geocodeForSave(address, existing);
-  const { data: updated, error } = await supabase
-    .from("companies")
-    .update({
-      name,
-      type: asType(str(formData, "type")),
-      sector_tags: sectorTags(formData),
-      website: nullable(formData, "website"),
-      phone: nullable(formData, "phone"),
-      notes: nullable(formData, "notes"),
-      company_number: nullable(formData, "company_number"),
-      vat_number: nullable(formData, "vat_number"),
-      lead_agent_id: lead,
-      ...address,
-      ...(geo ?? {}),
-    })
-    .eq("id", id)
-    .eq("agency_id", agencyId)
-    .eq("updated_at", existing.updated_at)
-    .select("id");
-  if (error) return { error: error.message };
-  if (!updated || updated.length === 0) {
+  const updated = await updateCompanyRow(agencyId, id, existing.updated_at, writeInput(formData), geo);
+  if (!updated) {
     return {
       error:
         "This company was changed by someone else while you were editing. Reload the page and try again.",
     };
   }
 
-  await syncCompanyAgents(supabase, id, agencyId, extra);
+  await syncCompanyAgents(agencyId, id, extra);
 
   revalidatePath("/companies");
   revalidatePath(`/companies/${id}`);
@@ -293,19 +209,14 @@ export async function updateCompany(
 }
 
 export async function deleteCompany(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const agencyId = user ? await currentAgencyId(supabase) : null;
   const id = String(formData.get("id") ?? "");
-  if (id && agencyId) {
-    await supabase
-      .from("companies")
-      .delete()
-      .eq("id", id)
-      .eq("agency_id", agencyId);
-    revalidatePath("/companies");
+  if (isDbConfigured && id) {
+    const session = await auth();
+    const agencyId = session?.user ? await currentAgencyId(session.user.id) : null;
+    if (agencyId) {
+      await deleteCompanyRow(agencyId, id);
+      revalidatePath("/companies");
+    }
   }
   redirect("/companies");
 }

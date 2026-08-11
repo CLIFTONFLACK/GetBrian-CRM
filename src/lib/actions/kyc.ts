@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
-import { currentAgencyId } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { getKycCompany, updateCompanyRegistration } from "@/lib/db/queries/kyc";
 import { runKycReport } from "@/lib/kyc/report";
 import type { FormState } from "@/lib/actions/types";
 
@@ -15,27 +16,20 @@ export async function runKyc(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
+  const session = await auth();
+  if (!session?.user) return { error: "You must be signed in." };
 
-  const agencyId = await currentAgencyId(supabase);
+  const agencyId = await currentAgencyId(session.user.id);
   if (!agencyId) return { error: "No agency is linked to your account." };
 
   const companyId = str(formData, "company_id");
   if (!companyId) return { error: "Pick a company first." };
 
-  const { data: company } = await supabase
-    .from("companies")
-    .select("id, name, company_number, vat_number")
-    .eq("id", companyId)
-    .maybeSingle();
+  const company = await getKycCompany(agencyId, companyId);
   if (!company) return { error: "Company not found." };
 
   try {
-    await runKycReport(company, supabase, agencyId, user.id);
+    await runKycReport(company, agencyId, session.user.id);
   } catch (err) {
     return { error: (err as Error).message };
   }
@@ -50,11 +44,11 @@ export async function linkCompanyNumber(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
+  const session = await auth();
+  if (!session?.user) return { error: "You must be signed in." };
+
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return { error: "No agency is linked to your account." };
 
   const id = str(formData, "company_id");
   if (!id) return { error: "Missing company id." };
@@ -62,11 +56,8 @@ export async function linkCompanyNumber(
   const company_number = nullable(formData, "company_number");
   const vat_number = nullable(formData, "vat_number");
 
-  const { error } = await supabase
-    .from("companies")
-    .update({ company_number, vat_number })
-    .eq("id", id);
-  if (error) return { error: error.message };
+  const ok = await updateCompanyRegistration(agencyId, id, company_number, vat_number);
+  if (!ok) return { error: "Company not found." };
 
   revalidatePath("/kyc");
   revalidatePath(`/companies/${id}`);

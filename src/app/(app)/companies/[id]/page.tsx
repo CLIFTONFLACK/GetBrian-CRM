@@ -1,7 +1,7 @@
 import * as React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Pencil, Plus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import {
   listingStatusBadge,
   requirementStatusBadge,
 } from "@/lib/badges";
+import { auth } from "@/lib/auth";
 import { deleteCompany } from "@/lib/actions/companies";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { ActivityTimeline } from "@/components/activity-timeline";
@@ -29,8 +30,15 @@ import { SendToTeam } from "@/components/send-to-team";
 import { DeepDiveView } from "@/components/deep-dive-view";
 import { getContactRoles, roleLabel } from "@/lib/contact-roles";
 import { getCompanyTypes, typeLabel } from "@/lib/company-types";
-import { getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { getCompanyAgentIds, getCompanyById } from "@/lib/db/queries/companies";
+import { listContactsByCompany } from "@/lib/db/queries/contacts";
+import { listRequirementsForCompany } from "@/lib/db/queries/requirements";
+import { listDisposalsForCompany } from "@/lib/db/queries/disposals";
+import { listActivitiesForEntity } from "@/lib/db/queries/activities";
+import { getLatestKycSummary } from "@/lib/db/queries/kyc";
+import { getLatestCompleteDeepDive } from "@/lib/db/queries/deep-dive";
 import { cn } from "@/lib/utils";
 
 export async function generateMetadata({
@@ -38,14 +46,14 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
+  if (!isDbConfigured) return { title: "Company" };
   const { id } = await params;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("companies")
-    .select("name")
-    .eq("id", id)
-    .maybeSingle();
-  return { title: data?.name || "Company" };
+  const session = await auth();
+  if (!session?.user) return { title: "Company" };
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return { title: "Company" };
+  const company = await getCompanyById(agencyId, id);
+  return { title: company?.name || "Company" };
 }
 
 export default async function CompanyDetailPage({
@@ -53,77 +61,41 @@ export default async function CompanyDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  if (!isDbConfigured) redirect("/login");
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const userId = session.user.id;
 
-  const { data: company } = await supabase
-    .from("companies")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const agencyId = await currentAgencyId(userId);
+  if (!agencyId) notFound();
+
+  const company = await getCompanyById(agencyId, id);
   if (!company) notFound();
 
-  const { data: contacts } = await supabase
-    .from("contacts")
-    .select("id, first_name, last_name, role, email")
-    .eq("company_id", id)
-    .order("first_name");
   const contactRoles = await getContactRoles();
+  const [contacts, agentRows, members, requirements, listings, activities] = await Promise.all([
+    listContactsByCompany(agencyId, id),
+    getCompanyAgentIds(agencyId, id),
+    getAgencyMembers(agencyId),
+    listRequirementsForCompany(agencyId, id),
+    listDisposalsForCompany(agencyId, id),
+    listActivitiesForEntity(agencyId, "company", id, 20),
+  ]);
 
-  const { data: requirements } = await supabase
-    .from("requirements")
-    .select("id, title, status")
-    .eq("company_id", id)
-    .order("title");
+  const [kycReport, deepDive] = await Promise.all([
+    getLatestKycSummary(agencyId, id),
+    getLatestCompleteDeepDive(agencyId, id),
+  ]);
 
-  // #1: listings linked to this company (as landlord / vendor / marketing co.).
-  const { data: listings } = await supabase
-    .from("disposals")
-    .select("id, title, city, status")
-    .eq("company_id", id)
-    .order("updated_at", { ascending: false });
-
-  const { data: activities } = await supabase
-    .from("activities")
-    .select("id, type, subject, body, occurred_at, created_by")
-    .eq("entity_type", "company")
-    .eq("entity_id", id)
-    .order("occurred_at", { ascending: false })
-    .limit(20);
-
-  const { data: agentRows } = await supabase
-    .from("company_agents")
-    .select("user_id")
-    .eq("company_id", id);
-  const members = await getAgencyMembers(supabase, company.agency_id);
   const nameOf = new Map(members.map((m) => [m.id, m.name]));
   const leadAgentName = company.lead_agent_id
     ? (nameOf.get(company.lead_agent_id) ?? "Unknown agent")
     : null;
-  const additionalAgents = (agentRows ?? []).map((r) => ({
-    id: r.user_id,
-    name: nameOf.get(r.user_id) ?? "Unknown agent",
+  const additionalAgents = agentRows.map((agentId) => ({
+    id: agentId,
+    name: nameOf.get(agentId) ?? "Unknown agent",
   }));
-
-  const { data: kycReport } = await supabase
-    .from("kyc_reports")
-    .select("id, risk_rating, flags, created_at")
-    .eq("company_id", id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const { data: deepDive } = await supabase
-    .from("deep_dive_reports")
-    .select("markdown, created_at, model")
-    .eq("company_id", id)
-    .eq("status", "complete")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
   const companyTypes = await getCompanyTypes();
   const t = companyTypeBadge(company.type, typeLabel(companyTypes, company.type));
@@ -147,7 +119,7 @@ export default async function CompanyDetailPage({
             link={`/companies/${company.id}`}
             subject={company.name}
             agents={members}
-            meId={user?.id}
+            meId={userId}
           />
           <Link
             href={`/companies/${company.id}/edit`}
@@ -228,11 +200,11 @@ export default async function CompanyDetailPage({
             </Link>
           </CardHeader>
           <CardContent>
-            {(contacts ?? []).length === 0 ? (
+            {contacts.length === 0 ? (
               <p className="text-sm text-muted-foreground">No contacts yet.</p>
             ) : (
               <ul className="space-y-2.5">
-                {contacts!.map((ct) => {
+                {contacts.map((ct) => {
                   const r = contactRoleBadge(ct.role, roleLabel(contactRoles, ct.role));
                   return (
                     <li
@@ -288,7 +260,7 @@ export default async function CompanyDetailPage({
               </div>
               {(kycReport.flags ?? []).length > 0 ? (
                 <ul className="space-y-1 text-muted-foreground">
-                  {kycReport.flags.slice(0, 4).map((f, i) => (
+                  {kycReport.flags.slice(0, 4).map((f: string, i: number) => (
                     <li key={i}>• {f}</li>
                   ))}
                 </ul>
@@ -339,13 +311,13 @@ export default async function CompanyDetailPage({
           </Link>
         </CardHeader>
         <CardContent>
-          {(requirements ?? []).length === 0 ? (
+          {requirements.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No requirements yet.
             </p>
           ) : (
             <ul className="divide-y">
-              {requirements!.map((rq) => {
+              {requirements.map((rq) => {
                 const rs = requirementStatusBadge(rq.status);
                 return (
                   <li
@@ -379,11 +351,11 @@ export default async function CompanyDetailPage({
           </Link>
         </CardHeader>
         <CardContent>
-          {(listings ?? []).length === 0 ? (
+          {listings.length === 0 ? (
             <p className="text-sm text-muted-foreground">No listings linked yet.</p>
           ) : (
             <ul className="divide-y">
-              {listings!.map((l) => {
+              {listings.map((l) => {
                 const ls = listingStatusBadge(l.status);
                 return (
                   <li
@@ -415,7 +387,7 @@ export default async function CompanyDetailPage({
         <CardContent className="space-y-5">
           <LogActivityForm entityType="company" entityId={company.id} />
           <ActivityTimeline
-            activities={activities ?? []}
+            activities={activities}
             actorNames={Object.fromEntries(nameOf)}
           />
         </CardContent>

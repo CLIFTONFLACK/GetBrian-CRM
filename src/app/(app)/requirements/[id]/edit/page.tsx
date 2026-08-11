@@ -1,36 +1,42 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { RequirementForm } from "@/components/requirement-form";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { updateRequirement } from "@/lib/actions/requirements";
 import { getCompanyTypes } from "@/lib/company-types";
-import { getAgencyMembers } from "@/lib/supabase/agency";
-import { getContactOptions } from "@/lib/supabase/pickers";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { listCompanyOptions } from "@/lib/db/queries/companies";
+import { listContactOptions } from "@/lib/db/queries/contacts";
+import {
+  getRequirementAgentIds,
+  getRequirementById,
+} from "@/lib/db/queries/requirements";
 
 export default async function EditRequirementPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  if (!isDbConfigured) redirect("/login");
   const { id } = await params;
-  const supabase = await createClient();
-  const [{ data: requirement }, { data: companies }] = await Promise.all([
-    supabase.from("requirements").select("*").eq("id", id).maybeSingle(),
-    supabase.from("companies").select("id, name").order("name"),
-  ]);
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) notFound();
+
+  const requirement = await getRequirementById(agencyId, id);
   if (!requirement) notFound();
 
-  const contacts = await getContactOptions(supabase, requirement.agency_id);
-  const companyTypes = await getCompanyTypes();
-
-  const { data: agentRows } = await supabase
-    .from("requirement_agents")
-    .select("user_id")
-    .eq("requirement_id", id);
-  const agents = await getAgencyMembers(supabase, requirement.agency_id);
-  const additionalAgentIds = (agentRows ?? []).map((r) => r.user_id);
+  const [companies, contacts, companyTypes, agentIds, agents] = await Promise.all([
+    listCompanyOptions(agencyId),
+    listContactOptions(agencyId),
+    getCompanyTypes(),
+    getRequirementAgentIds(agencyId, id),
+    getAgencyMembers(agencyId),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -40,11 +46,11 @@ export default async function EditRequirementPage({
           <RequirementForm
             action={updateRequirement}
             requirement={requirement}
-            companies={companies ?? []}
+            companies={companies}
             contacts={contacts}
             companyTypes={companyTypes}
             agents={agents}
-            additionalAgentIds={additionalAgentIds}
+            additionalAgentIds={agentIds}
           />
         </CardContent>
       </Card>

@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 
-import { currentAgencyId } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { createActivity } from "@/lib/db/queries/activities";
 import { Constants, type Database } from "@/lib/database.types";
 import type { FormState } from "@/lib/actions/types";
 
@@ -26,13 +28,10 @@ export async function logActivity(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
-
-  const agencyId = await currentAgencyId(supabase);
+  if (!isDbConfigured) return { error: "The database isn't configured yet." };
+  const session = await auth();
+  if (!session?.user) return { error: "You must be signed in." };
+  const agencyId = await currentAgencyId(session.user.id);
   if (!agencyId) return { error: "No agency is linked to your account." };
 
   const subject = str(formData, "subject");
@@ -50,23 +49,16 @@ export async function logActivity(
       ? new Date(`${occurredOn}T12:00:00`).toISOString()
       : null;
 
-  const { error } = await supabase.from("activities").insert({
-    agency_id: agencyId,
-    created_by: user.id,
-    type: oneOf<ActivityType>(
-      str(formData, "type"),
-      Constants.public.Enums.activity_type,
-      "note",
-    ),
+  await createActivity(agencyId, session.user.id, {
+    type: oneOf<ActivityType>(str(formData, "type"), Constants.public.Enums.activity_type, "note"),
     subject: subject || null,
     body: body || null,
-    entity_type: entityType
+    entityType: entityType
       ? oneOf<EntityType>(entityType, Constants.public.Enums.entity_type, "company")
       : null,
-    entity_id: entityId,
-    ...(occurredAt ? { occurred_at: occurredAt } : {}),
+    entityId,
+    occurredAt,
   });
-  if (error) return { error: error.message };
 
   if (entityType && entityId && PATH[entityType]) {
     revalidatePath(`/${PATH[entityType]}/${entityId}`);

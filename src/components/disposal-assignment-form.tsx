@@ -7,7 +7,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { updateDisposalAssignment } from "@/lib/actions/disposals";
 import type { FormState } from "@/lib/actions/types";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 
 export function DisposalAssignmentForm({
   disposalId,

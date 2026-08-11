@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,8 +7,14 @@ import { KycReportView } from "@/components/kyc/kyc-report-view";
 import { KycRunner } from "@/components/kyc/kyc-runner";
 import { kycRiskBadge } from "@/lib/badges";
 import { isKycConfigured } from "@/lib/kyc/config";
-import type { Tables } from "@/lib/database.types";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import {
+  getLatestKycReport,
+  listCompaniesForKyc,
+  listRecentKycReports,
+} from "@/lib/db/queries/kyc";
 
 function fmtDate(d: string): string {
   const parsed = new Date(d);
@@ -25,33 +32,22 @@ export default async function KycPage({
 }: {
   searchParams: Promise<{ company?: string }>;
 }) {
+  if (!isDbConfigured) redirect("/login");
   const { company: selectedId } = await searchParams;
-  const supabase = await createClient();
 
-  const { data: companies } = await supabase
-    .from("companies")
-    .select("id, name, company_number, vat_number")
-    .order("name");
-  const list = companies ?? [];
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) redirect("/login");
+
+  const [list, recent] = await Promise.all([
+    listCompaniesForKyc(agencyId),
+    listRecentKycReports(agencyId),
+  ]);
   const nameById = new Map(list.map((c) => [c.id, c.name]));
 
-  const { data: recent } = await supabase
-    .from("kyc_reports")
-    .select("id, company_id, company_number, status, risk_rating, created_at")
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  let latest: Tables<"kyc_reports"> | null = null;
-  if (selectedId) {
-    const { data } = await supabase
-      .from("kyc_reports")
-      .select("*")
-      .eq("company_id", selectedId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    latest = data ?? null;
-  }
+  const latest = selectedId ? await getLatestKycReport(agencyId, selectedId) : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -112,11 +108,11 @@ export default async function KycPage({
           <CardTitle>Recent reports</CardTitle>
         </CardHeader>
         <CardContent>
-          {(recent ?? []).length === 0 ? (
+          {recent.length === 0 ? (
             <p className="text-sm text-muted-foreground">No KYC reports yet.</p>
           ) : (
             <ul className="divide-y">
-              {recent!.map((r) => {
+              {recent.map((r) => {
                 const risk = kycRiskBadge(r.risk_rating);
                 return (
                   <li

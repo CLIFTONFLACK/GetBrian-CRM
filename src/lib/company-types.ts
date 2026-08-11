@@ -1,6 +1,6 @@
 import { cache } from "react";
 
-import { createClient } from "@/lib/supabase/server";
+import { listCompanyTypes } from "@/lib/db/queries/lookups";
 
 export type CompanyType = {
   id: string;
@@ -15,12 +15,7 @@ export type CompanyType = {
  * Cached per request so a page can call it from several spots without re-querying.
  */
 export const getCompanyTypes = cache(async (): Promise<CompanyType[]> => {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("company_types")
-    .select("id, slug, label, sort_order, is_system")
-    .order("sort_order", { ascending: true });
-  return data ?? [];
+  return listCompanyTypes();
 });
 
 /** Title-case a bare slug as a last-resort label for a type no longer in the list. */

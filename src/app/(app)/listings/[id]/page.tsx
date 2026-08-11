@@ -1,7 +1,7 @@
 import * as React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ExternalLink, FileDown, Pencil } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -32,8 +32,22 @@ import { ListingShareActions } from "@/components/listing-share-actions";
 import { LocationMap } from "@/components/location-map";
 import { SendToTeam } from "@/components/send-to-team";
 import { getCompanyTypes, typeLabel } from "@/lib/company-types";
-import { getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import {
+  getDisposalAgentIds,
+  getDisposalById,
+  getDisposalTitle,
+  getLinkedCompany,
+  getLinkedContact,
+  getUserProfile,
+  listDisposalAreas,
+  listDisposalDocuments,
+} from "@/lib/db/queries/disposals";
+import { listActiveRequirementsForMatching } from "@/lib/db/queries/requirements";
+import { getDealsForListing } from "@/lib/db/queries/deals";
+import { signDisposalDocUrl } from "@/lib/disposal-docs";
 import { cn } from "@/lib/utils";
 
 const money = (v: number | null) =>
@@ -61,14 +75,14 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
+  if (!isDbConfigured) return { title: "Listing" };
   const { id } = await params;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("disposals")
-    .select("title")
-    .eq("id", id)
-    .maybeSingle();
-  return { title: data?.title ?? "Listing" };
+  const session = await auth();
+  if (!session?.user) return { title: "Listing" };
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return { title: "Listing" };
+  const title = await getDisposalTitle(agencyId, id);
+  return { title: title ?? "Listing" };
 }
 
 export default async function ListingDetailPage({
@@ -78,6 +92,7 @@ export default async function ListingDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ flex?: string }>;
 }) {
+  if (!isDbConfigured) redirect("/login");
   const { id } = await params;
   const { flex } = await searchParams;
   const flexParsed = Number(flex ?? DEFAULT_LOCATION_FLEX);
@@ -85,15 +100,14 @@ export default async function ListingDetailPage({
     100,
     Math.max(0, Number.isFinite(flexParsed) ? flexParsed : DEFAULT_LOCATION_FLEX),
   );
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: d } = await supabase
-    .from("disposals")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const userId = session.user.id;
+  const agencyId = await currentAgencyId(userId);
+  if (!agencyId) notFound();
+
+  const d = await getDisposalById(agencyId, id);
   if (!d) notFound();
 
   const lt = listingTypeBadge(d.listing_type);
@@ -106,99 +120,54 @@ export default async function ListingDetailPage({
   // None of these depend on each other's results (only on `d`, already
   // resolved above) — fetch them all concurrently instead of serially.
   const [
-    { data: reqs },
-    { data: dealRows },
-    { data: agentRows },
+    reqs,
+    deals,
+    agentIds,
     agents,
-    { data: docRows },
-    { data: areaRows },
-    { data: leadAgent },
+    docRows,
+    areas,
+    leadAgent,
     companyTypes,
   ] = await Promise.all([
     // Active briefs only — a satisfied/withdrawn requirement is not an
     // opportunity, and offering a "Create deal" button against one is wrong.
-    supabase
-      .from("requirements")
-      .select(
-        "id, title, target_towns, target_regions, target_counties, target_postcode_districts, target_neighbourhoods, target_london_zones, min_sqft, max_sqft, min_covers, max_covers, use_classes, tenure_prefs, max_rent, max_premium, max_guide_price",
-      )
-      .eq("status", "active"),
+    listActiveRequirementsForMatching(agencyId),
     // Deals already created from this listing ("under offer to X").
-    supabase
-      .from("deals")
-      .select("id, title, stage, value")
-      .eq("listing_id", id)
-      .order("updated_at", { ascending: false }),
-    supabase.from("disposal_agents").select("user_id").eq("disposal_id", id),
-    getAgencyMembers(supabase, d.agency_id),
-    supabase
-      .from("disposal_documents")
-      .select("id, name, doc_type, size_bytes, file_path")
-      .eq("disposal_id", id)
-      .order("created_at"),
-    supabase
-      .from("disposal_areas")
-      .select("id, name, size_sqft, size_sqm, rent_pa, availability")
-      .eq("disposal_id", id)
-      .order("sort_order")
-      .order("created_at"),
-    d.lead_agent_id
-      ? supabase
-          .from("profiles")
-          .select("full_name, email, phone, avatar_url, linkedin_url, x_url")
-          .eq("id", d.lead_agent_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+    getDealsForListing(agencyId, id),
+    getDisposalAgentIds(agencyId, id),
+    getAgencyMembers(agencyId),
+    listDisposalDocuments(agencyId, id),
+    listDisposalAreas(agencyId, id),
+    d.lead_agent_id ? getUserProfile(d.lead_agent_id) : Promise.resolve(null),
     getCompanyTypes(),
   ]);
 
-  const matches = (reqs ?? [])
+  const matches = reqs
     .map((rq) => ({ rq, ...scoreMatch(rq, d, { locationFlex }) }))
     .filter((m) => m.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 10);
 
-  const deals = dealRows ?? [];
-  const additionalAgentIds = (agentRows ?? []).map((r) => r.user_id);
+  const additionalAgentIds = agentIds;
 
-  const docRowsList = docRows ?? [];
-  const { data: signedList } = docRowsList.length
-    ? await supabase.storage
-        .from("disposal-docs")
-        .createSignedUrls(
-          docRowsList.map((r) => r.file_path),
-          3600,
-        )
-    : { data: [] as { path: string | null; signedUrl: string | null }[] };
-  const signedByPath = new Map(
-    (signedList ?? []).map((s) => [s.path, s.signedUrl]),
+  // A signed, 1hr bearer URL per document (see disposal-docs.ts) — mirrors
+  // the old `createSignedUrls(paths, 3600)` batch call exactly, just one
+  // agency-scoped DAO lookup per doc instead of one Storage API call for
+  // the whole batch.
+  const docs: DisposalDoc[] = await Promise.all(
+    docRows.map(async (r) => ({
+      ...r,
+      url: await signDisposalDocUrl(agencyId, r.id),
+    })),
   );
-  const docs: DisposalDoc[] = docRowsList.map((r) => ({
-    ...r,
-    url: signedByPath.get(r.file_path) ?? null,
-  }));
-
-  const areas = areaRows ?? [];
 
   // External send history — who this listing has been emailed to.
-  const sendHistory = await getSendHistory(supabase, { listingId: id });
+  const sendHistory = await getSendHistory(agencyId, { listingId: id });
 
   // #4: linked company + point-of-contact for this listing.
-  const [{ data: linkedCompany }, { data: linkedContact }] = await Promise.all([
-    d.company_id
-      ? supabase
-          .from("companies")
-          .select("id, name, type")
-          .eq("id", d.company_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    d.contact_id
-      ? supabase
-          .from("contacts")
-          .select("id, first_name, last_name, role, email, phone")
-          .eq("id", d.contact_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+  const [linkedCompany, linkedContact] = await Promise.all([
+    d.company_id ? getLinkedCompany(agencyId, d.company_id) : Promise.resolve(null),
+    d.contact_id ? getLinkedContact(agencyId, d.contact_id) : Promise.resolve(null),
   ]);
 
   return (
@@ -243,7 +212,7 @@ export default async function ListingDetailPage({
             link={`/listings/${d.id}`}
             subject={d.title ?? "this listing"}
             agents={agents}
-            meId={user?.id}
+            meId={userId}
           />
           <Link
             href={`/listings/${d.id}/edit`}

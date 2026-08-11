@@ -3,27 +3,34 @@
 import { Resend } from "resend";
 
 import { renderParticularsPdf } from "@/lib/pdf/build-particulars";
-import { currentAgencyId } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import {
+  createExternalSends,
+  getContactEmailOptions,
+  getRequirementBriefsForSend,
+} from "@/lib/db/queries/deals";
+import { getContactById } from "@/lib/db/queries/contacts";
+import { getDisposalsByIds } from "@/lib/db/queries/disposals";
 import type { FormState } from "@/lib/actions/types";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 
 /**
- * Email addresses for the agency's contacts (RLS-scoped), so the Send Deal
- * wizard can hide contacts it could never email — the "that contact has no
- * email address" failure now surfaces before the send, not after.
+ * Email addresses for the agency's contacts, so the Send Deal wizard can hide
+ * contacts it could never email — the "that contact has no email address"
+ * failure now surfaces before the send, not after. Agency-scoped explicitly
+ * (there's no RLS backstop on this schema — see AGENTS.md; the original
+ * Supabase version relied on RLS here and wasn't even agency-filtered).
  */
-export async function listContactEmails(): Promise<
-  { id: string; email: string | null }[]
-> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
-  const { data } = await supabase.from("contacts").select("id, email").limit(5000);
-  return data ?? [];
+export async function listContactEmails(): Promise<{ id: string; email: string | null }[]> {
+  if (!isDbConfigured) return [];
+  const session = await auth();
+  if (!session?.user) return [];
+  const agencyId = await currentAgencyId(session.user.id);
+  if (!agencyId) return [];
+  return getContactEmailOptions(agencyId);
 }
 
 /**
@@ -43,21 +50,18 @@ export async function sendDealExternal(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
+  if (!isDbConfigured) return { error: "The database isn't configured yet." };
+  const session = await auth();
+  if (!session?.user) return { error: "You must be signed in." };
 
-  const agencyId = await currentAgencyId(supabase);
+  const agencyId = await currentAgencyId(session.user.id);
   if (!agencyId) return { error: "No agency is linked to your account." };
 
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
   if (!apiKey || !from) {
     return {
-      error:
-        "Email sending isn't configured yet — set RESEND_API_KEY and EMAIL_FROM.",
+      error: "Email sending isn't configured yet — set RESEND_API_KEY and EMAIL_FROM.",
     };
   }
 
@@ -84,21 +88,16 @@ export async function sendDealExternal(
   if (!subject) return { error: "A subject is required." };
   const body = str(formData, "body");
 
-  const { data: contact } = await supabase
-    .from("contacts")
-    .select("first_name, last_name, email")
-    .eq("id", contactId)
-    .maybeSingle();
+  const contact = await getContactById(agencyId, contactId);
   if (!contact) return { error: "Contact not found." };
-  if (!contact.email)
-    return { error: "That contact has no email address — add one first." };
+  if (!contact.email) return { error: "That contact has no email address — add one first." };
 
   // Attach a particulars PDF per listing, up to MAX_ATTACHMENTS.
   const attachments: { filename: string; content: Buffer }[] = [];
   const pdfKindOf = new Map<string, "branded" | "unbranded">();
   const notAttached: string[] = [];
   for (const id of listingIds) {
-    const pdf = await renderParticularsPdf(id, supabase);
+    const pdf = await renderParticularsPdf(agencyId, id);
     if (!pdf) return { error: "Listing not found." };
     pdfKindOf.set(id, pdf.isIntel ? "unbranded" : "branded");
     if (attachments.length < MAX_ATTACHMENTS) {
@@ -111,11 +110,8 @@ export async function sendDealExternal(
   // Requirement briefs (bulk mode) — summarised inline in the email body.
   let briefLines: string[] = [];
   if (requirementIds.length > 0) {
-    const { data: reqRows } = await supabase
-      .from("requirements")
-      .select("id, title, target_towns, min_sqft, max_sqft, max_rent")
-      .in("id", requirementIds);
-    briefLines = (reqRows ?? []).map((r) => {
+    const reqRows = await getRequirementBriefsForSend(agencyId, requirementIds);
+    briefLines = reqRows.map((r) => {
       const bits = [
         r.target_towns.length ? r.target_towns.join(", ") : null,
         r.min_sqft != null || r.max_sqft != null
@@ -131,11 +127,8 @@ export async function sendDealExternal(
   // even when the attachments are stripped by the recipient's mail client.
   let listingLines: string[] = [];
   if (listingIds.length > 0) {
-    const { data: listingRows } = await supabase
-      .from("disposals")
-      .select("id, title, city, size_sqft, rent_pa")
-      .in("id", listingIds);
-    listingLines = (listingRows ?? []).map((l) => {
+    const listingRows = await getDisposalsByIds(agencyId, listingIds);
+    listingLines = listingRows.map((l) => {
       const bits = [
         l.city,
         l.size_sqft != null ? `${l.size_sqft.toLocaleString("en-GB")} sq ft` : null,
@@ -167,12 +160,10 @@ export async function sendDealExternal(
     .filter((l): l is string => l != null)
     .join("\n");
 
-  // Replies should land with the sending agent, not the shared from-address.
-  const { data: me } = await supabase
-    .from("profiles")
-    .select("email")
-    .eq("id", user.id)
-    .maybeSingle();
+  // Replies should land with the sending agent, not the shared from-address —
+  // the session already carries their email (no separate profiles lookup
+  // needed now that profiles merged into users, see db/migrations/0001_init.sql).
+  const replyTo = session.user.email ?? undefined;
 
   // A network/SDK fault throws rather than returning `error` — catch it so the
   // agent sees why the send failed instead of a crashed action.
@@ -182,7 +173,7 @@ export async function sendDealExternal(
     const { data, error: sendError } = await resend.emails.send({
       from,
       to: contact.email,
-      replyTo: me?.email ?? undefined,
+      replyTo,
       subject,
       text,
       attachments: attachments.length > 0 ? attachments : undefined,
@@ -190,37 +181,34 @@ export async function sendDealExternal(
     if (sendError) return { error: `Email failed: ${sendError.message}` };
     sent = data;
   } catch (e) {
-    return {
-      error: `Email failed: ${e instanceof Error ? e.message : "unknown error"}`,
-    };
+    return { error: `Email failed: ${e instanceof Error ? e.message : "unknown error"}` };
   }
 
   // Log the send — one row per requirement × listing, so the "already sent"
   // chips on both records stay accurate for every pair in the batch.
   const baseRow = {
-    agency_id: agencyId,
-    deal_id: dealId,
-    company_id: companyId,
-    contact_id: contactId,
-    recipient_email: contact.email,
+    dealId,
+    companyId,
+    contactId,
+    recipientEmail: contact.email,
     subject,
     body: body || null,
-    provider_id: sent?.id ?? null,
-    sent_by: user.id,
+    providerId: sent?.id ?? null,
   };
-  const rows = (requirementIds.length > 0 ? requirementIds : [null]).flatMap(
-    (requirement_id) =>
-      (listingIds.length > 0 ? listingIds : [null]).map((listing_id) => ({
-        ...baseRow,
-        requirement_id,
-        listing_id,
-        pdf_kind: listing_id ? (pdfKindOf.get(listing_id) ?? null) : null,
-      })),
+  const rows = (requirementIds.length > 0 ? requirementIds : [null]).flatMap((requirementId) =>
+    (listingIds.length > 0 ? listingIds : [null]).map((listingId) => ({
+      ...baseRow,
+      requirementId,
+      listingId,
+      pdfKind: listingId ? (pdfKindOf.get(listingId) ?? null) : null,
+    })),
   );
-  const { error: logError } = await supabase.from("external_sends").insert(rows);
-  if (logError) {
+  try {
+    await createExternalSends(agencyId, session.user.id, rows);
+  } catch (e) {
     // The email is already out — surface success but note the logging failure.
-    return { message: `Sent to ${contact.email} (logging failed: ${logError.message})` };
+    const msg = e instanceof Error ? e.message : "unknown error";
+    return { message: `Sent to ${contact.email} (logging failed: ${msg})` };
   }
 
   const capped = notAttached.length

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Building2, CalendarPlus, Layers, Plus, Target } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
@@ -14,8 +15,15 @@ import { propertyUseBadge } from "@/lib/badges";
 import { getCompanyTypes } from "@/lib/company-types";
 import { HOME_COUNTIES } from "@/lib/locations";
 import { filterHref, resolveSort } from "@/lib/sort";
-import { currentAgencyId, getAgencyMembers } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { listCompanyOptions } from "@/lib/db/queries/companies";
+import { listContactOptions } from "@/lib/db/queries/contacts";
+import {
+  getRequirementsByIds,
+  listRequirementFacetRows,
+} from "@/lib/db/queries/requirements";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Requirements" };
@@ -37,7 +45,11 @@ export default async function RequirementsPage({
   }>;
 }) {
   const { q, sort, dir, status, loc, page: pageParam } = await searchParams;
-  const supabase = await createClient();
+
+  if (!isDbConfigured) redirect("/login");
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const agencyId = await currentAgencyId(session.user.id);
 
   const { column, ascending } = resolveSort(
     sort,
@@ -49,17 +61,15 @@ export default async function RequirementsPage({
   // Aggregate pass: only the columns the status tiles, the stats bar and the
   // target-location facet need (plus the id, which the paginated row fetch
   // keys off). Ordered here so the page slice below comes from the sorted set.
-  let query = supabase
-    .from("requirements")
-    .select(
-      "id, status, target_towns, target_regions, target_counties, target_postcode_districts, target_neighbourhoods, target_london_zones, created_at, use_classes",
-    )
-    .order(column, { ascending });
-  if (q) query = query.ilike("title", `%${q}%`);
-  const { data } = await query;
+  const rows = agencyId
+    ? await listRequirementFacetRows(agencyId, {
+        q,
+        column: column as "title" | "max_rent" | "status",
+        ascending,
+      })
+    : [];
   // `rows` is the tile base (q filtered). The status facet is applied to the
   // table in memory so the tile counts always show the full distribution.
-  const rows = data ?? [];
   const targetsOf = (r: (typeof rows)[number]) => [
     ...(r.target_towns ?? []),
     ...(r.target_regions ?? []),
@@ -140,36 +150,21 @@ export default async function RequirementsPage({
   const pageState = resolvePage(pageParam, total, PAGE_SIZE);
   const pageIds = listRows.slice(pageState.from, pageState.to).map((r) => r.id);
 
-  const { data: detail } = pageIds.length
-    ? await supabase
-        .from("requirements")
-        .select("id, title, status, target_towns, max_rent, company_id")
-        .in("id", pageIds)
-    : { data: [] };
-  // `.in()` does not preserve the requested order — re-apply the sorted slice.
-  const byId = new Map((detail ?? []).map((r) => [r.id, r]));
+  const detail = agencyId && pageIds.length ? await getRequirementsByIds(agencyId, pageIds) : [];
+  // `= ANY()` does not preserve the requested order — re-apply the sorted slice.
+  const byId = new Map(detail.map((r) => [r.id, r]));
   const pageRows = pageIds
     .map((id) => byId.get(id))
     .filter((r): r is NonNullable<typeof r> => r != null);
 
   // Companies double as the operator-name lookup and the Send Deal company picker.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const agencyId = await currentAgencyId(supabase);
-  const [members, { data: companyRows }, { data: contactRows }, companyTypes] =
-    await Promise.all([
-      agencyId ? getAgencyMembers(supabase, agencyId) : Promise.resolve([]),
-      supabase.from("companies").select("id, name").order("name"),
-      supabase.from("contacts").select("id, first_name, last_name").order("first_name"),
-      getCompanyTypes(),
-    ]);
-  const companies = companyRows ?? [];
+  const [members, companies, contacts, companyTypes] = await Promise.all([
+    agencyId ? getAgencyMembers(agencyId) : Promise.resolve([]),
+    agencyId ? listCompanyOptions(agencyId) : Promise.resolve([]),
+    agencyId ? listContactOptions(agencyId) : Promise.resolve([]),
+    getCompanyTypes(),
+  ]);
   const names = new Map(companies.map((c) => [c.id, c.name]));
-  const contacts = (contactRows ?? []).map((c) => ({
-    id: c.id,
-    name: [c.first_name, c.last_name].filter(Boolean).join(" ") || "Unnamed contact",
-  }));
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -253,7 +248,7 @@ export default async function RequirementsPage({
           }))}
           params={params}
           agents={members}
-          meId={user?.id}
+          meId={session.user.id}
           companies={companies}
           contacts={contacts}
           companyTypes={companyTypes}

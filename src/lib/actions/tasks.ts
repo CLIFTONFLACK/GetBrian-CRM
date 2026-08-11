@@ -2,8 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 
-import { currentAgencyId } from "@/lib/supabase/agency";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { createNotifications } from "@/lib/db/queries/messages";
+import {
+  createTask as createTaskRow,
+  deleteTask as deleteTaskRow,
+  setTaskStatus,
+} from "@/lib/db/queries/tasks";
 import type { FormState } from "@/lib/actions/types";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
@@ -13,40 +20,29 @@ export async function createTask(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You must be signed in." };
+  if (!isDbConfigured) return { error: "The database isn't configured yet." };
+  const session = await auth();
+  if (!session?.user) return { error: "You must be signed in." };
 
-  const agencyId = await currentAgencyId(supabase);
+  const agencyId = await currentAgencyId(session.user.id);
   if (!agencyId) return { error: "No agency is linked to your account." };
 
   const title = str(formData, "title");
   if (!title) return { error: "A task title is required." };
   const details = str(formData, "details") || null;
-  const dueAt = str(formData, "due_at");
+  const dueAtRaw = str(formData, "due_at");
+  const dueAt = dueAtRaw ? new Date(dueAtRaw).toISOString() : null;
   const assigneeId = str(formData, "assignee_id") || null;
 
-  const { error } = await supabase.from("tasks").insert({
-    agency_id: agencyId,
-    title,
-    details,
-    due_at: dueAt ? new Date(dueAt).toISOString() : null,
-    assignee_id: assigneeId,
-    created_by: user.id,
-  });
-  if (error) return { error: error.message };
+  await createTaskRow(agencyId, session.user.id, { title, details, dueAt, assigneeId });
 
-  // Notify the assignee (if someone else was given the task).
-  if (assigneeId && assigneeId !== user.id) {
-    await supabase.from("notifications").insert({
-      agency_id: agencyId,
-      user_id: assigneeId,
+  // Notify the assignee (if someone else was given the task) — reuses
+  // messages.ts's bulk-insert notifications helper rather than duplicating
+  // the insert here.
+  if (assigneeId && assigneeId !== session.user.id) {
+    await createNotifications(agencyId, [assigneeId], {
       title: `New task assigned: “${title}”`,
-      body: dueAt
-        ? `Due ${new Date(dueAt).toLocaleString("en-GB")}`
-        : (details ?? null),
+      body: dueAt ? `Due ${new Date(dueAt).toLocaleString("en-GB")}` : details,
       link: "/tasks",
     });
   }
@@ -60,26 +56,28 @@ export async function createTask(
  * client submits the state it wants, never a negation of a stale current value.
  */
 export async function toggleTaskStatus(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const agencyId = await currentAgencyId(supabase);
+  const session = await auth();
+  if (!session?.user) return;
+  const agencyId = await currentAgencyId(session.user.id);
+
   const id = str(formData, "id");
   const intent = str(formData, "intent");
   if (!id || !agencyId) return;
   if (intent !== "mark_done" && intent !== "mark_open") return;
-  await supabase
-    .from("tasks")
-    .update({ status: intent === "mark_done" ? "done" : "open" })
-    .eq("id", id)
-    .eq("agency_id", agencyId);
+
+  await setTaskStatus(agencyId, id, intent === "mark_done" ? "done" : "open");
   revalidatePath("/tasks");
 }
 
 /** Delete a task. */
 export async function deleteTask(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const agencyId = await currentAgencyId(supabase);
+  const session = await auth();
+  if (!session?.user) return;
+  const agencyId = await currentAgencyId(session.user.id);
+
   const id = str(formData, "id");
   if (!id || !agencyId) return;
-  await supabase.from("tasks").delete().eq("id", id).eq("agency_id", agencyId);
+
+  await deleteTaskRow(agencyId, id);
   revalidatePath("/tasks");
 }

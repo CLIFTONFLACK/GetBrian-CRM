@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import {
   Card,
@@ -8,14 +9,21 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ConcentrationMap } from "@/components/concentration-map-lazy";
-import { createClient } from "@/lib/supabase/server";
-import { getMapLayers } from "@/lib/supabase/map-points";
+import { auth } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/db/client";
+import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { getMapLayers } from "@/lib/db/queries/map-points";
 
 export const metadata: Metadata = { title: "Map" };
 
 export default async function MapPage() {
-  const supabase = await createClient();
-  const layers = await getMapLayers(supabase);
+  if (!isDbConfigured) redirect("/login");
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  const agencyId = await currentAgencyId(session.user.id);
+  const layers = agencyId
+    ? await getMapLayers(agencyId)
+    : { listings: [], companies: [], contacts: [] };
 
   return (
     <div className="mx-auto max-w-6xl">

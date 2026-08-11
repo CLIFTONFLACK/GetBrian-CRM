@@ -9,8 +9,8 @@ import { LocationSelect } from "@/components/location-select";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { UseClassCheckboxes } from "@/components/use-class-checkboxes";
-import type { Tables } from "@/lib/database.types";
-import type { AgentOption } from "@/lib/supabase/agency";
+import type { Company } from "@/lib/db/queries/companies";
+import type { AgentOption } from "@/lib/db/queries/agencies";
 import { partitionSectorTags } from "@/lib/use-classes";
 
 /**
@@ -31,7 +31,7 @@ export function CompanyFormFields({
   contactPicker,
   idPrefix = "",
 }: {
-  company?: Tables<"companies">;
+  company?: Company;
   agents: AgentOption[];
   additionalAgentIds?: string[];
   types?: { slug: string; label: string }[];

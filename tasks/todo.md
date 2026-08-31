@@ -738,3 +738,93 @@ Bugs the verification caught and that are now fixed:
   once `.next` is cleared.
 - MKR has no per-property id, so `source_ref` is a slug of the headline: an edited
   headline reads as a new listing and Withdraws the old one.
+
+---
+
+## 2026-08-31 - Target Locations backfilled + deterministic match ordering
+
+Follow-on from the same day's import work, after the client uploaded the four
+converted files successfully (63 companies / 86 contacts / 82 requirements).
+
+### Maintainer-script loader
+
+`scripts/_alias-hooks.mjs` could only rewrite `@/...` to a `.ts` path, so any
+script reaching `@/lib/locations` failed: the directory has an `index.ts`, and
+that index imports two JSON datasets bare, which Node refuses without
+`with { type: "json" }`. Closed all three gaps (alias, directory index, JSON
+attributes). This unblocked everything below.
+
+### MatchMaker verified against the real book
+
+`scripts/smoke-match.mjs` - 82 active requirements x 128 listings = 10,496
+pairs, 0 errors, every requirement finds a 50%+ listing.
+
+### Target Locations: 51/82 -> 82/82
+
+The first conversion demanded an exact whole-token match, so 31 briefs kept
+their location as free text in `notes` and were scored with the location
+dimension inapplicable - MatchMaker never asked where the property was.
+
+`scripts/lib/parse-area.mjs`, driven by `scripts/fix-requirement-locations.mjs`:
+
+1. **Listing-book resolution (34 rows).** "Within 3 miles of <X>" where X is one
+   of CDG's own listings resolves to that listing's real postcode and town.
+   Runs FIRST and consumes the phrase - "Within 3 miles of Victoria Centre"
+   word-matches London's Victoria, but that listing is in Nottingham NG1.
+2. **Whole-word scanning** via the app's own `containsWord`.
+3. **Geocoding the last 3**, snapped to the nearest London centroid and
+   rejected beyond 2 miles. All landed at 0.14-0.19 mi.
+
+Deliberately no free-text town scanning: 1,448 UK town names include too many
+ordinary words, and "22 London Road" is not a London target.
+
+Result: 27 zoned, 49 neighbourhoods, 33 towns, 39 districts, 0 with nothing.
+120 values added over 53 rows, unioned onto existing data (guarded to abort if
+any row lost a value), idempotent on re-run.
+
+### Deterministic match ordering (`byMatchQuality`)
+
+Investigating why Charlotte's Cloud ranked a Mill Hill unit top exposed a
+separate, universal bug. With no target location that brief was scored on two
+criteria - size band and use class - so **seven** listings tied at exactly 100%,
+and the winner was decided purely by Postgres row order. The listing the brief
+was actually written against sat last in that tie.
+
+Both record pages take `.slice(0, 10)` and the board takes 50, so tie order did
+not merely reshuffle a list - it decided which matches an agent ever saw.
+
+`byMatchQuality` in `src/lib/matching/score.ts`, used by all three call sites:
+score desc -> applicable-dimension count desc (100% from five checks beats 100%
+from two) -> id asc for stability. No tier for "passed more individual
+criteria": at equal weighted score, clearing one 25-point dimension versus a 15
+and a 10 is not obviously better.
+
+### Review
+
+`scripts/verify-match-order.mjs` shuffles the listing rows with three fixed
+seeds and asserts the top 10 is unchanged. The control re-runs each case with
+the old score-only comparator and must come out unstable, else the test proves
+nothing.
+
+    requirements tested                       : 82
+      with ties inside their top 10           : 82
+      unstable under the NEW comparator       : 0
+      unstable under the OLD (score-only) one : 82   <- control
+
+So the defect was universal: every brief's top 10 could change between page
+loads. tsc and eslint clean.
+
+Also confirmed by before/after ranking: Charlotte's Cloud moved from
+"8 The Broadway, Mill Hill" to "Fully Fitted Restaurant, Gloucester Road"
+(the property the brief was written against); Habibeh Abgoon's Camden match
+correctly fell 100% -> 78%.
+
+### Not done
+
+- `scripts/convert-cdg-export.mjs` still carries the weaker area parser. It is
+  marked SUPERSEDED with a pointer, rather than rewired, because the good one
+  needs a database connection for the listing index and that converter
+  deliberately has none. Re-running it without then running
+  `fix-requirement-locations.mjs` will regress the target locations.
+- Missing listing data still scores as a pass (`d.rent_pa == null || ...`), so a
+  listing with no rent is indistinguishable from one that genuinely fits.

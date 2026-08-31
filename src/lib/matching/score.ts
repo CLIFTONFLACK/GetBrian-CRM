@@ -432,3 +432,37 @@ export function scoreMatch(
   const score = possible > 0 ? Math.round((gained / possible) * 100) : 0;
   return { score, reasons };
 }
+
+/**
+ * Deterministic ordering for a scored match list.
+ *
+ * Sorting on `score` alone leaves ties in whatever order the rows arrived from
+ * Postgres, which is not stable between requests — and because the record pages
+ * take the top 10, a tie doesn't merely reshuffle the list, it decides which
+ * matches an agent ever sees. A real brief hit this: with no target location it
+ * was scored on size and use class alone, seven listings tied at 100%, and the
+ * one the brief was actually written against sat last in row order.
+ *
+ * The tiers, in order:
+ *
+ *  1. `score` — the headline number, unchanged.
+ *  2. How many dimensions were applicable. `score` is a percentage of the
+ *     criteria that could be checked, so 100% from five checks is stronger
+ *     evidence than 100% from two, and should outrank it. Applicability is a
+ *     property of the requirement, so this separates briefs on the agency-wide
+ *     board rather than listings under one brief.
+ *  3. `id` — nothing meaningful left to say, so fall back to something fixed
+ *     rather than to row order. This is the tier that makes the list stable.
+ *
+ * Note there is deliberately no tier for "passed more individual criteria":
+ * at equal weighted score, clearing one 25-point dimension versus a 15 and a 10
+ * is not obviously better, and inventing a preference would be noise.
+ */
+export function byMatchQuality<T extends MatchResult>(
+  idOf: (item: T) => string,
+): (a: T, b: T) => number {
+  return (a, b) =>
+    b.score - a.score ||
+    b.reasons.length - a.reasons.length ||
+    idOf(a).localeCompare(idOf(b));
+}

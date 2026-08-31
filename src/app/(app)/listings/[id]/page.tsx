@@ -17,7 +17,7 @@ import {
 } from "@/lib/badges";
 import { deleteDisposal } from "@/lib/actions/disposals";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
-import { DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
+import { byMatchQuality, DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
 import { LocationFlexSlider } from "@/components/location-flex-slider";
 import { CreateDealButton } from "@/components/create-deal-button";
 import { MatchReasons } from "@/components/match-reasons";
@@ -145,7 +145,8 @@ export default async function ListingDetailPage({
   const matches = reqs
     .map((rq) => ({ rq, ...scoreMatch(rq, d, { locationFlex }) }))
     .filter((m) => m.score > 0)
-    .sort((a, b) => b.score - a.score)
+    // As on the requirement page: the top 10 cut makes tie order load-bearing.
+    .sort(byMatchQuality((m) => m.rq.id))
     .slice(0, 10);
 
   const additionalAgentIds = agentIds;

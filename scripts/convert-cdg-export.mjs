@@ -21,6 +21,9 @@
  *
  * Run:  node scripts/convert-cdg-export.mjs
  * Reads  "Data CSVs/"  →  writes  "Data CSVs/import-ready/"
+ *
+ * NOTE: the Target Location columns this produces are superseded by
+ * scripts/fix-requirement-locations.mjs — see parseArea below.
  */
 
 import fs from "node:fs";
@@ -199,6 +202,16 @@ function parseUseClasses(cell) {
  * neighbourhoods, postcode districts, and radius phrases like "Within 3 miles
  * of 34-43 Russell Street" all share one cell. Classify what the CRM has a
  * column for; everything else is returned so the caller can keep it in notes.
+ *
+ * SUPERSEDED — do not extend this. It only placed 51 of 82 briefs, because it
+ * demands an exact whole-token match. scripts/lib/parse-area.mjs places 82/82:
+ * it resolves "within N miles of <X>" against CDG's own listing book, scans
+ * free text for neighbourhoods whole-word, and geocodes the remainder. It is
+ * not used here only because it needs a database connection for the listing
+ * index, which this converter deliberately does without.
+ *
+ * If you re-run this converter, run scripts/fix-requirement-locations.mjs
+ * afterwards or the target locations will regress.
  */
 function parseArea(cell) {
   const out = {

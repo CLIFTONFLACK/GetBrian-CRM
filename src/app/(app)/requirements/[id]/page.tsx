@@ -16,7 +16,7 @@ import {
 } from "@/lib/badges";
 import { deleteRequirement } from "@/lib/actions/requirements";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
-import { DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
+import { byMatchQuality, DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
 import { LocationFlexSlider } from "@/components/location-flex-slider";
 import { MatchOpportunities } from "@/components/match-opportunities";
 import { SendHistoryCard } from "@/components/send-history-card";
@@ -117,7 +117,9 @@ export default async function RequirementDetailPage({
     .filter((d) => isListingMatchable(d.status))
     .map((d) => ({ d, ...scoreMatch(r, d, { locationFlex }) }))
     .filter((m) => m.score > 0)
-    .sort((a, b) => b.score - a.score)
+    // Ties decide which listings make the top 10 at all, so the order has to be
+    // deterministic rather than however Postgres returned the rows.
+    .sort(byMatchQuality((m) => m.d.id))
     .slice(0, 10);
 
   // Pickers for the Send Deal wizard's external step.

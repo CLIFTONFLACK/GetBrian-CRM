@@ -19,7 +19,7 @@ import { setMatchStatus } from "@/lib/actions/matches";
 import { isListingMatchable, listingTypeBadge, matchScoreBadge } from "@/lib/badges";
 import { USE_CLASS_OPTIONS } from "@/lib/use-classes";
 import type { Database } from "@/lib/database.types";
-import { DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
+import { byMatchQuality, DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
 import { getCompanyTypes } from "@/lib/company-types";
 import { getPairSendHistory } from "@/lib/send-history";
 import { filterHref } from "@/lib/sort";
@@ -160,10 +160,12 @@ export default async function MatchesPage({
     if (shortlistedOnly) return status === "shortlisted";
     return status !== "rejected" || showRejected;
   });
-  // Shortlisted pairs float to the top; everything else by score.
+  // Shortlisted pairs float to the top; everything else by match quality.
+  // The board shows the first 50, so tie order decides what is on screen.
+  const byQuality = byMatchQuality<(typeof pairs)[number]>((p) => `${p.rq.id}:${p.d.id}`);
   pairs.sort((a, b) => {
     const rank = (p: typeof a) => (statusOf(p) === "shortlisted" ? 1 : 0);
-    return rank(b) - rank(a) || b.score - a.score;
+    return rank(b) - rank(a) || byQuality(a, b);
   });
 
   const avgScore = pairs.length

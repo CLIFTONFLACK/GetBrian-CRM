@@ -14,7 +14,14 @@ import { createRequirement, type RequirementWriteInput } from "@/lib/db/queries/
 import { deriveCounty } from "@/lib/locations";
 import { addressQuery, geocodeAddress } from "@/lib/maps/geocode";
 import { Constants } from "@/lib/database.types";
-import { parseCsv, type ImportEntity } from "@/lib/csv";
+import {
+  IMPORT_TEMPLATES,
+  mapHeaders,
+  parseCsv,
+  REQUIRED_COLUMNS,
+  splitList,
+  type ImportEntity,
+} from "@/lib/csv";
 import {
   formatUseClasses,
   parseUseClasses,
@@ -34,8 +41,9 @@ import type { FormState } from "@/lib/actions/types";
 const ENTITIES: ImportEntity[] = ["companies", "contacts", "requirements", "listings"];
 const LISTING_TYPES = ["cdg", "intel"];
 
-const list = (v: string) =>
-  v.split(";").map((s) => s.trim()).filter(Boolean);
+// Multi-value cells use ";" in our template and "," in every other system's
+// export — splitList handles both. See csv.ts for why it isn't just a split.
+const list = splitList;
 const numOrNull = (v: string) => {
   const n = Number(v.replace(/[, ]/g, ""));
   return v.trim() && Number.isFinite(n) ? n : null;
@@ -82,11 +90,27 @@ export async function importEntityCsv(
   if (!csv.trim()) return { error: "Upload a CSV file first." };
 
   const rows = parseCsv(csv);
-  if (rows.length < 2) {
+  // Headers are matched loosely (case, spaces vs underscores, common synonyms)
+  // and the header row is located rather than assumed, because exports from
+  // other systems lead with a title banner. See mapHeaders in csv.ts.
+  const header = mapHeaders(entity, rows);
+  const { columns, headerRow } = header;
+  if (rows.length <= headerRow + 1) {
     return { error: "Need a header row plus at least one data row." };
   }
-  const header = rows[0].map((h) => h.trim().toLowerCase());
-  const colIdx = (name: string) => header.indexOf(name);
+  // A column the file simply doesn't have is a fault of the file, not of every
+  // row in it: say so once, naming the column, instead of reporting N identical
+  // "x is required" row errors that never point at the real problem.
+  const missing = REQUIRED_COLUMNS[entity].filter((c) => !columns.has(c));
+  if (missing.length > 0) {
+    const found = (rows[headerRow] ?? []).map((c) => c.trim()).filter(Boolean);
+    return {
+      error:
+        `This file has no ${missing.map((c) => `"${c}"`).join(" or ")} column, so no rows ` +
+        `can be imported. Header row read as: ${found.join(", ") || "(blank)"}. ` +
+        `Download the ${IMPORT_TEMPLATES[entity].label} template and match its column names.`,
+    };
+  }
 
   // Contact roles + company types are editable data now — validate imported
   // values against the live slug lists (fallbacks "other") rather than a fixed enum.
@@ -122,14 +146,32 @@ export async function importEntityCsv(
   const requirementRecords: RequirementRecord[] = [];
   const listingRecords: ListingRecord[] = [];
   const errors: string[] = [];
+  // Values we could not use but that didn't cost the whole row — reported so a
+  // partially imported row is visible rather than silent.
+  const warnings: string[] = [];
   // Case-insensitive dedupe keys (contact emails / company names) seen earlier
   // in this file, so a row duplicated within the CSV itself is skipped too.
   const seenInFile = new Set<string>();
 
-  rows.slice(1).forEach((r, n) => {
+  rows.slice(headerRow + 1).forEach((r, n) => {
+    const rowNo = headerRow + n + 2;
+    // Several source columns can feed one field ("Phone Number" and "Mobile
+    // Number" both map to phone): take the first that actually has a value.
     const get = (name: string) => {
-      const i = colIdx(name);
-      return i >= 0 ? (r[i] ?? "").trim() : "";
+      for (const i of columns.get(name) ?? []) {
+        const v = (r[i] ?? "").trim();
+        if (v) return v;
+      }
+      return "";
+    };
+    // A non-empty cell that isn't a number ("Up to £120,000", "175 sq m") is
+    // reported rather than quietly stored as null.
+    const num = (name: string) => {
+      const raw = get(name);
+      const value = numOrNull(raw);
+      if (raw && value === null)
+        warnings.push(`Row ${rowNo}: ignored ${name} "${raw}" — not a number`);
+      return value;
     };
     try {
       if (entity === "companies") {
@@ -237,13 +279,13 @@ export async function importEntityCsv(
           tenurePrefs: list(get("tenure_prefs")).filter((t) =>
             (Constants.public.Enums.tenure_type as readonly string[]).includes(t),
           ) as RequirementRecord["tenurePrefs"],
-          minSqft: numOrNull(get("min_sqft")),
-          maxSqft: numOrNull(get("max_sqft")),
-          minCovers: numOrNull(get("min_covers")),
-          maxCovers: numOrNull(get("max_covers")),
-          maxRent: numOrNull(get("max_rent")),
-          maxPremium: numOrNull(get("max_premium")),
-          maxGuidePrice: numOrNull(get("max_guide_price")),
+          minSqft: num("min_sqft"),
+          maxSqft: num("max_sqft"),
+          minCovers: num("min_covers"),
+          maxCovers: num("max_covers"),
+          maxRent: num("max_rent"),
+          maxPremium: num("max_premium"),
+          maxGuidePrice: num("max_guide_price"),
           notes: get("notes") || null,
           leadAgentId: null,
         });
@@ -283,16 +325,16 @@ export async function importEntityCsv(
           propertyType: useClasses.length > 0 ? formatUseClasses(useClasses) : null,
           useClass:
             useClasses.length > 0 ? planningClassFor(useClasses) : get("use_class") || null,
-          sizeSqft: numOrNull(get("size_sqft")),
+          sizeSqft: num("size_sqft"),
           sizeSqm: null,
-          coversInternal: numOrNull(get("covers_internal")),
+          coversInternal: num("covers_internal"),
           coversExternal: null,
           fitOutState: null,
           epcRating: null,
           tenureRaw: null,
-          rentPa: numOrNull(get("rent_pa")),
-          premium: numOrNull(get("premium")),
-          guidePrice: numOrNull(get("guide_price")),
+          rentPa: num("rent_pa"),
+          premium: num("premium"),
+          guidePrice: num("guide_price"),
           rateableValue: null,
           serviceCharge: null,
           keyFeatures: [],
@@ -318,7 +360,7 @@ export async function importEntityCsv(
         });
       }
     } catch (e) {
-      errors.push(`Row ${n + 2}: ${(e as Error).message}`);
+      errors.push(`Row ${rowNo}: ${(e as Error).message}`);
     }
   });
 
@@ -433,6 +475,19 @@ export async function importEntityCsv(
   const skipped = errors.length
     ? ` Skipped ${errors.length}: ${errors.slice(0, 3).join("; ")}${errors.length > 3 ? "…" : ""}`
     : "";
-  if (!inserted && errors.length) return { error: `Nothing imported.${skipped}` };
-  return { message: `Imported ${inserted} ${entity}.${skipped}` };
+  // Columns the file carried that we had no home for. Silently dropping these
+  // is how a companies file imported 25 names and threw away every address.
+  const ignored = header.unrecognised.length
+    ? ` Ignored ${header.unrecognised.length} unrecognised column${
+        header.unrecognised.length > 1 ? "s" : ""
+      }: ${header.unrecognised.join(", ")}.`
+    : "";
+  const notes = warnings.length
+    ? ` ${warnings.length} value${warnings.length > 1 ? "s" : ""} ignored: ${warnings
+        .slice(0, 3)
+        .join("; ")}${warnings.length > 3 ? "…" : ""}`
+    : "";
+  if (!inserted && errors.length)
+    return { error: `Nothing imported.${skipped}${ignored}${notes}` };
+  return { message: `Imported ${inserted} ${entity}.${skipped}${ignored}${notes}` };
 }

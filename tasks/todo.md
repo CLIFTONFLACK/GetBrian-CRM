@@ -543,3 +543,110 @@ Gotcha worth remembering (now in lessons.md): exporting a constant from a `"use 
 module and importing it into a Server Component yields a client *reference*, not the
 value. It stringified into the page as a thrown-error stub; tsc and eslint were both
 clean, only the rendered page showed it.
+
+---
+
+## 2026-08-31 - CDG bulk upload failed: importer hardening + data conversion
+
+Raised 2026-08-31. CDG tried to bulk-upload three exports from their previous
+system through Admin → Data import and got errors.
+
+### What actually went wrong
+
+The three files are exports from another system, not the CRM's own templates.
+The importer matched column headers by exact lowercased name, so almost nothing
+lined up.
+
+| File | Result before the fix |
+|---|---|
+| `contact-list-…csv` | 0 / 25 rows. `First Name` (space) never matched `first_name` (underscore), so every row threw *"first_name is required"*. |
+| `requirement-list-…csv` | 0 / 83 rows. A `Requirements` title banner on line 1 was read as the header row; the real header on line 3 (`Tenant, Size, Property Type, Rent, Area, Tenant Email`) has neither `title` nor `contact_email` anyway. |
+| `companies-list-…csv` | Silently half-worked. `Name` and `Postcode` matched by luck, so 25 rows imported while `Company Type`, `Domain`, `Address Line 1`, `Town` and `Telephone` were discarded with no warning. |
+
+Three further faults behind the header problem:
+
+- **Encoding.** All three files are Windows-1252. `Blob.text()` decodes UTF-8
+  only, so `Lyon’s` (byte 0x92) and `£` (0xA3) became U+FFFD before the server
+  ever saw them.
+- **Separator.** The importer split multi-value cells on `;`; these files use
+  `,`, so `"Bar, Pub, Restaurant"` would have imported as one tag.
+- **Ordering.** Only 18 of 83 requirement rows name a contact that exists in the
+  contacts export, and a requirement with no contact is refused.
+
+### Plan
+
+- [x] Reproduce the failure by running the importer's own parser over the files
+- [x] Match headers loosely (case, spaces vs underscores, per-entity synonyms)
+- [x] Locate the header row instead of assuming row 0, so title banners are skipped
+- [x] Decode Windows-1252 / UTF-16 uploads instead of assuming UTF-8
+- [x] Accept `,` as well as `;` in multi-value cells
+- [x] Fail once, naming the column, when a required column is absent
+- [x] Report unrecognised columns and unparseable numbers instead of dropping them
+- [x] Allow several source columns to feed one field (Phone Number + Mobile Number)
+- [x] Convert the three exports into import-ready CSVs
+- [x] Verify with controls that must go red
+
+### Changes
+
+| File | Change |
+|---|---|
+| [src/lib/csv.ts](../src/lib/csv.ts) | `decodeCsvBytes`, `normaliseHeader`, alias tables, `mapHeaders`, `splitList`, `REQUIRED_COLUMNS` |
+| [src/lib/actions/import-data.ts](../src/lib/actions/import-data.ts) | Uses `mapHeaders`; refuses a file with a missing required column by name; `get()` takes the first non-empty of several mapped columns; `num()` warns on unparseable numbers; result message reports ignored columns and values |
+| [src/components/data-import.tsx](../src/components/data-import.tsx) | Reads `arrayBuffer()` through `decodeCsvBytes` rather than `f.text()` |
+| [scripts/convert-cdg-export.mjs](../scripts/convert-cdg-export.mjs) | One-off converter for CDG's exports |
+| [scripts/verify-import-headers.mjs](../scripts/verify-import-headers.mjs) | Verification harness, run with `node scripts/verify-import-headers.mjs` |
+
+### Converted data — `Data CSVs/import-ready/`
+
+Import in this order; each depends on the one above it.
+
+1. `companies-import.csv` — 63 rows (25 from the export, 38 referenced by
+   contacts or requirements)
+2. `contacts-import.csv` — 25 rows
+3. `contacts-from-requirements.csv` — 61 rows, **derived**: people who appear
+   only in the requirements export's `Tenant` / `Tenant Email` columns. Without
+   these, 64 requirements cannot import. Optional — skip the file and those
+   requirements are simply refused.
+4. `requirements-import.csv` — 82 rows (83rd, "The Coffee", has no email)
+
+Conversion decisions:
+
+- `Size` split into `min_sqft` / `max_sqft`; one row in sq m converted at
+  10.7639 (175–275 sq m → 1,884–2,960 sq ft).
+- `Rent` reduced to `max_rent` using the top of a band ("£50,000 - £120,000
+  per annum" → 120000), with the original string preserved in `notes`.
+- `Area` classified against the CRM's own location vocabularies into zones,
+  neighbourhoods, towns, counties and postcode districts. 27 rows got zones,
+  30 got a mapped area. Anything unclassifiable ("Within 3 miles of 34-43
+  Russell Street") is preserved verbatim in `notes` — 57 of 82 rows carry one.
+- `Property Type` mapped to use classes via the same word matching the app uses.
+  "Retail" has no CRM equivalent and is noted rather than dropped.
+
+### Review
+
+Verified with `node scripts/verify-import-headers.mjs`, which imports the real
+`src/lib/csv.ts` rather than reimplementing it. Every assertion is paired with a
+control that must fail; the run exits non-zero if a control passes.
+
+The first run caught a bad control of my own: *"old exact-match found the
+required columns"* passed for companies, because the old code genuinely did find
+`Name` there — companies never errored, it lost data quietly. The control was
+replaced with a columns-mapped comparison (2 → 7 for companies, 1 → 6 contacts,
+0 → 4 requirements), which discriminates for all three.
+
+Also checked against the app's real parsers: every `use_classes` value round-trips
+through `parseUseClasses` without loss, every `Zone n` is in `LONDON_ZONE_OPTIONS`,
+every neighbourhood is in the London vocabulary, `active` is a valid
+`requirement_status`, no numeric cell is non-numeric, no `min_sqft > max_sqft`,
+no duplicate emails across the two contact files, and every `company_name` a
+contact references has a row in `companies-import.csv`.
+
+`npx tsc --noEmit` clean.
+
+### Not done
+
+- The importer still has no dry-run / preview. Every finding above surfaced only
+  after a real import attempt; a "show me what this file will do" step is the
+  obvious next improvement.
+- Listings were not part of this upload and are untouched beyond sharing the new
+  header layer.

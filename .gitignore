@@ -48,3 +48,6 @@ next-env.d.ts
 # Local working assets (design mockups, team headshots) — not part of the app
 # build; keep out of the shared repo.
 Assets/
+
+# Client data exports — real contact PII, never commit
+/Data CSVs/

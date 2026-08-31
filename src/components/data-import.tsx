@@ -7,7 +7,7 @@ import { Download, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { importEntityCsv } from "@/lib/actions/import-data";
-import { IMPORT_TEMPLATES, toCsv, type ImportEntity } from "@/lib/csv";
+import { decodeCsvBytes, IMPORT_TEMPLATES, toCsv, type ImportEntity } from "@/lib/csv";
 import type { FormState } from "@/lib/actions/types";
 
 function EntityImporter({ entity }: { entity: ImportEntity }) {
@@ -46,7 +46,10 @@ function EntityImporter({ entity }: { entity: ImportEntity }) {
       const ws = wb.Sheets[wb.SheetNames[0]];
       setCsv(ws ? XLSX.utils.sheet_to_csv(ws) : "");
     } else {
-      setCsv(await f.text());
+      // Not f.text(): that decodes UTF-8 unconditionally and turns a
+      // Windows-1252 export's apostrophes and pound signs into "" before the
+      // importer ever sees them. See decodeCsvBytes.
+      setCsv(decodeCsvBytes(await f.arrayBuffer()));
     }
   }
 
@@ -94,7 +97,9 @@ export function DataImport() {
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
         Download a template, fill it in, and upload it as CSV or Excel (.xlsx/.xls).
-        Multi-value cells (tags, towns) are separated with “;”.
+        Multi-value cells (tags, towns) are separated with “;” — a comma works too.
+        Column names are matched loosely, so “First Name” and “first_name” are the same
+        column; anything we can’t place is listed in the result rather than dropped.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <EntityImporter entity="companies" />

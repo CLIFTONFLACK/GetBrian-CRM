@@ -285,7 +285,17 @@ export default async function ListingsPage({
         {/* The tab is part of the current view — a GET filter submit must not
             silently drop the user back to CDG's own book. */}
         <input type="hidden" name="silo" value={activeSilo} />
-        <FilterSelect name="agent" label="Agent" value={agent} options={agentOptions} />
+        {/* Agent belongs to the Market Intel silo — on the CDG tab every row is
+            CDG's own book, so the control would offer nothing to choose. */}
+        {activeSilo === "intel" ? (
+          <FilterSelect
+            name="agent"
+            label="Agent"
+            value={agent}
+            options={agentOptions}
+            tone="teal"
+          />
+        ) : null}
         <FilterSelect name="town" label="Town" value={town} options={townOptions} />
         <FilterSelect name="county" label="County" value={county} options={countyOptions} />
         <FilterSelect

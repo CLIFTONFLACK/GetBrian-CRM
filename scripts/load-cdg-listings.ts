@@ -21,6 +21,18 @@
  * rows in place (preserving their id, and anything hanging off it — deals,
  * documents, images) rather than deleting and recreating. Input is
  * supabase/seeds/cdg_listings.json (from scrape-cdg-all.ts).
+ *
+ * Re-runnable as a *sweep*, matching what the Market Intel resync already does
+ * for partner books:
+ *
+ *   - rows whose `source_ref` the fresh scrape no longer returns are marked
+ *     Withdrawn, never deleted, so deals and send history keep pointing at a
+ *     real row;
+ *   - the lead agent is only assigned when a row hasn't got one. The first load
+ *     seeds it from the agent named on CDG's site, but after that the
+ *     assignment belongs to the agency and a re-run must not undo it.
+ *
+ * Pass `--dry-run` to report what would change without writing.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -28,6 +40,7 @@ import { dirname, join } from "node:path";
 
 import { sql } from "@/lib/db/client";
 import { upsertDisposalFromSource, updateDisposalLeadAgent } from "@/lib/db/queries/disposals";
+import { markDisposalsWithdrawn } from "@/lib/db/queries/intel";
 import type { DisposalInsert } from "@/lib/disposals/cdg";
 
 const AGENCY_NAME = "CDG demo";
@@ -66,13 +79,54 @@ const idByName = new Map(
   memberRows.filter((m) => m.full_name).map((m) => [m.full_name as string, m.id]),
 );
 
+const dryRun = process.argv.includes("--dry-run");
+
+// The book as the CRM currently holds it, so the sweep can report what is new
+// and work out which refs have disappeared from CDG's site.
+const existing = (await sql`
+  select id, source_ref, title, status, lead_agent_id
+  from public.disposals
+  where agency_id = ${agencyId} and source = 'cdg'
+`) as {
+  id: string;
+  source_ref: string | null;
+  title: string | null;
+  status: string | null;
+  lead_agent_id: string | null;
+}[];
+
+const existingByRef = new Map(
+  existing.filter((r) => r.source_ref).map((r) => [r.source_ref as string, r]),
+);
+const freshRefs = new Set(rows.map((r) => r.source_ref).filter(Boolean) as string[]);
+const added = rows.filter((r) => r.source_ref && !existingByRef.has(r.source_ref));
+const gone = existing.filter(
+  (r) => r.source_ref != null && !freshRefs.has(r.source_ref) && r.status !== "Withdrawn",
+);
+
+console.log(`Scraped ${rows.length} live listings; CRM holds ${existing.length}.`);
+console.log(`  ${added.length} new, ${rows.length - added.length} updated in place.`);
+console.log(`  ${gone.length} no longer on the site -> Withdrawn.`);
+for (const g of gone) console.log(`    - ${g.source_ref} (${g.status}) ${g.title ?? ""}`);
+if (dryRun) {
+  console.log("\nDry run: nothing written.");
+  process.exit(0);
+}
+
 let processed = 0;
 for (const row of rows) {
-  const leadAgentId =
-    (row.agent_name && idByName.get(row.agent_name)) || memberRows[processed % memberRows.length].id;
-
   const { id } = await upsertDisposalFromSource(agencyId, createdBy, "cdg", row);
-  await updateDisposalLeadAgent(agencyId, id, leadAgentId);
+
+  // Seed the lead agent only when the row hasn't got one. CDG's site names the
+  // handling agent, which is the right starting point, but a reassignment made
+  // in the CRM must survive the next sweep.
+  const prior = row.source_ref ? existingByRef.get(row.source_ref) : undefined;
+  if (!prior?.lead_agent_id) {
+    const leadAgentId =
+      (row.agent_name && idByName.get(row.agent_name)) ||
+      memberRows[processed % memberRows.length].id;
+    await updateDisposalLeadAgent(agencyId, id, leadAgentId);
+  }
 
   processed++;
   if (processed % 20 === 0 || processed === rows.length) {
@@ -80,5 +134,11 @@ for (const row of rows) {
   }
 }
 
+const withdrawn = await markDisposalsWithdrawn(
+  agencyId,
+  gone.map((g) => g.id),
+);
+
 console.log(`\nDone. ${processed} CDG listings loaded into "${AGENCY_NAME}".`);
+console.log(`${withdrawn} marked Withdrawn.`);
 process.exit(0);

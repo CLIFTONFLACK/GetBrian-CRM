@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 /**
  * A GET filter form: a search box + page-specific filter controls (passed as
@@ -57,25 +58,46 @@ export function FilterBar({
   );
 }
 
-/** A labelled filter <select> for use inside FilterBar. */
+/**
+ * A labelled filter <select> for use inside FilterBar.
+ *
+ * `tone="teal"` marks a control that belongs to the Market Intel silo rather
+ * than to the page as a whole. It reuses the domain teal from MASTER.md §2
+ * (the same ramp as the teal badges) rather than the brand ramp: app chrome is
+ * navy, and CDG's own `#1ab6b6` is reserved for client-facing PDFs. The label
+ * still says "Agent", so the colour is reinforcement, never the only signal.
+ */
 export function FilterSelect({
   name,
   label,
   value,
   options,
+  tone = "default",
 }: {
   name: string;
   label: string;
   value?: string;
   options: { value: string; label: string }[];
+  tone?: "default" | "teal";
 }) {
+  const teal = tone === "teal";
   return (
-    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+    <label
+      className={cn(
+        "flex flex-col gap-1 text-xs",
+        teal ? "text-teal-700 dark:text-teal-300" : "text-muted-foreground",
+      )}
+    >
       {label}
       <select
         name={name}
         defaultValue={value ?? ""}
-        className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          "h-9 rounded-md border px-3 text-sm focus-visible:outline-none focus-visible:ring-2",
+          teal
+            ? "border-teal-300 bg-teal-50 text-teal-900 focus-visible:ring-teal-500 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-100"
+            : "border-input bg-background text-foreground focus-visible:ring-ring",
+        )}
       >
         <option value="">All</option>
         {options.map((o) => (

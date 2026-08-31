@@ -650,3 +650,91 @@ contact references has a row in `companies-import.csv`.
   obvious next improvement.
 - Listings were not part of this upload and are untouched beyond sharing the new
   header layer.
+
+---
+
+## Market Intel — all ten partner agents + Listings agent filter (2026-08-31)
+
+### What shipped
+
+`INTEL_SOURCES` now covers the full agent list, in the order it was given:
+Shelley Sandzer, Matta London, Restaurant Property, Hay Hill, Bruce Gillingham
+Pollard, Davis Coffer Lyons, MKR Property, Stephen Kane & Co, Lewis Craig,
+Savills. Seven new extractors under `src/lib/disposals/`, each documented with
+the CMS it targets and the selectors it depends on:
+
+| Source | Shape | Notes |
+|---|---|---|
+| Bruce Gillingham Pollard | detail | whole book on one page; `<dl>` fields, `data-lat/lng`; card gallery carried as hints |
+| Davis Coffer Lyons | detail | paginated `/our-properties/`; numeric-entity encoded throughout |
+| Hay Hill | detail | RealHomes theme; status, price, geocoded address, coords |
+| Restaurant Property | detail | Concrete CMS, **named `b993` block only** (see below) |
+| Stephen Kane & Co | detail | WpResidence; status/type/size/rent only on the results row → hints |
+| MKR Property | list | no detail pages at all; one page → many rows |
+| Savills | list | `__NEXT_DATA__` island holds the full record; 359 rows in ~2.5s |
+
+The registry's `scraper` became a discriminated union — `kind: "detail"`
+(enumerate then fetch, with the orchestrator's retries/concurrency) or
+`kind: "list"` (index returns everything). `IntelListing.hints` lets a list card
+carry the fields its detail page omits; `applyHints` fills gaps by default and
+only overrides on keys the card genuinely owns (Stephen Kane's status, BGP's
+gallery). Shared plumbing lives in `src/lib/disposals/scrape-utils.ts`.
+
+Listings gained an **Agent** filter (`?agent=`), faceted on the displayed label
+so "CDG Leisure" covers every non-partner source. The Source column is now
+headed "Agent", and the filter form carries the active silo in a hidden input —
+previously, applying any filter from the Intel tab bounced you back to CDG's book.
+
+### Judgement calls
+
+- **Matta London has no book to scrape.** Their site is three Wix pages (home,
+  book-online, privacy) — they act for occupiers. Registered with
+  `scraper: null` and a note, so the gap is visible rather than looking missed.
+- **Restaurant Property's anonymous archive is excluded.** Their `/properties`
+  stacks two blocks: ~35 named units with detail pages, and ~4,250 anonymised
+  teasers ("Hotel - Mayfair", no address, no price, "Request More Info"). Only
+  the named block is imported.
+- **Savills is scoped to UK leisure**, to-let and for-sale (359 rows). The whole
+  firm would bury CDG's own market; widening it is one line in `SAVILLS_SEARCHES`.
+
+### Verified
+
+Every extractor was run against saved copies of the real pages, then live
+end-to-end through `INTEL_SOURCES`: Shelley Sandzer 22, Restaurant Property 35,
+Hay Hill 12, BGP 68, DCL 68, Stephen Kane 37, Lewis Craig 19, Savills 359.
+Bugs the verification caught and that are now fixed:
+
+- "F1 Arcade" in body copy parsed as a postcode → `UK_POSTCODE` tightened to the
+  real single-letter areas, and prose scans now demand a full postcode.
+- "Rates payable (UBR multiplier: £0.584): £88,184" imported as £0 → `moneyOnLine`
+  takes the last figure on the labelled line.
+- Savills' `Price` is a **monthly** figure for lettings; £125,000 pa is stored as
+  10416.66666. Rents now read `DisplayPriceText`. Per-sq-ft quotes ("£45") are
+  kept as text rather than scored as an annual rent.
+- "The property is held freehold … available to let" imported a pub-to-let as a
+  freehold sale → `resolveDisposalType` reconciles the copy against the search
+  intent.
+- Hay Hill files a Chelmsford restaurant under its London city taxonomy → the
+  town now comes from the geocoded address.
+- "Passing £43,500 Per Annum" → `rentPeriodFor` matched "Pa" inside "Passing".
+- `splitStatusPrefix` stripped "Sold" off "Sold Out Bar, E1"; the flag must now
+  be marked (`** SOLD **`, `[LET]`, or followed by a dash).
+
+`npx tsc --noEmit` and `npx eslint .` clean.
+
+### Not done / known limits
+
+- **MKR resync will 403.** Their Cloudflare WAF blocks Node's TLS fingerprint —
+  curl gets 200, `fetch` gets 403 for every URL on the domain, with or without
+  browser headers and Chrome cipher ordering. The extractor is correct against
+  their real markup and stays wired; the registry note warns before anyone
+  clicks Resync. Fixing it properly means a fetch proxy or TLS impersonation.
+- **The signed-in Listings page was not rendered.** The dev server runs, but the
+  route is behind auth and credentials aren't mine to enter. The Agent facet was
+  verified by running its exact predicate over the registry; the visual check is
+  outstanding.
+- `npm run build` fails in this checkout with a Turbopack junction-point error
+  under the Google Drive mount — pre-existing and unrelated; `next dev` works
+  once `.next` is cleared.
+- MKR has no per-property id, so `source_ref` is a slug of the headline: an edited
+  headline reads as a new listing and Withdraws the old one.

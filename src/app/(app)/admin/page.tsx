@@ -64,6 +64,7 @@ export default async function AdminPage() {
       label: s.label,
       website: s.website,
       hasScraper: s.scraper !== null,
+      note: s.note ?? null,
       count: rows.length,
       lastSynced,
     };

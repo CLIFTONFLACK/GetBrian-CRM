@@ -1,10 +1,1069 @@
 [
   {
     "source": "cdg",
+    "source_ref": "274296",
+    "source_url": "https://www.cdgleisure.com/find-a-property/properties/274296-fitzrovia-w1-fully-fitted-restaurant-with-extract-london",
+    "status": "Available",
+    "source_updated_at": "2026-08-27T13:33:51+00:00",
+    "title": "Fitzrovia W1, Fully Fitted Restaurant with Extract",
+    "summary": "Fully Fitted Restaurant in Fitzrovia W1",
+    "address_line": "Fully Fitted Restaurant with Extract",
+    "area": "Fitzrovia",
+    "city": "London",
+    "postcode": "W1Y",
+    "lat": 51.5185,
+    "lng": -0.134289,
+    "property_type": "Restaurant",
+    "use_class": null,
+    "disposal_type": "lease_assignment",
+    "to_let": true,
+    "for_sale": false,
+    "rent_pa": 55000,
+    "rent_raw": "£55,000 per annum",
+    "rent_period": "per annum",
+    "premium": null,
+    "premium_raw": null,
+    "guide_price": null,
+    "price_qualifier": "on_application",
+    "vat_applicable": true,
+    "rateable_value": null,
+    "business_rates": null,
+    "service_charge": null,
+    "estate_charge": null,
+    "parking_charge": null,
+    "tenure_raw": "An assignment of the existingr full repairing and insuring lease for a term of 15 years expiring in December 2035, which is drawn inside the security of tenure provisions of the Landlord and Tenant Act 1954 part 2 as amended.",
+    "lease_term_years": null,
+    "lease_expiry": "2035-12-01",
+    "rent_review_basis": null,
+    "next_rent_review": null,
+    "inside_1954_act": null,
+    "size_sqft": 1190,
+    "size_sqm": 110.56,
+    "covers_internal": null,
+    "covers_external": 50,
+    "floors": [
+      {
+        "name": "Ground",
+        "sqft": 760,
+        "sqm": 70.61
+      },
+      {
+        "name": "Basement",
+        "sqft": 430,
+        "sqm": 39.95
+      }
+    ],
+    "licensing_notes": "The premises benefit from E class planning use class, along with a premises licence which allows for sale of alcohol with the standard restaurant hours and conditions.",
+    "fit_out_state": "fully_fitted",
+    "epc_rating": null,
+    "description": "The premises are currently fitted out as a Modern Restaurant over the ground floor and basement premises and arranged to accommodate approximately 50 covers plus additional external seating for 4 people on the forecourt. The show kitchen is located on the ground floor and also has a kitchen in the basement along with storage and customer toilets.",
+    "location_description": "The premises are situated  just off Charlotte Street in the heart of Fitzrovia and close to both Goodge Street and Tottenham Court Road. The area benefits from strong all day trade every day of the week. Nearby operators include Norma, Icco Pizza, Carousel, The Charlotte Street Hotel, and the Fitzroy Tavern, to name a few of the many restaurants, bars and cafés in the immediate area.",
+    "key_features": [
+      "Beautifully Fitted Out to High Standard",
+      "Full Kitchen Extraction",
+      "Tenant Friendly Lease",
+      "Premises Licence in Place",
+      "Great Transport Links"
+    ],
+    "sections": [
+      {
+        "title": "Description",
+        "content": "The premises are currently fitted out as a Modern Restaurant over the ground floor and basement premises and arranged to accommodate approximately 50 covers plus additional external seating for 4 people on the forecourt. The show kitchen is located on the ground floor and also has a kitchen in the basement along with storage and customer toilets."
+      },
+      {
+        "title": "Tenure",
+        "content": "An assignment of the existingr full repairing and insuring lease for a term of 15 years expiring in December 2035, which is drawn inside the security of tenure provisions of the Landlord and Tenant Act 1954 part 2 as amended."
+      },
+      {
+        "title": "Passing Rent",
+        "content": "£55,000 per annum exclusive."
+      },
+      {
+        "title": "Premium",
+        "content": "On Application."
+      },
+      {
+        "title": "VAT",
+        "content": "All prices are quoted may be subject to VAT if applicable."
+      },
+      {
+        "title": "Planning/Licensing",
+        "content": "The premises benefit from E class planning use class, along with a premises licence which allows for sale of alcohol with the standard restaurant hours and conditions."
+      },
+      {
+        "title": "Holding Deposit",
+        "content": "A holding deposit will be required to secure the property which will grant a period of exclusivity and will be held in the CDG Leisure client account."
+      },
+      {
+        "title": "Confidentiality",
+        "content": "This sale is highly confidential and under no circumstances should a direct approach be made to staff as they are unaware of an impending sale."
+      }
+    ],
+    "agent_name": "Salvatore Di Natale",
+    "agent_email": "salvatore@cdgleisure.com",
+    "agent_phone": "07989 471288",
+    "agent_photo": "https://as-images.imgix.net/0c80fd529148bd3060556967a6287ef8-salv%20pic%20for%20property%20details.jpg",
+    "images": [
+      {
+        "url": "https://as-images.imgix.net/f6f845816d27875c4566c58a04448160-stockcake-greek-grilling-tradition-3947819-medium.jpg",
+        "alt": "Fitzrovia W1, Fully Fitted Restaurant with Extract, London, Restaurant Lease Assignment - StockCake-Greek_Grilling_Tradition-3947819-medium.jpg",
+        "source_url": "https://as-images.imgix.net/f6f845816d27875c4566c58a04448160-stockcake-greek-grilling-tradition-3947819-medium.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      }
+    ],
+    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/7b6c50b8d760941700cb654d74602807.pdf"
+  },
+  {
+    "source": "cdg",
+    "source_ref": "390539",
+    "source_url": "https://www.cdgleisure.com/find-a-property/properties/390539-1-new-oxford-street-london",
+    "status": "Available",
+    "source_updated_at": "2026-08-27T13:48:52+00:00",
+    "title": "1 New Oxford Street",
+    "summary": "Holborn Grab & Go Unit",
+    "address_line": "1 New Oxford Street",
+    "area": null,
+    "city": "London",
+    "postcode": "WC1A 1NU",
+    "lat": 51.5170898,
+    "lng": -0.1235,
+    "property_type": "Cafe (A1)",
+    "use_class": null,
+    "disposal_type": "lease_assignment",
+    "to_let": true,
+    "for_sale": false,
+    "rent_pa": 48000,
+    "rent_raw": "£48,000 per annum",
+    "rent_period": "per annum",
+    "premium": null,
+    "premium_raw": null,
+    "guide_price": null,
+    "price_qualifier": "offers_in_region",
+    "vat_applicable": true,
+    "rateable_value": null,
+    "business_rates": null,
+    "service_charge": null,
+    "estate_charge": null,
+    "parking_charge": null,
+    "tenure_raw": "Lease held until October 2029 with an understanding in place for a new lease or extension to be granted to the assignee.",
+    "lease_term_years": null,
+    "lease_expiry": null,
+    "rent_review_basis": null,
+    "next_rent_review": null,
+    "inside_1954_act": null,
+    "size_sqft": 527,
+    "size_sqm": 48.96,
+    "covers_internal": null,
+    "covers_external": 8,
+    "floors": [
+      {
+        "name": "Ground",
+        "sqft": 527,
+        "sqm": 48.96
+      }
+    ],
+    "licensing_notes": "The premises benefit from E Class planning.",
+    "fit_out_state": "fully_fitted",
+    "epc_rating": null,
+    "description": "The unit is fully fitted and operating as a grab and go takeaway catering to the busy lunch trade, fit-out in a bright, modern finish and fridge display units. There are approximately 10 seats inside and seating for 8 covers outside.",
+    "location_description": "Located in New Oxford Street at the juncture between the West End and the bustling Bloomsbury and Holborn office districts, this unit sits in a busy spot with commuters, tourists and students passing by all day, every day of the week.",
+    "key_features": [
+      "Strong Office/Student Location",
+      "New Oxford Street",
+      "Fully Fitted",
+      "527 sq ft Unit"
+    ],
+    "sections": [
+      {
+        "title": "Description",
+        "content": "The unit is fully fitted and operating as a grab and go takeaway catering to the busy lunch trade, fit-out in a bright, modern finish and fridge display units. There are approximately 10 seats inside and seating for 8 covers outside."
+      },
+      {
+        "title": "Tenure",
+        "content": "Lease held until October 2029 with an understanding in place for a new lease or extension to be granted to the assignee."
+      },
+      {
+        "title": "Passing Rent",
+        "content": "£48,000 per annum exclusive."
+      },
+      {
+        "title": "Premium",
+        "content": "Offers in the region of £70,000 invited for the leasehold interest, fixtures and fittings and equipment."
+      },
+      {
+        "title": "VAT",
+        "content": "VAT may be applicable to the rent, premium and any other figures quoted."
+      },
+      {
+        "title": "Planning",
+        "content": "The premises benefit from E Class planning."
+      },
+      {
+        "title": "Confidentiality",
+        "content": "This sale is highly confidential and under no circumstances should a direct approach be made to staff as they are unaware of an impending sale."
+      },
+      {
+        "title": "Holding Deposit",
+        "content": "A holding deposit will be required to secure the property which will allow a period of exclusivity and will be held in the CDG Leisure client account."
+      }
+    ],
+    "agent_name": "David Kornbluth",
+    "agent_email": "davidk@cdgleisure.com",
+    "agent_phone": "07507880040",
+    "agent_photo": "https://as-images.imgix.net/f926c6d488c8444a371fad6bac112331-dovvy%20pic%20for%20property%20details.jpg",
+    "images": [
+      {
+        "url": "https://as-images.imgix.net/ffdff469b3d6be8209d4b3f78e9cd5b1-holborn-frontage.png",
+        "alt": "1 New Oxford Street, London, Cafe (A1) Lease Assignment - Holborn Frontage.png",
+        "source_url": "https://as-images.imgix.net/ffdff469b3d6be8209d4b3f78e9cd5b1-holborn-frontage.png?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      }
+    ],
+    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/6d62de77bd2bb9356e880921b4899af3.pdf"
+  },
+  {
+    "source": "cdg",
+    "source_ref": "379439",
+    "source_url": "https://www.cdgleisure.com/find-a-property/properties/379439-181-drury-lane-covent-garden",
+    "status": "Available",
+    "source_updated_at": "2026-08-21T13:51:23+00:00",
+    "title": "181 Drury Lane",
+    "summary": "Prime E Class Premises with Dual Entrance and Upper Parts",
+    "address_line": "181 Drury Lane",
+    "area": null,
+    "city": "Covent Garden",
+    "postcode": "WC2B 5QF",
+    "lat": 51.515702,
+    "lng": -0.123352,
+    "property_type": "",
+    "use_class": null,
+    "disposal_type": "lease_assignment",
+    "to_let": true,
+    "for_sale": false,
+    "rent_pa": 140000,
+    "rent_raw": "£140,000 per annum",
+    "rent_period": "per annum",
+    "premium": null,
+    "premium_raw": null,
+    "guide_price": null,
+    "price_qualifier": "on_application",
+    "vat_applicable": true,
+    "rateable_value": null,
+    "business_rates": null,
+    "service_charge": null,
+    "estate_charge": null,
+    "parking_charge": null,
+    "tenure_raw": "A FRI lease granted for a term of 15 years from October 2024 with 5 yearly rent reviews, and is granted inside the L&T act 1954. There is a tenant only break clause in the 5th and 10th year of the term.",
+    "lease_term_years": null,
+    "lease_expiry": null,
+    "rent_review_basis": "5 yearly",
+    "next_rent_review": null,
+    "inside_1954_act": null,
+    "size_sqft": 3400,
+    "size_sqm": 315.87,
+    "covers_internal": null,
+    "covers_external": null,
+    "floors": [
+      {
+        "name": "Ground",
+        "sqft": 2200,
+        "sqm": 204.39
+      },
+      {
+        "name": "1st",
+        "sqft": 600,
+        "sqm": 55.74
+      },
+      {
+        "name": "2nd",
+        "sqft": 600,
+        "sqm": 55.74
+      }
+    ],
+    "licensing_notes": "The premises benefit from E Class use, and there is a premises licence in place with the standard restaurant hours and conditions.",
+    "fit_out_state": "fully_fitted",
+    "epc_rating": null,
+    "description": "The premises is currently fitted out as a high class patisserie and coffee Shop, with the upper parts currently utilised as private office space and storage with it's own entrance. The premises comes with a fully equipment kitchen for baking and has reco-air extraction in situ.",
+    "location_description": "Within a short walk are the Royal Opera House, Covent Garden Market, numerous boutique shops, street performers, restaurants, and pubs. The area is very busy throughout the day with shoppers, tourists, theatre-goers, and office workers.",
+    "key_features": [
+      "Prime Covent Garden Location",
+      "Inside The 1954 Act Lease",
+      "Dual Entrance",
+      "Upper Parts Included in Lease",
+      "Close to Covent Garden Tube Station"
+    ],
+    "sections": [
+      {
+        "title": "Description",
+        "content": "The premises is currently fitted out as a high class patisserie and coffee Shop, with the upper parts currently utilised as private office space and storage with it's own entrance. The premises comes with a fully equipment kitchen for baking and has reco-air extraction in situ."
+      },
+      {
+        "title": "Tenure",
+        "content": "A FRI lease granted for a term of 15 years from October 2024 with 5 yearly rent reviews, and is granted inside the L&T act 1954. There is a tenant only break clause in the 5th and 10th year of the term."
+      },
+      {
+        "title": "Rent",
+        "content": "The current rent is £140.000 per annum exclusive."
+      },
+      {
+        "title": "Premium",
+        "content": "On Application."
+      },
+      {
+        "title": "VAT",
+        "content": "May be applicable to the premium and rent."
+      },
+      {
+        "title": "Planning/Licencing",
+        "content": "The premises benefit from E Class use, and there is a premises licence in place with the standard restaurant hours and conditions."
+      },
+      {
+        "title": "Confidentiality",
+        "content": "A holding deposit will be required to secure the property, will grant a period of exclusivity and will be held in the CDG Leisure client account."
+      }
+    ],
+    "agent_name": "Salvatore Di Natale",
+    "agent_email": "salvatore@cdgleisure.com",
+    "agent_phone": "07989 471288",
+    "agent_photo": "https://as-images.imgix.net/0c80fd529148bd3060556967a6287ef8-salv%20pic%20for%20property%20details.jpg",
+    "images": [
+      {
+        "url": "https://as-images.imgix.net/74ca9e4bb95cd0d18b124c63e2df9601-img-4112.jpeg",
+        "alt": "181 Drury Lane, Covent Garden Lease Assignment - IMG_4112.jpeg",
+        "source_url": "https://as-images.imgix.net/74ca9e4bb95cd0d18b124c63e2df9601-img-4112.jpeg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      }
+    ],
+    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/175a943ccd6182c82e3be6823d344778.pdf"
+  },
+  {
+    "source": "cdg",
+    "source_ref": "390076",
+    "source_url": "https://www.cdgleisure.com/find-a-property/properties/390076-250-bethnal-green-road-london",
+    "status": "Available",
+    "source_updated_at": "2026-08-20T16:33:45+00:00",
+    "title": "250 Bethnal Green Road",
+    "summary": "Bottle Shop with Basement Wine Bar (also Retail/Cafe) Opportunity in Bethnal Green",
+    "address_line": "250 Bethnal Green Road",
+    "area": null,
+    "city": "London",
+    "postcode": "E2 0AA",
+    "lat": 51.526053,
+    "lng": -0.066904,
+    "property_type": "Bar / Cafe (A1)",
+    "use_class": "Class E",
+    "disposal_type": "lease_assignment",
+    "to_let": true,
+    "for_sale": false,
+    "rent_pa": null,
+    "rent_raw": "Rent on application",
+    "rent_period": null,
+    "premium": 35000,
+    "premium_raw": "£35,000",
+    "guide_price": null,
+    "price_qualifier": "on_application",
+    "vat_applicable": true,
+    "rateable_value": null,
+    "business_rates": null,
+    "service_charge": null,
+    "estate_charge": null,
+    "parking_charge": null,
+    "tenure_raw": "An assignment of the existing 10 year lease expiring in June 2031, subject to 5 yearly rent reviews. We understand the lease to be held outside the 1954 Act.",
+    "lease_term_years": 10,
+    "lease_expiry": "2031-06-01",
+    "rent_review_basis": "5 yearly",
+    "next_rent_review": null,
+    "inside_1954_act": false,
+    "size_sqft": 702,
+    "size_sqm": 65.22,
+    "covers_internal": 25,
+    "covers_external": null,
+    "floors": [
+      {
+        "name": "Ground",
+        "sqft": 366,
+        "sqm": 34
+      },
+      {
+        "name": "Basement",
+        "sqft": 336,
+        "sqm": 31.22
+      }
+    ],
+    "licensing_notes": "Class E planning use with a premises licence allowing the sale of alcohol until 23:00 day of the week, with unrestricted bar use in the basement.",
+    "fit_out_state": "fully_fitted",
+    "epc_rating": null,
+    "description": "Fully fitted wine shop premises over ground floor and basement featuring full retail layout, integrated commercial display fridges and service counter. Internal stairs lead to a basement bar with seating for 25 covers, prep kitchen and customer WCs.",
+    "location_description": "Located in Bethnal Green in London's East End, in an excellent position on Bethnal Green Road, a main commercial street just down the road from Brick Lane and within walking distance of both Bethnal Green and Shoreditch High Street stations.",
+    "key_features": [
+      "Premises Licence in Place",
+      "Great Basement Wine Bar",
+      "25 Covers",
+      "Busy Location"
+    ],
+    "sections": [
+      {
+        "title": "Description",
+        "content": "Fully fitted wine shop premises over ground floor and basement featuring full retail layout, integrated commercial display fridges and service counter. Internal stairs lead to a basement bar with seating for 25 covers, prep kitchen and customer WCs."
+      },
+      {
+        "title": "Tenure",
+        "content": "An assignment of the existing 10 year lease expiring in June 2031, subject to 5 yearly rent reviews. We understand the lease to be held outside the 1954 Act."
+      },
+      {
+        "title": "Passing Rent",
+        "content": "Upon application."
+      },
+      {
+        "title": "Premium",
+        "content": "Offers in region of £35,000 to include the leasehold interest and all unbranded fixtures and fittings (subject to inventory)."
+      },
+      {
+        "title": "VAT",
+        "content": "VAT may be applicable to the rent, premium and any other figures quoted."
+      },
+      {
+        "title": "Planning/Licence",
+        "content": "Class E planning use with a premises licence allowing the sale of alcohol until 23:00 day of the week, with unrestricted bar use in the basement."
+      },
+      {
+        "title": "Confidentiality",
+        "content": "This sale is highly confidential and under no circumstances should a direct approach be made to staff as they are unaware of an impending sale."
+      },
+      {
+        "title": "Holding Deposit",
+        "content": "A holding deposit will be required to secure the property and will grant a period of exclusivity which will be held in the CDG Leisure client account until completion."
+      }
+    ],
+    "agent_name": "David Kornbluth",
+    "agent_email": "davidk@cdgleisure.com",
+    "agent_phone": "07507880040",
+    "agent_photo": "https://as-images.imgix.net/f926c6d488c8444a371fad6bac112331-dovvy%20pic%20for%20property%20details.jpg",
+    "images": [
+      {
+        "url": "https://as-images.imgix.net/5ad84d2ceb1f4edc6c8bcb01903469fb-frontage.jpeg",
+        "alt": "250 Bethnal Green Road, London, Bar / Cafe (A1) Lease Assignment - Frontage.jpeg",
+        "source_url": "https://as-images.imgix.net/5ad84d2ceb1f4edc6c8bcb01903469fb-frontage.jpeg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      },
+      {
+        "url": "https://as-images.imgix.net/80a03b806fcdf5125a23e3e97bb2ab2b-internal-2.jpg",
+        "alt": "250 Bethnal Green Road, London, Bar / Cafe (A1) Lease Assignment - internal 2.jpg",
+        "source_url": "https://as-images.imgix.net/80a03b806fcdf5125a23e3e97bb2ab2b-internal-2.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      },
+      {
+        "url": "https://as-images.imgix.net/120ded46a663f5411b8b5ddf47437ca1-internal-1.jpg",
+        "alt": "250 Bethnal Green Road, London, Bar / Cafe (A1) Lease Assignment - internal 1.jpg",
+        "source_url": "https://as-images.imgix.net/120ded46a663f5411b8b5ddf47437ca1-internal-1.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      }
+    ],
+    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/a98c73453ffebbb6e9becfe182bd9cc4.pdf"
+  },
+  {
+    "source": "cdg",
+    "source_ref": "384925",
+    "source_url": "https://www.cdgleisure.com/find-a-property/properties/384925-dalston-hackney-pub-lease-for-sale-london",
+    "status": "Available",
+    "source_updated_at": "2026-08-27T13:44:09+00:00",
+    "title": "Dalston/Hackney Pub Lease For Sale",
+    "summary": "Dalston/Hackney Pub - Lease For Sale",
+    "address_line": "Dalston/Hackney Pub Lease For Sale",
+    "area": null,
+    "city": "London",
+    "postcode": "E8",
+    "lat": 51.54432918163826,
+    "lng": -0.07275260478516454,
+    "property_type": "Bar / Pub / Restaurant",
+    "use_class": "Sui Generis",
+    "disposal_type": "lease_assignment",
+    "to_let": true,
+    "for_sale": false,
+    "rent_pa": 60000,
+    "rent_raw": "£60,000 per annum",
+    "rent_period": "per annum",
+    "premium": 75000,
+    "premium_raw": "£75,000",
+    "guide_price": null,
+    "price_qualifier": "offers_in_region",
+    "vat_applicable": true,
+    "rateable_value": null,
+    "business_rates": null,
+    "service_charge": null,
+    "estate_charge": null,
+    "parking_charge": null,
+    "tenure_raw": "We will offer an assignment of your 20 year underlease expiring July 2045, subject to 5 yearly rent reviews.",
+    "lease_term_years": null,
+    "lease_expiry": "2045-07-01",
+    "rent_review_basis": "5 yearly",
+    "next_rent_review": null,
+    "inside_1954_act": null,
+    "size_sqft": 2300,
+    "size_sqm": 213.67,
+    "covers_internal": 65,
+    "covers_external": 30,
+    "floors": [
+      {
+        "name": "Ground",
+        "sqft": 1000,
+        "sqm": 92.9
+      },
+      {
+        "name": "Basement",
+        "sqft": 1300,
+        "sqm": 120.77
+      }
+    ],
+    "licensing_notes": "The premises benefit from Sui generis planning use with a premises license allowing alcohol until 23:00 Sunday to Wednesday and 00:00 Thursday to Saturday, with standard pub/bar conditions, i.e. no restriction on vertical drinking or alcohol without food.",
+    "fit_out_state": "fully_fitted",
+    "epc_rating": null,
+    "description": "The pub restaurant is laid out over ground floor to accommodate is laid out to accommodate approximately 65 covers and a full kitchen with extract services. There are an additional 30 covers in the large terrace to the front of the property. The basement houses the cellar and other storage as well as a prep kitchen.",
+    "location_description": "The premises are located in a corner position at the junction of Queensbridge Road with Richmond Road, in Hackney, close to Dalston Station. The area is largely residential in nature, making this pub a magnet for locals.",
+    "key_features": [
+      "Great neighbourhood Location",
+      "Beautiful Fully Fitted Pub Premises",
+      "Outside Seating for 35 Covers",
+      "Full Kitchen with Extract"
+    ],
+    "sections": [
+      {
+        "title": "Description",
+        "content": "The pub restaurant is laid out over ground floor to accommodate is laid out to accommodate approximately 65 covers and a full kitchen with extract services. There are an additional 30 covers in the large terrace to the front of the property. The basement houses the cellar and other storage as well as a prep kitchen."
+      },
+      {
+        "title": "Tenure",
+        "content": "We will offer an assignment of your 20 year underlease expiring July 2045, subject to 5 yearly rent reviews."
+      },
+      {
+        "title": "Passing Rent",
+        "content": "£60,000 per annum exclusive."
+      },
+      {
+        "title": "Premium",
+        "content": "Offers in the region of £40,000."
+      },
+      {
+        "title": "VAT",
+        "content": "All prices quoted may be subject to VAT if applicable."
+      },
+      {
+        "title": "Planning/Licence",
+        "content": "The premises benefit from Sui generis planning use with a premises license allowing alcohol until 23:00 Sunday to Wednesday and 00:00 Thursday to Saturday, with standard pub/bar conditions, i.e. no restriction on vertical drinking or alcohol without food."
+      },
+      {
+        "title": "Confidentiality",
+        "content": "Highly confidential, staff are unaware and must not be approached."
+      },
+      {
+        "title": "Holding Deposit",
+        "content": "A holding deposit will be required to secure the property; the deposit will buy a period of exclusivity and will be held in the CDG Leisure client account."
+      }
+    ],
+    "agent_name": "David Kornbluth",
+    "agent_email": "davidk@cdgleisure.com",
+    "agent_phone": "07507880040",
+    "agent_photo": "https://as-images.imgix.net/f926c6d488c8444a371fad6bac112331-dovvy%20pic%20for%20property%20details.jpg",
+    "images": [
+      {
+        "url": "https://as-images.imgix.net/91df00061130b0aece0e77f463bde044-generated-image.jpg",
+        "alt": "Dalston/Hackney Pub Lease For Sale, London, Bar / Pub / Restaurant Lease Assignment - generated_image.jpg",
+        "source_url": "https://as-images.imgix.net/91df00061130b0aece0e77f463bde044-generated-image.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      }
+    ],
+    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/c5f280955f4c9e75ca9131732dd51408.pdf"
+  },
+  {
+    "source": "cdg",
+    "source_ref": "389856",
+    "source_url": "https://www.cdgleisure.com/find-a-property/properties/389856-38-william-iv-street-london",
+    "status": "Available",
+    "source_updated_at": "2026-08-27T13:50:43+00:00",
+    "title": "38 William IV Street",
+    "summary": "Covent Garden Bubble Tea Shop Lease For Sale",
+    "address_line": "38 William IV Street",
+    "area": null,
+    "city": "London",
+    "postcode": "WC2N 4DD",
+    "lat": 51.509601,
+    "lng": -0.126499,
+    "property_type": "Cafe (A1)",
+    "use_class": null,
+    "disposal_type": "lease_assignment",
+    "to_let": true,
+    "for_sale": false,
+    "rent_pa": 65000,
+    "rent_raw": "£65,000 per annum",
+    "rent_period": "per annum",
+    "premium": null,
+    "premium_raw": null,
+    "guide_price": null,
+    "price_qualifier": "offers_in_region",
+    "vat_applicable": true,
+    "rateable_value": null,
+    "business_rates": null,
+    "service_charge": null,
+    "estate_charge": null,
+    "parking_charge": null,
+    "tenure_raw": "An assignment of the existing lease granted in November 2022 for a term of 10 years subject to five yearly rent reviews. The lease is contracted outside the security provisions of the Landlord & Tenant Act 1954.",
+    "lease_term_years": null,
+    "lease_expiry": null,
+    "rent_review_basis": null,
+    "next_rent_review": null,
+    "inside_1954_act": null,
+    "size_sqft": 848,
+    "size_sqm": 78.78,
+    "covers_internal": null,
+    "covers_external": null,
+    "floors": [
+      {
+        "name": "Ground",
+        "sqft": 548,
+        "sqm": 50.91
+      },
+      {
+        "name": "Basement",
+        "sqft": 300,
+        "sqm": 27.87
+      }
+    ],
+    "licensing_notes": "The premises benefit from E Class planning.",
+    "fit_out_state": "fully_fitted",
+    "epc_rating": null,
+    "description": "The premises are currently fitted out as a bubble tea shop and laid out over ground floor and basement.",
+    "location_description": "Situated in prime Covent Garden, just moments away from Trafalgar Square and the Strand and close to Charing Cross Station. The area is very busy 7 days a week with high tourist, student and office footfall.",
+    "key_features": [
+      "Prime Location",
+      "High Footfall",
+      "Fully Fitted Out"
+    ],
+    "sections": [
+      {
+        "title": "Description",
+        "content": "The premises are currently fitted out as a bubble tea shop and laid out over ground floor and basement."
+      },
+      {
+        "title": "Tenure",
+        "content": "An assignment of the existing lease granted in November 2022 for a term of 10 years subject to five yearly rent reviews. The lease is contracted outside the security provisions of the Landlord & Tenant Act 1954."
+      },
+      {
+        "title": "Passing Rent",
+        "content": "The current passing rent is £65,000 per annum exclusive plus 10% of turnover whichever the higher."
+      },
+      {
+        "title": "Premium",
+        "content": "Offers in the region of £40,000."
+      },
+      {
+        "title": "VAT",
+        "content": "VAT may be applicable to the rent, premium and any other figures quoted."
+      },
+      {
+        "title": "Planning",
+        "content": "The premises benefit from E Class planning."
+      },
+      {
+        "title": "Holding Deposit",
+        "content": "A holding deposit will be required to secure the property which will allow a period of exclusivity and will be held in the CDG Leisure client account."
+      }
+    ],
+    "agent_name": "David Kornbluth",
+    "agent_email": "davidk@cdgleisure.com",
+    "agent_phone": "07507880040",
+    "agent_photo": "https://as-images.imgix.net/f926c6d488c8444a371fad6bac112331-dovvy%20pic%20for%20property%20details.jpg",
+    "images": [
+      {
+        "url": "https://as-images.imgix.net/f9fec1b4a9cfe834dc0a167cf8c9a48a-screenshot-2026-08-18-194440.jpg",
+        "alt": "38 William IV Street, London, Cafe (A1) Lease Assignment - Screenshot 2026-08-18 194440.jpg",
+        "source_url": "https://as-images.imgix.net/f9fec1b4a9cfe834dc0a167cf8c9a48a-screenshot-2026-08-18-194440.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      }
+    ],
+    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/7765e34ed7f222762b35ee039242c0b4.pdf"
+  },
+  {
+    "source": "cdg",
+    "source_ref": "385021",
+    "source_url": "https://www.cdgleisure.com/find-a-property/properties/385021-wardour-street-cafe-london",
+    "status": "Available",
+    "source_updated_at": "2026-08-13T12:33:06+00:00",
+    "title": "Wardour Street Cafe",
+    "summary": "Prime Soho Cafe Premises - Lease For Sale",
+    "address_line": "Wardour Street Cafe",
+    "area": "Soho",
+    "city": "London",
+    "postcode": "W1F",
+    "lat": 51.513586783101935,
+    "lng": -0.1365061058349526,
+    "property_type": "Cafe (A1)",
+    "use_class": "Class E",
+    "disposal_type": "lease_assignment",
+    "to_let": true,
+    "for_sale": false,
+    "rent_pa": 70000,
+    "rent_raw": "£70,000 per annum",
+    "rent_period": "per annum",
+    "premium": null,
+    "premium_raw": null,
+    "guide_price": null,
+    "price_qualifier": "offers_in_region",
+    "vat_applicable": true,
+    "rateable_value": null,
+    "business_rates": null,
+    "service_charge": null,
+    "estate_charge": null,
+    "parking_charge": null,
+    "tenure_raw": "Assignment of the existing lease expiring in April 2032 with the next rent review being April 2027. The lease is contracted outside the security provisions of the Landlord & Tenant Act 1954.",
+    "lease_term_years": null,
+    "lease_expiry": "2032-04-01",
+    "rent_review_basis": null,
+    "next_rent_review": null,
+    "inside_1954_act": null,
+    "size_sqft": 1000,
+    "size_sqm": 92.9,
+    "covers_internal": null,
+    "covers_external": null,
+    "floors": [
+      {
+        "name": "Ground",
+        "sqft": 500,
+        "sqm": 46.45
+      },
+      {
+        "name": "Basement",
+        "sqft": 500,
+        "sqm": 46.45
+      }
+    ],
+    "licensing_notes": "The premises benefit from Class E planning use.",
+    "fit_out_state": "fully_fitted",
+    "epc_rating": null,
+    "description": "The premises provide an attractive, well-configured ground floor trading space with customer seating, a prominent serving counter and ancillary basement accommodation, benefiting from an inviting frontage suited to a variety of concepts.",
+    "location_description": "Situated on Wardour Street in the heart of Soho, surrounded by renowned restaurants, bars, theatres and entertainment venues, within walking distance of Tottenham Court Road, Leicester Square and Piccadilly Circus stations.",
+    "key_features": [
+      "Busy Location on Wardour Street",
+      "Fully Fitted Cafe/Dessert Unit",
+      "Good Lease"
+    ],
+    "sections": [
+      {
+        "title": "Description",
+        "content": "The premises provide an attractive, well-configured ground floor trading space with customer seating, a prominent serving counter and ancillary basement accommodation, benefiting from an inviting frontage suited to a variety of concepts."
+      },
+      {
+        "title": "Tenure",
+        "content": "Assignment of the existing lease expiring in April 2032 with the next rent review being April 2027. The lease is contracted outside the security provisions of the Landlord & Tenant Act 1954."
+      },
+      {
+        "title": "Passing Rent",
+        "content": "The current passing rent is £70,000 per annum exclusive."
+      },
+      {
+        "title": "Premium",
+        "content": "Offers in the region of £95,000 to include the leasehold interest, goodwill, fixtures and fittings (subject to inventory)."
+      },
+      {
+        "title": "VAT",
+        "content": "All prices quoted may be subject to VAT if applicable."
+      },
+      {
+        "title": "Planning",
+        "content": "The premises benefit from Class E planning use."
+      },
+      {
+        "title": "Confidentiality",
+        "content": "Highly confidential, staff are unaware and must not be approached."
+      },
+      {
+        "title": "Holding Deposit",
+        "content": "A holding deposit will be required to secure the property; the deposit will buy a period of exclusivity and will be held in the CDG Leisure client account."
+      }
+    ],
+    "agent_name": "David Kornbluth",
+    "agent_email": "davidk@cdgleisure.com",
+    "agent_phone": "07507880040",
+    "agent_photo": "https://as-images.imgix.net/f926c6d488c8444a371fad6bac112331-dovvy%20pic%20for%20property%20details.jpg",
+    "images": [
+      {
+        "url": "https://as-images.imgix.net/098443807939c766281cdb773ec1b005-cafe.jpg",
+        "alt": "Wardour Street Cafe, London, Cafe (A1) Lease Assignment - cafe.jpg",
+        "source_url": "https://as-images.imgix.net/098443807939c766281cdb773ec1b005-cafe.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      }
+    ],
+    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/ad248d8f58149dd25d395b837b7055ce.pdf"
+  },
+  {
+    "source": "cdg",
+    "source_ref": "388822",
+    "source_url": "https://www.cdgleisure.com/find-a-property/properties/388822-64-battersea-rise-london",
+    "status": "Available",
+    "source_updated_at": "2026-08-10T15:00:34+00:00",
+    "title": "64 Battersea Rise",
+    "summary": "Battersea Rise Restaurant - New Lease",
+    "address_line": "64 Battersea Rise",
+    "area": null,
+    "city": "London",
+    "postcode": "SW11 1EQ",
+    "lat": 51.4610344,
+    "lng": -0.1662195,
+    "property_type": "Restaurant",
+    "use_class": null,
+    "disposal_type": "new_lease",
+    "to_let": true,
+    "for_sale": false,
+    "rent_pa": null,
+    "rent_raw": "Rent on application",
+    "rent_period": null,
+    "premium": null,
+    "premium_raw": null,
+    "guide_price": null,
+    "price_qualifier": "offers_in_region",
+    "vat_applicable": true,
+    "rateable_value": null,
+    "business_rates": null,
+    "service_charge": null,
+    "estate_charge": null,
+    "parking_charge": null,
+    "tenure_raw": "A new lease for a term to be agreed, subject to 5 to yearly rent reviews. the lease will be granted outside the Landlord and Tenant Act 1954, part 2 amended.",
+    "lease_term_years": null,
+    "lease_expiry": null,
+    "rent_review_basis": null,
+    "next_rent_review": null,
+    "inside_1954_act": null,
+    "size_sqft": 1810,
+    "size_sqm": 168.16,
+    "covers_internal": 80,
+    "covers_external": null,
+    "floors": [
+      {
+        "name": "Ground",
+        "sqft": 1080,
+        "sqm": 100.34
+      },
+      {
+        "name": "Basement",
+        "sqft": 730,
+        "sqm": 67.82
+      }
+    ],
+    "licensing_notes": "The premises benefit from an E-class planning use, with a premises licence to sell<br />\nalcohol from 10am to 1am from Friday to Saturday, 10am to 12pm from Monday to<br />\nThursday and till 11:30pm on Sunday.",
+    "fit_out_state": "fully_fitted",
+    "epc_rating": null,
+    "description": "The premises are fully fitted as a pizza restaurant, benefitting from full extraction and a fully fitted commercial kitchen. There are approximately 80 covers over ground floor an basement.",
+    "location_description": "The premises are in a busy parade of restaurants, shops and food retailers, such as<br />\nPho, Pad Thai Story, Banana Tree and Honi Poke to name a few. The premises are located a short walk from Clapham Junction Station.",
+    "key_features": [
+      "Great Corner Location",
+      "Fully Fitted Kitchen with Extraction",
+      "Late Licence",
+      "Fully Fitted to High Standard",
+      "New Lease"
+    ],
+    "sections": [
+      {
+        "title": "Description",
+        "content": "The premises are fully fitted as a pizza restaurant, benefitting from full extraction and a fully fitted commercial kitchen. There are approximately 80 covers over ground floor an basement."
+      },
+      {
+        "title": "Tenure",
+        "content": "A new lease for a term to be agreed, subject to 5 to yearly rent reviews. the lease will be granted outside the Landlord and Tenant Act 1954, part 2 amended."
+      },
+      {
+        "title": "Quoting Rent",
+        "content": "Offers in the region of £65,000 per annum exclusive."
+      },
+      {
+        "title": "Premium",
+        "content": "Nominal premium offers invited for these fully fitted premises."
+      },
+      {
+        "title": "VAT",
+        "content": "VAT may be applicable to the rent, premium and other outgoings."
+      },
+      {
+        "title": "Planning/Licence",
+        "content": "The premises benefit from an E-class planning use, with a premises licence to sell<br />\nalcohol from 10am to 1am from Friday to Saturday, 10am to 12pm from Monday to<br />\nThursday and till 11:30pm on Sunday."
+      },
+      {
+        "title": "Holding Deposit",
+        "content": "A holding deposit will be required to secure the property and will grant a period of<br />\nexclusivity which will be held in the CDG Leisure client account until completion."
+      },
+      {
+        "title": "Confidentiality",
+        "content": "This sale is highly confidential and under no circumstances should a direct approach<br />\nbe made to staff as they are unaware of an impending sale."
+      }
+    ],
+    "agent_name": "David Kornbluth",
+    "agent_email": "davidk@cdgleisure.com",
+    "agent_phone": "07507880040",
+    "agent_photo": "https://as-images.imgix.net/f926c6d488c8444a371fad6bac112331-dovvy%20pic%20for%20property%20details.jpg",
+    "images": [
+      {
+        "url": "https://as-images.imgix.net/2879f9c4a682ff03e9eb2ab35d636e36-8ded2367-0e97-45ea-b5c1-937ad6277d42.jpg",
+        "alt": "64 Battersea Rise, London, Restaurant To Let - 8ded2367-0e97-45ea-b5c1-937ad6277d42.jpg",
+        "source_url": "https://as-images.imgix.net/2879f9c4a682ff03e9eb2ab35d636e36-8ded2367-0e97-45ea-b5c1-937ad6277d42.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      },
+      {
+        "url": "https://as-images.imgix.net/fddd7c719a1d4ff7f635048c5d390e41-4c0ef967-e698-4610-8660-0a40307e22f9.jpg",
+        "alt": "64 Battersea Rise, London, Restaurant To Let - 4c0ef967-e698-4610-8660-0a40307e22f9.jpg",
+        "source_url": "https://as-images.imgix.net/fddd7c719a1d4ff7f635048c5d390e41-4c0ef967-e698-4610-8660-0a40307e22f9.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      },
+      {
+        "url": "https://as-images.imgix.net/0a611f035d7ce86f3a8e9d0bc9c26d09-28665af6-3ad3-44a4-97b1-c3476c89a0b2.jpg",
+        "alt": "64 Battersea Rise, London, Restaurant To Let - 28665af6-3ad3-44a4-97b1-c3476c89a0b2.jpg",
+        "source_url": "https://as-images.imgix.net/0a611f035d7ce86f3a8e9d0bc9c26d09-28665af6-3ad3-44a4-97b1-c3476c89a0b2.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      },
+      {
+        "url": "https://as-images.imgix.net/fe13c6df5dc6fef75e80b9594d2b20dd-53740c4b-6b1c-47fb-a6ec-617e95231035.jpg",
+        "alt": "64 Battersea Rise, London, Restaurant To Let - 53740c4b-6b1c-47fb-a6ec-617e95231035.jpg",
+        "source_url": "https://as-images.imgix.net/fe13c6df5dc6fef75e80b9594d2b20dd-53740c4b-6b1c-47fb-a6ec-617e95231035.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      },
+      {
+        "url": "https://as-images.imgix.net/a29c1f905ad2aea3cc2b108f20dfae42-15782d2d-fcfb-46f2-92be-02ffbd7135d8.jpg",
+        "alt": "64 Battersea Rise, London, Restaurant To Let - 15782d2d-fcfb-46f2-92be-02ffbd7135d8.jpg",
+        "source_url": "https://as-images.imgix.net/a29c1f905ad2aea3cc2b108f20dfae42-15782d2d-fcfb-46f2-92be-02ffbd7135d8.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      },
+      {
+        "url": "https://as-images.imgix.net/10d21dc8d12621bf8ebcd78c71a97eb8-79636649-3e3c-4912-a917-0b9743e81f45.jpg",
+        "alt": "64 Battersea Rise, London, Restaurant To Let - 79636649-3e3c-4912-a917-0b9743e81f45.jpg",
+        "source_url": "https://as-images.imgix.net/10d21dc8d12621bf8ebcd78c71a97eb8-79636649-3e3c-4912-a917-0b9743e81f45.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      },
+      {
+        "url": "https://as-images.imgix.net/8319cb1e58dd4d86f7a02c77cfc14439-7e9eaaa4-93b3-4ab4-865c-10f87abc4b9c.jpg",
+        "alt": "64 Battersea Rise, London, Restaurant To Let - 7e9eaaa4-93b3-4ab4-865c-10f87abc4b9c.jpg",
+        "source_url": "https://as-images.imgix.net/8319cb1e58dd4d86f7a02c77cfc14439-7e9eaaa4-93b3-4ab4-865c-10f87abc4b9c.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      },
+      {
+        "url": "https://as-images.imgix.net/12eadba12c483b213c788afa6f8a2fd9-0ef69bde-4e87-4f3b-988f-98fd198ef8e8.jpg",
+        "alt": "64 Battersea Rise, London, Restaurant To Let - 0ef69bde-4e87-4f3b-988f-98fd198ef8e8.jpg",
+        "source_url": "https://as-images.imgix.net/12eadba12c483b213c788afa6f8a2fd9-0ef69bde-4e87-4f3b-988f-98fd198ef8e8.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      },
+      {
+        "url": "https://as-images.imgix.net/49dba00f3a9a9bfbaa2ce53d1731ecdb-db0d1827-b457-4ade-90ee-633ed13932c3.jpg",
+        "alt": "64 Battersea Rise, London, Restaurant To Let - db0d1827-b457-4ade-90ee-633ed13932c3.jpg",
+        "source_url": "https://as-images.imgix.net/49dba00f3a9a9bfbaa2ce53d1731ecdb-db0d1827-b457-4ade-90ee-633ed13932c3.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      },
+      {
+        "url": "https://as-images.imgix.net/4959728530550a31b7b16361c1d318aa-035cf1e8-b9fb-4023-988d-3a8fdd18ff17.jpg",
+        "alt": "64 Battersea Rise, London, Restaurant To Let - 035cf1e8-b9fb-4023-988d-3a8fdd18ff17.jpg",
+        "source_url": "https://as-images.imgix.net/4959728530550a31b7b16361c1d318aa-035cf1e8-b9fb-4023-988d-3a8fdd18ff17.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      }
+    ],
+    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/c5d6155ba6ce0374fa16606538026c9d.pdf"
+  },
+  {
+    "source": "cdg",
+    "source_ref": "375806",
+    "source_url": "https://www.cdgleisure.com/find-a-property/properties/375806-126-clapham-high-street-london",
+    "status": "Under Offer",
+    "source_updated_at": "2026-08-17T12:07:08+00:00",
+    "title": "126 Clapham High Street",
+    "summary": "Prime Fully Fitted Restaurant on Clapham High Street - NEW LEASE",
+    "address_line": "126 Clapham High Street",
+    "area": null,
+    "city": "London",
+    "postcode": "SW4 7UH",
+    "lat": 51.4629682,
+    "lng": -0.1353819,
+    "property_type": "Restaurant",
+    "use_class": null,
+    "disposal_type": "new_lease",
+    "to_let": true,
+    "for_sale": false,
+    "rent_pa": 75000,
+    "rent_raw": "£75,000 per annum",
+    "rent_period": "per annum",
+    "premium": null,
+    "premium_raw": null,
+    "guide_price": null,
+    "price_qualifier": null,
+    "vat_applicable": true,
+    "rateable_value": null,
+    "business_rates": null,
+    "service_charge": null,
+    "estate_charge": null,
+    "parking_charge": null,
+    "tenure_raw": "The granting of a new FRI Lease for a term to be agreed, with 5 yearly rent reviews.",
+    "lease_term_years": null,
+    "lease_expiry": null,
+    "rent_review_basis": "5 yearly",
+    "next_rent_review": null,
+    "inside_1954_act": null,
+    "size_sqft": 1800,
+    "size_sqm": 167.23,
+    "covers_internal": null,
+    "covers_external": 100,
+    "floors": [
+      {
+        "name": "Ground",
+        "sqft": 1800,
+        "sqm": 167.23
+      }
+    ],
+    "licensing_notes": "The premises benefit from E Class use and a premises licence is in place to sell alcohol until MIDNIGHT with the standard restaurant conditions.",
+    "fit_out_state": "fully_fitted",
+    "epc_rating": null,
+    "description": "The Restaurant is fully fitted out to a very good standard entirely over the ground floor with full kitchen extraction. The seating capacity is approximately 100 covers and also benefits from outside seating on the front terrace (subject to licence renewal).",
+    "location_description": "Prominently located on Clapham High Street which benefits from very high footfall day and night, every day of the week. Nearby operators include Mc Donalds, KFC,  M&S Foodhall, Shake Shack, Popeyes, and Wingstop, to name but a few. Transport links are excellent with Clapham Common Tube Station being only a few minutes walk away.",
+    "key_features": [
+      "Prominent Location on The Busy High Street",
+      "Good pedestrian footfall at all times",
+      "100 Covers",
+      "Full Kitchen Extraction",
+      "Alcohol Licence in Place",
+      "Outside Seating"
+    ],
+    "sections": [
+      {
+        "title": "Description",
+        "content": "The Restaurant is fully fitted out to a very good standard entirely over the ground floor with full kitchen extraction. The seating capacity is approximately 100 covers and also benefits from outside seating on the front terrace (subject to licence renewal)."
+      },
+      {
+        "title": "Tenure",
+        "content": "The granting of a new FRI Lease for a term to be agreed, with 5 yearly rent reviews."
+      },
+      {
+        "title": "Asking Rent",
+        "content": "£75,000 per annum exclusive."
+      },
+      {
+        "title": "Premium",
+        "content": "NIL"
+      },
+      {
+        "title": "VAT",
+        "content": "VAT may be applicable to the rent, premium and all other figures quoted."
+      },
+      {
+        "title": "Planning/Licence",
+        "content": "The premises benefit from E Class use and a premises licence is in place to sell alcohol until MIDNIGHT with the standard restaurant conditions."
+      },
+      {
+        "title": "Holding Deposit",
+        "content": "A holding deposit will be required to secure the property which will allow a period of exclusivity and will be held in the CDG Leisure client account."
+      }
+    ],
+    "agent_name": "Salvatore Di Natale",
+    "agent_email": "salvatore@cdgleisure.com",
+    "agent_phone": "07989 471288",
+    "agent_photo": "https://as-images.imgix.net/0c80fd529148bd3060556967a6287ef8-salv%20pic%20for%20property%20details.jpg",
+    "images": [
+      {
+        "url": "https://as-images.imgix.net/7f705522690431c27e9d4c734aead017-img-3854.jpeg",
+        "alt": "126 Clapham High Street, London, Restaurant To Let - IMG_3854.jpeg",
+        "source_url": "https://as-images.imgix.net/7f705522690431c27e9d4c734aead017-img-3854.jpeg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      },
+      {
+        "url": "https://as-images.imgix.net/460df709838ceb424116c6e5dd01a945-4.jpg",
+        "alt": "126 Clapham High Street, London, Restaurant To Let - 4.jpg",
+        "source_url": "https://as-images.imgix.net/460df709838ceb424116c6e5dd01a945-4.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      },
+      {
+        "url": "https://as-images.imgix.net/bcf09cec1b5260dd29fa0eb38a039316-3.jpg",
+        "alt": "126 Clapham High Street, London, Restaurant To Let - 3.jpg",
+        "source_url": "https://as-images.imgix.net/bcf09cec1b5260dd29fa0eb38a039316-3.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
+      }
+    ],
+    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/114c2a4e4004c3012aafcef44733e027.pdf"
+  },
+  {
+    "source": "cdg",
     "source_ref": "384064",
     "source_url": "https://www.cdgleisure.com/find-a-property/properties/384064-southwark-street-london",
-    "status": "Available",
-    "source_updated_at": "2026-07-27T20:35:05+00:00",
+    "status": "Under Offer",
+    "source_updated_at": "2026-08-04T14:25:54+00:00",
     "title": "Southwark Street",
     "summary": "Fully Fitted Restaurant/Takeaway located in very busy Borough Location - Lots of Passing Trade",
     "address_line": "Southwark Street",
@@ -858,8 +1917,8 @@
     "source": "cdg",
     "source_ref": "382802",
     "source_url": "https://www.cdgleisure.com/find-a-property/properties/382802-long-acre-london",
-    "status": "Available",
-    "source_updated_at": "2026-07-17T13:56:17+00:00",
+    "status": "Under Offer",
+    "source_updated_at": "2026-08-26T16:24:08+00:00",
     "title": "Long Acre",
     "summary": "Fully Fitted Cafe/Restaurant in Prime Covent Garden With Light Extraction in Situ and Premises License in Place",
     "address_line": "Long Acre",
@@ -1088,7 +2147,7 @@
     "source_ref": "380792",
     "source_url": "https://www.cdgleisure.com/find-a-property/properties/380792-islington-wine-bar-profitable-business-for-sale-london",
     "status": "Available",
-    "source_updated_at": "2026-07-16T16:13:23+00:00",
+    "source_updated_at": "2026-08-24T14:46:53+00:00",
     "title": "Islington Wine Bar - Profitable Business For Sale",
     "summary": "Islington Restaurant/Wine Bar Lease For Sale",
     "address_line": "Islington Wine Bar - Profitable Business For Sale",
@@ -1123,7 +2182,7 @@
     "inside_1954_act": null,
     "size_sqft": 525,
     "size_sqm": 48.78,
-    "covers_internal": 20,
+    "covers_internal": 41,
     "covers_external": null,
     "floors": [
       {
@@ -1140,8 +2199,8 @@
     "licensing_notes": "The premises benefit from Class E planning use with a premises license allowing alcohol to be served on the premises with or without food and off the premises with food only, until 23:00 every day of the week.",
     "fit_out_state": "fully_fitted",
     "epc_rating": null,
-    "description": "Fully fitted wine bar laid out to accommodate approximately 20 covers over ground and first floors with storage in the basement.",
-    "location_description": "Wine bar premises in a great neighbourhood location close to Highbury and Islington station. The area benefits from many long established, independent retail and restaurant businesses as well as the nationals",
+    "description": "Fully fitted wine bar arranged over two floors — ground floor and basement — providing approximately 41 covers in total, with a bar and seating area on the ground floor and an additional customer seating area at basement level. There is also useful storage space in the basement, a large walk-in fridge within the ground-floor bar area, and a second walk-in fridge in the rear yard currently used for storage.",
+    "location_description": "Wine bar premises in a great neighbourhood location close to Highbury and Islington station. The area benefits from many long established, independent retail and restaurant businesses as well as the nationals.",
     "key_features": [
       "Lovely Profitable Wine Bar",
       "Great neighbourhood Location",
@@ -1152,7 +2211,7 @@
     "sections": [
       {
         "title": "Description",
-        "content": "Fully fitted wine bar laid out to accommodate approximately 20 covers over ground and first floors with storage in the basement."
+        "content": "Fully fitted wine bar arranged over two floors — ground floor and basement — providing approximately 41 covers in total, with a bar and seating area on the ground floor and an additional customer seating area at basement level. There is also useful storage space in the basement, a large walk-in fridge within the ground-floor bar area, and a second walk-in fridge in the rear yard currently used for storage."
       },
       {
         "title": "Tenure",
@@ -1210,8 +2269,8 @@
     "source": "cdg",
     "source_ref": "380633",
     "source_url": "https://www.cdgleisure.com/find-a-property/properties/380633-chinatown-soho-london",
-    "status": "Available",
-    "source_updated_at": "2026-07-17T13:57:28+00:00",
+    "status": "Under Offer",
+    "source_updated_at": "2026-08-10T19:19:57+00:00",
     "title": "Chinatown, Soho",
     "summary": "Confidentially Available - Prime Chinatown Location - Asian Style Operators Only - First Time on Market For 25 years!",
     "address_line": "Chinatown, Soho",
@@ -2279,126 +3338,6 @@
   },
   {
     "source": "cdg",
-    "source_ref": "375806",
-    "source_url": "https://www.cdgleisure.com/find-a-property/properties/375806-126-clapham-high-street-london",
-    "status": "Under Offer",
-    "source_updated_at": "2026-07-17T14:43:27+00:00",
-    "title": "126 Clapham High Street",
-    "summary": "Prime Fully Fitted Restaurant on Clapham High Street",
-    "address_line": "126 Clapham High Street",
-    "area": null,
-    "city": "London",
-    "postcode": "SW4 7UH",
-    "lat": 51.4629682,
-    "lng": -0.1353819,
-    "property_type": "Restaurant",
-    "use_class": null,
-    "disposal_type": "new_lease",
-    "to_let": true,
-    "for_sale": false,
-    "rent_pa": 75000,
-    "rent_raw": "£75,000 per annum",
-    "rent_period": "per annum",
-    "premium": null,
-    "premium_raw": null,
-    "guide_price": null,
-    "price_qualifier": null,
-    "vat_applicable": true,
-    "rateable_value": null,
-    "business_rates": null,
-    "service_charge": null,
-    "estate_charge": null,
-    "parking_charge": null,
-    "tenure_raw": "The granting of a new FRI Sub-lease for a term to be mutually agreed, with 5 yearly rent reviews.",
-    "lease_term_years": null,
-    "lease_expiry": null,
-    "rent_review_basis": "5 yearly",
-    "next_rent_review": null,
-    "inside_1954_act": null,
-    "size_sqft": 1600,
-    "size_sqm": 148.64,
-    "covers_internal": null,
-    "covers_external": 100,
-    "floors": [
-      {
-        "name": "Ground",
-        "sqft": 1600,
-        "sqm": 148.64
-      }
-    ],
-    "licensing_notes": "The premises benefit from E Class use and a premises licence is in place with the standard restaurant hours and conditions.",
-    "fit_out_state": "fully_fitted",
-    "epc_rating": null,
-    "description": "The Restaurant is fully fitted out to a very good standard entirely over the ground floor with full kitchen extraction. The seating capacity is approximately 100 covers and also benefits from outside seating on the front terrace (subject to licence renewal).",
-    "location_description": "Prominently located on Clapham High Street which benefits from very high footfall day and night, every day of the week. Nearby operators include Mc Donalds, KFC,  M&S Foodhall, Shake Shack, Popeyes, and Wingstop, to name but a few. Transport links are excellent with Clapham Common Tube Station being only a few minutes walk away.",
-    "key_features": [
-      "Prominent Location on The Busy High Street",
-      "Good pedestrian footfall at all times",
-      "70+ Covers",
-      "Full Kitchen Extraction",
-      "Alcohol Licence in Place",
-      "New Sub-Lease Available",
-      "Outside Seating"
-    ],
-    "sections": [
-      {
-        "title": "Description",
-        "content": "The Restaurant is fully fitted out to a very good standard entirely over the ground floor with full kitchen extraction. The seating capacity is approximately 100 covers and also benefits from outside seating on the front terrace (subject to licence renewal)."
-      },
-      {
-        "title": "Tenure",
-        "content": "The granting of a new FRI Sub-lease for a term to be mutually agreed, with 5 yearly rent reviews."
-      },
-      {
-        "title": "Asking Rent",
-        "content": "£75,000 per annum exclusive."
-      },
-      {
-        "title": "Premium",
-        "content": "Nominal Premium Offers Invited."
-      },
-      {
-        "title": "VAT",
-        "content": "VAT may be applicable to the rent, premium and all other figures quoted."
-      },
-      {
-        "title": "Planning/Licence",
-        "content": "The premises benefit from E Class use and a premises licence is in place with the standard restaurant hours and conditions."
-      },
-      {
-        "title": "Confidentiality",
-        "content": "Highly confidential and under no circumstances should a direct approach be made to staff as they are unaware of an impending sale."
-      },
-      {
-        "title": "Holding Deposit",
-        "content": "A holding deposit will be required to secure the property which will allow a period of exclusivity and will be held in the CDG Leisure client account."
-      }
-    ],
-    "agent_name": "Salvatore Di Natale",
-    "agent_email": "salvatore@cdgleisure.com",
-    "agent_phone": "07989 471288",
-    "agent_photo": "https://as-images.imgix.net/0c80fd529148bd3060556967a6287ef8-salv%20pic%20for%20property%20details.jpg",
-    "images": [
-      {
-        "url": "https://as-images.imgix.net/0c1d4c4d076d1cee02be05147a67b69e-frontage-best-2.jpg",
-        "alt": "126 Clapham High Street, London, Restaurant To Let - Frontage best 2.jpg",
-        "source_url": "https://as-images.imgix.net/0c1d4c4d076d1cee02be05147a67b69e-frontage-best-2.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/460df709838ceb424116c6e5dd01a945-4.jpg",
-        "alt": "126 Clapham High Street, London, Restaurant To Let - 4.jpg",
-        "source_url": "https://as-images.imgix.net/460df709838ceb424116c6e5dd01a945-4.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/bcf09cec1b5260dd29fa0eb38a039316-3.jpg",
-        "alt": "126 Clapham High Street, London, Restaurant To Let - 3.jpg",
-        "source_url": "https://as-images.imgix.net/bcf09cec1b5260dd29fa0eb38a039316-3.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      }
-    ],
-    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/114c2a4e4004c3012aafcef44733e027.pdf"
-  },
-  {
-    "source": "cdg",
     "source_ref": "376392",
     "source_url": "https://www.cdgleisure.com/find-a-property/properties/376392-22-inverness-street-london",
     "status": "Available",
@@ -2675,127 +3614,6 @@
       }
     ],
     "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/0431a98057610359f68fcf10216af9f6.pdf"
-  },
-  {
-    "source": "cdg",
-    "source_ref": "376306",
-    "source_url": "https://www.cdgleisure.com/find-a-property/properties/376306-304-bethnal-green-road-london",
-    "status": "Under Offer",
-    "source_updated_at": "2026-07-18T12:20:15+00:00",
-    "title": "304 Bethnal Green Road",
-    "summary": "Fully Fitted Corner Pub Premises on Bethnal Green Road in East London",
-    "address_line": "304 Bethnal Green Road",
-    "area": "East London",
-    "city": "London",
-    "postcode": "E2 0AG",
-    "lat": 51.526259,
-    "lng": -0.064704,
-    "property_type": "Bar / Pub",
-    "use_class": null,
-    "disposal_type": "new_lease",
-    "to_let": true,
-    "for_sale": false,
-    "rent_pa": null,
-    "rent_raw": null,
-    "rent_period": null,
-    "premium": null,
-    "premium_raw": null,
-    "guide_price": null,
-    "price_qualifier": "offers_in_region",
-    "vat_applicable": null,
-    "rateable_value": null,
-    "business_rates": null,
-    "service_charge": null,
-    "estate_charge": null,
-    "parking_charge": null,
-    "tenure_raw": "New lease available for a term to be arranged subject to periodic rent reviews.",
-    "lease_term_years": null,
-    "lease_expiry": null,
-    "rent_review_basis": null,
-    "next_rent_review": null,
-    "inside_1954_act": null,
-    "size_sqft": 2277,
-    "size_sqm": 211.54,
-    "covers_internal": null,
-    "covers_external": null,
-    "floors": [
-      {
-        "name": "Ground - Pub",
-        "sqft": 1047,
-        "sqm": 97.27
-      },
-      {
-        "name": "Basement - Pub",
-        "sqft": 1230,
-        "sqm": 114.27
-      }
-    ],
-    "licensing_notes": "A license is in place to sell alcohol without the need for food until 11pm every day of the week.",
-    "fit_out_state": "fully_fitted",
-    "epc_rating": null,
-    "description": "The premises are fully fit as a traditional pub on ground floor with lots of history and lots of local patronage as has been a pub for many years. The basement consists of storage, cellars and office.",
-    "location_description": "Located on the corner of Bethnal Green Road and Vallance Road in the heart of East London, within minutes walk to Bethnal Green Underground Station.",
-    "key_features": [
-      "Prominent Corner Location",
-      "Fully Fitted",
-      "New Lease Available",
-      "Low Asking Rent",
-      "Premises License in Place"
-    ],
-    "sections": [
-      {
-        "title": "Description",
-        "content": "The premises are fully fit as a traditional pub on ground floor with lots of history and lots of local patronage as has been a pub for many years. The basement consists of storage, cellars and office."
-      },
-      {
-        "title": "Tenure",
-        "content": "New lease available for a term to be arranged subject to periodic rent reviews."
-      },
-      {
-        "title": "Rent",
-        "content": "Offers in region of £45,000pax"
-      },
-      {
-        "title": "Holding Deposit",
-        "content": "A holding deposit will be required to secure the property; the deposit will buy a period of exclusivity and will be held in the CDG Leisure client account."
-      },
-      {
-        "title": "Premises License",
-        "content": "A license is in place to sell alcohol without the need for food until 11pm every day of the week."
-      }
-    ],
-    "agent_name": "Morris Greenberg",
-    "agent_email": "morris@cdgleisure.com",
-    "agent_phone": "0207 100 5520",
-    "agent_photo": "https://as-images.imgix.net/600c00648e2a5fd30d8e13c5f877c55b-mo%20pic.jpg",
-    "images": [
-      {
-        "url": "https://as-images.imgix.net/aaab21670b7bb224b08c7f5fa6b1bd63-pic-1.jpeg",
-        "alt": "304 Bethnal Green Road, London, Bar / Pub To Let - pic 1.jpeg",
-        "source_url": "https://as-images.imgix.net/aaab21670b7bb224b08c7f5fa6b1bd63-pic-1.jpeg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/441d869514f04641603cf23ef2f65074-pic-5.jpeg",
-        "alt": "304 Bethnal Green Road, London, Bar / Pub To Let - pic 5.jpeg",
-        "source_url": "https://as-images.imgix.net/441d869514f04641603cf23ef2f65074-pic-5.jpeg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/e5b34c66a75b011a396e46ec689394a0-pic-4.jpeg",
-        "alt": "304 Bethnal Green Road, London, Bar / Pub To Let - pic 4.jpeg",
-        "source_url": "https://as-images.imgix.net/e5b34c66a75b011a396e46ec689394a0-pic-4.jpeg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/808bbf682b3395961de5ff4029cda2c3-pic-3.jpeg",
-        "alt": "304 Bethnal Green Road, London, Bar / Pub To Let - pic 3.jpeg",
-        "source_url": "https://as-images.imgix.net/808bbf682b3395961de5ff4029cda2c3-pic-3.jpeg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/2d8f8bba10e739632bbba038b67ec4d4-pic-2.jpeg",
-        "alt": "304 Bethnal Green Road, London, Bar / Pub To Let - pic 2.jpeg",
-        "source_url": "https://as-images.imgix.net/2d8f8bba10e739632bbba038b67ec4d4-pic-2.jpeg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      }
-    ],
-    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/0bc9a731a9dc4748f2bf47a451f4abd5.pdf"
   },
   {
     "source": "cdg",
@@ -3947,134 +4765,6 @@
   },
   {
     "source": "cdg",
-    "source_ref": "373465",
-    "source_url": "https://www.cdgleisure.com/find-a-property/properties/373465-7-hammersmith-road-london",
-    "status": "Under Offer",
-    "source_updated_at": "2026-07-22T14:31:23+00:00",
-    "title": "7 Hammersmith Road",
-    "summary": "4am Restaurant Kensington Olympia",
-    "address_line": "7 Hammersmith Road",
-    "area": null,
-    "city": "London",
-    "postcode": "W14 8XJ",
-    "lat": 51.495828,
-    "lng": -0.208477,
-    "property_type": "Restaurant",
-    "use_class": "Class E",
-    "disposal_type": "new_lease",
-    "to_let": true,
-    "for_sale": false,
-    "rent_pa": 55000,
-    "rent_raw": "£55,000 per annum",
-    "rent_period": "per annum",
-    "premium": null,
-    "premium_raw": null,
-    "guide_price": null,
-    "price_qualifier": null,
-    "vat_applicable": true,
-    "rateable_value": null,
-    "business_rates": null,
-    "service_charge": null,
-    "estate_charge": null,
-    "parking_charge": null,
-    "tenure_raw": "The premises are available on a new lease for a term to be agreed, subject to 5 yearly rent reviews.",
-    "lease_term_years": null,
-    "lease_expiry": null,
-    "rent_review_basis": "5 yearly",
-    "next_rent_review": null,
-    "inside_1954_act": null,
-    "size_sqft": 1410,
-    "size_sqm": 131,
-    "covers_internal": null,
-    "covers_external": null,
-    "floors": [
-      {
-        "name": "Ground",
-        "sqft": 550,
-        "sqm": 51.1
-      },
-      {
-        "name": "Basement",
-        "sqft": 860,
-        "sqm": 79.9
-      }
-    ],
-    "licensing_notes": "The premises benefit from Class E planning use and there is a premises licence in place allowing the sale of alcohol every day of the week until 04:00.",
-    "fit_out_state": "shell",
-    "epc_rating": null,
-    "description": "Ground floor and basement restaurant unit in shell condition, benefitting from newly installed air conditioning and upgraded facilities. Full extract to roof level. Would suit a variety of restaurant or QSR operators.",
-    "location_description": "Located in an excellent position in Hammersmith Road, Olympia, opposite Kensington Olympia station and surrounded by a host of independent restaurant, takeaway, cafe and bar operators.",
-    "key_features": [
-      "New Lease Available",
-      "Full Extraction",
-      "Shell Condition",
-      "4am Late Night Refreshment and Alcohol Licence"
-    ],
-    "sections": [
-      {
-        "title": "Description",
-        "content": "Ground floor and basement restaurant unit in shell condition, benefitting from newly installed air conditioning and upgraded facilities. Full extract to roof level. Would suit a variety of restaurant or QSR operators."
-      },
-      {
-        "title": "Tenure",
-        "content": "The premises are available on a new lease for a term to be agreed, subject to 5 yearly rent reviews."
-      },
-      {
-        "title": "Quoting Rent",
-        "content": "£55,000 per annum exclusive."
-      },
-      {
-        "title": "Premium",
-        "content": "Nil premium."
-      },
-      {
-        "title": "VAT",
-        "content": "VAT may be applicable to the rent, premium and all other figures quoted."
-      },
-      {
-        "title": "Planning/Licence",
-        "content": "The premises benefit from Class E planning use and there is a premises licence in place allowing the sale of alcohol every day of the week until 04:00."
-      },
-      {
-        "title": "Holding Deposit",
-        "content": "A holding deposit will be required to secure the property which will allow a period of exclusivity and will be held in the CDG Leisure client account."
-      }
-    ],
-    "agent_name": "David Kornbluth",
-    "agent_email": "davidk@cdgleisure.com",
-    "agent_phone": "07507880040",
-    "agent_photo": "https://as-images.imgix.net/f926c6d488c8444a371fad6bac112331-dovvy%20pic%20for%20property%20details.jpg",
-    "images": [
-      {
-        "url": "https://as-images.imgix.net/b412f813234bf7e04aea215a8af35e38-frontage.jpg",
-        "alt": "7 Hammersmith Road, London, Restaurant To Let - FRONTAGE.jpg",
-        "source_url": "https://as-images.imgix.net/b412f813234bf7e04aea215a8af35e38-frontage.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/0f4be47b615076dd404374c108d186c3-50b7e4e0-ce07-4b44-99f4-fa33b9f41893.jpg",
-        "alt": "7 Hammersmith Road, London, Restaurant To Let - 50b7e4e0-ce07-4b44-99f4-fa33b9f41893.jpg",
-        "source_url": "https://as-images.imgix.net/0f4be47b615076dd404374c108d186c3-50b7e4e0-ce07-4b44-99f4-fa33b9f41893.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/a1a8fa129fe74361b6ed2dd5744b31a7-d0c8dc8b-b62e-4536-b432-d702a13fe40c.jpg",
-        "alt": "7 Hammersmith Road, London, Restaurant To Let - d0c8dc8b-b62e-4536-b432-d702a13fe40c.jpg",
-        "source_url": "https://as-images.imgix.net/a1a8fa129fe74361b6ed2dd5744b31a7-d0c8dc8b-b62e-4536-b432-d702a13fe40c.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/937fb93a8bbedf281349f31f2c3f4d77-7ccfb263-ff8c-4cf8-97e0-1bb76a28277f.jpg",
-        "alt": "7 Hammersmith Road, London, Restaurant To Let - 7ccfb263-ff8c-4cf8-97e0-1bb76a28277f.jpg",
-        "source_url": "https://as-images.imgix.net/937fb93a8bbedf281349f31f2c3f4d77-7ccfb263-ff8c-4cf8-97e0-1bb76a28277f.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/5ac4e451bb3792a30552d7d12e0d531b-e5ca3373-fc9e-45b4-b229-cab69817b927.jpg",
-        "alt": "7 Hammersmith Road, London, Restaurant To Let - e5ca3373-fc9e-45b4-b229-cab69817b927.jpg",
-        "source_url": "https://as-images.imgix.net/5ac4e451bb3792a30552d7d12e0d531b-e5ca3373-fc9e-45b4-b229-cab69817b927.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      }
-    ],
-    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/d93397d697ae1db000f04ef494c10832.pdf"
-  },
-  {
-    "source": "cdg",
     "source_ref": "372884",
     "source_url": "https://www.cdgleisure.com/find-a-property/properties/372884-247-249-lavender-hill-london",
     "status": "Available",
@@ -4377,8 +5067,8 @@
     "source": "cdg",
     "source_ref": "372409",
     "source_url": "https://www.cdgleisure.com/find-a-property/properties/372409-kingsway-london",
-    "status": "Under Offer",
-    "source_updated_at": "2026-07-18T12:20:42+00:00",
+    "status": "Available",
+    "source_updated_at": "2026-08-04T14:25:07+00:00",
     "title": "Kingsway",
     "summary": "Very Prime Kiosk Style Unit on Kingsway in busy Footfall Location with extraction in Situ",
     "address_line": "Kingsway",
@@ -4387,7 +5077,7 @@
     "postcode": "WC2",
     "lat": 51.5153743,
     "lng": -0.1188512,
-    "property_type": "Cafe (A1) / Restaurant",
+    "property_type": "Cafe (A1)",
     "use_class": null,
     "disposal_type": "new_lease",
     "to_let": true,
@@ -4472,7 +5162,7 @@
     "images": [
       {
         "url": "https://as-images.imgix.net/708a59ba6eba65fa2f760711045b40d6-noodles.jpg",
-        "alt": "Kingsway, London, Cafe (A1) / Restaurant To Let - noodles.jpg",
+        "alt": "Kingsway, London, Cafe (A1) To Let - noodles.jpg",
         "source_url": "https://as-images.imgix.net/708a59ba6eba65fa2f760711045b40d6-noodles.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
       }
     ],
@@ -4579,7 +5269,7 @@
     "source_ref": "371817",
     "source_url": "https://www.cdgleisure.com/find-a-property/properties/371817-cleveland-street-london",
     "status": "Under Offer",
-    "source_updated_at": "2026-07-18T12:19:24+00:00",
+    "source_updated_at": "2026-08-27T14:36:19+00:00",
     "title": "Cleveland Street",
     "summary": "Fully Fitted Restaurant in Prime Fitzrovia Location",
     "address_line": "Cleveland Street",
@@ -6597,120 +7287,6 @@
   },
   {
     "source": "cdg",
-    "source_ref": "353238",
-    "source_url": "https://www.cdgleisure.com/find-a-property/properties/353238-4-riverside-walk-kingston-upon-thames",
-    "status": "Available",
-    "source_updated_at": "2026-03-02T14:28:29+00:00",
-    "title": "4 Riverside Walk",
-    "summary": "Exciting Opportunity - Large Fitted Restaurant with Riverside Terrace in Kingston upon Thames",
-    "address_line": "4 Riverside Walk",
-    "area": null,
-    "city": "Kingston upon Thames",
-    "postcode": "KT1 1QN",
-    "lat": 51.410751,
-    "lng": -0.307833,
-    "property_type": "Restaurant",
-    "use_class": "Class E",
-    "disposal_type": "new_lease",
-    "to_let": true,
-    "for_sale": false,
-    "rent_pa": null,
-    "rent_raw": null,
-    "rent_period": null,
-    "premium": null,
-    "premium_raw": null,
-    "guide_price": null,
-    "price_qualifier": "on_application",
-    "vat_applicable": true,
-    "rateable_value": null,
-    "business_rates": null,
-    "service_charge": null,
-    "estate_charge": null,
-    "parking_charge": null,
-    "tenure_raw": "Available on a new lease for a term to be agreed, subject to periodic rent reviews.",
-    "lease_term_years": null,
-    "lease_expiry": null,
-    "rent_review_basis": null,
-    "next_rent_review": null,
-    "inside_1954_act": null,
-    "size_sqft": 4371,
-    "size_sqm": 406.08,
-    "covers_internal": null,
-    "covers_external": null,
-    "floors": [
-      {
-        "name": "Ground",
-        "sqft": 3817,
-        "sqm": 354.61
-      },
-      {
-        "name": "Ground - Terrace",
-        "sqft": 554,
-        "sqm": 51.47
-      }
-    ],
-    "licensing_notes": "Class E planning use and the ability to obtain a new Premises Licence to allow the sale of alcohol with standard restaurant hours and conditions.",
-    "fit_out_state": "fully_fitted",
-    "epc_rating": null,
-    "description": "The premises are currently laid out as a restaurant/bar over ground floor, benefitting from the full fit out and much of the equipment installed by Busaba. There is a large al fresco dining terrace overlooking the river.",
-    "location_description": "The premises are located in a great position on Riverside Walk, being the middle restaurant of the parade. This unit is a prime unit seeing as the main entrance to the new leisure scheme will be accessed adjacent to the entrance of this unit.",
-    "key_features": [
-      "Kingston Riverside Walk - An Exceptional Riverside Dining Destination",
-      "Fully Fitted Unit with Extraction",
-      "Overlooking the River Thames",
-      "Excellent Opportunity to be alongside Bills, Comptoir, Pizza Express"
-    ],
-    "sections": [
-      {
-        "title": "Description",
-        "content": "The premises are currently laid out as a restaurant/bar over ground floor, benefitting from the full fit out and much of the equipment installed by Busaba. There is a large al fresco dining terrace overlooking the river."
-      },
-      {
-        "title": "Tenure",
-        "content": "Available on a new lease for a term to be agreed, subject to periodic rent reviews."
-      },
-      {
-        "title": "Quoting Rent",
-        "content": "Upon application."
-      },
-      {
-        "title": "VAT",
-        "content": "May be applicable."
-      },
-      {
-        "title": "Planning/Licence",
-        "content": "Class E planning use and the ability to obtain a new Premises Licence to allow the sale of alcohol with standard restaurant hours and conditions."
-      },
-      {
-        "title": "Holding Deposit",
-        "content": "Upon agreement of a transaction we would request a holding deposit to be paid to CDG Leisure client account released upon completion of a transaction."
-      }
-    ],
-    "agent_name": "David Kornbluth",
-    "agent_email": "davidk@cdgleisure.com",
-    "agent_phone": "07507880040",
-    "agent_photo": "https://as-images.imgix.net/f926c6d488c8444a371fad6bac112331-dovvy%20pic%20for%20property%20details.jpg",
-    "images": [
-      {
-        "url": "https://as-images.imgix.net/3c55af1048ff6b19f66366f66e0d23fe-original-98849747-baeb-4663-aa15-29424e560070.jpeg",
-        "alt": "4 Riverside Walk, Kingston upon Thames, Restaurant To Let - original-98849747-BAEB-4663-AA15-29424E560070.jpeg",
-        "source_url": "https://as-images.imgix.net/3c55af1048ff6b19f66366f66e0d23fe-original-98849747-baeb-4663-aa15-29424e560070.jpeg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/1a6625f1f712543729f216916e40bd1e-original-4c7a2968-0184-48f9-976b-d3bc22855db7.jpeg",
-        "alt": "4 Riverside Walk, Kingston upon Thames, Restaurant To Let - original-4C7A2968-0184-48F9-976B-D3BC22855DB7.jpeg",
-        "source_url": "https://as-images.imgix.net/1a6625f1f712543729f216916e40bd1e-original-4c7a2968-0184-48f9-976b-d3bc22855db7.jpeg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/a79fa7684e87d3b56ebba920348fc03f-original-803bf3bd-ba49-478a-8ff6-95479f2ad800.jpeg",
-        "alt": "4 Riverside Walk, Kingston upon Thames, Restaurant To Let - original-803BF3BD-BA49-478A-8FF6-95479F2AD800.jpeg",
-        "source_url": "https://as-images.imgix.net/a79fa7684e87d3b56ebba920348fc03f-original-803bf3bd-ba49-478a-8ff6-95479f2ad800.jpeg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      }
-    ],
-    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/d765f32ae976d37ba28eb19ab023f050.pdf"
-  },
-  {
-    "source": "cdg",
     "source_ref": "353167",
     "source_url": "https://www.cdgleisure.com/find-a-property/properties/353167-376-380-high-road-leyton-london",
     "status": "Available",
@@ -7296,7 +7872,7 @@
     "source_ref": "346066",
     "source_url": "https://www.cdgleisure.com/find-a-property/properties/346066-leagrave-street-london",
     "status": "Available",
-    "source_updated_at": "2025-12-08T21:39:06+00:00",
+    "source_updated_at": "2026-08-10T19:22:04+00:00",
     "title": "Leagrave Street",
     "summary": "Open Plan Ground Floor Space in East London - Suitable for Gyms, Vets, Nursery and Other Leisure type Operators",
     "address_line": "Leagrave Street",
@@ -7401,243 +7977,6 @@
       }
     ],
     "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/89ef0b974ce1256f2a836a04ed3cd9de.pdf"
-  },
-  {
-    "source": "cdg",
-    "source_ref": "346061",
-    "source_url": "https://www.cdgleisure.com/find-a-property/properties/346061-kensington-high-street-london",
-    "status": "Available",
-    "source_updated_at": "2025-12-09T16:14:38+00:00",
-    "title": "Kensington High Street",
-    "summary": "Fully Fitted Restaurant in Prime Location on Kensington High Street - Assignment of Lease Although New Lease May Be Available",
-    "address_line": "Kensington High Street",
-    "area": null,
-    "city": "London",
-    "postcode": "W8",
-    "lat": 51.499916,
-    "lng": -0.195292,
-    "property_type": "Restaurant",
-    "use_class": "A3",
-    "disposal_type": "lease_assignment",
-    "to_let": true,
-    "for_sale": false,
-    "rent_pa": null,
-    "rent_raw": null,
-    "rent_period": null,
-    "premium": null,
-    "premium_raw": null,
-    "guide_price": null,
-    "price_qualifier": "on_application",
-    "vat_applicable": true,
-    "rateable_value": null,
-    "business_rates": null,
-    "service_charge": null,
-    "estate_charge": null,
-    "parking_charge": null,
-    "tenure_raw": "The original full repairing and insuring lease is granted from 29th of September 1999 for a term of 20 years with rent reviews every 5 years. There was a reversion for a further ten years from September 2019. The lease is granted inside the Security of Tenure Provisions of The Landlord and Tenant Act 1954 and a New Lease may be available.",
-    "lease_term_years": null,
-    "lease_expiry": null,
-    "rent_review_basis": null,
-    "next_rent_review": null,
-    "inside_1954_act": null,
-    "size_sqft": 2180,
-    "size_sqm": 202.53,
-    "covers_internal": null,
-    "covers_external": null,
-    "floors": [
-      {
-        "name": "Ground - Restaurant",
-        "sqft": 1112,
-        "sqm": 103.31
-      },
-      {
-        "name": "Basement - Restaurant",
-        "sqft": 1068,
-        "sqm": 99.22
-      }
-    ],
-    "licensing_notes": "We understand the premises benefit from A3 use with a premises licence allowing the sale of alcohol until midnight every day of the week except Sundays until 23.30 all with standard restaurant conditions applied.",
-    "fit_out_state": "fully_fitted",
-    "epc_rating": null,
-    "description": "The premises are fully fit to a good standard and are well maintained, trading over ground floor and basement with a limited space for outside seating across the front over the designated pavement lights demised to the premises.<br />\n<br />\nThere is a fully fitted kitchen, cold room, customer, toilets and storage in the basement.",
-    "location_description": "Located on the very busy south side of Kensington High Street, High Street Kensington tube is a short walk away with local operators including many multiple type operators all driving heavy footfall traffic to the property. As well as playing host to a wide range of restaurants and retailers there is an affluent residential population within the vicinity.",
-    "key_features": [
-      "Fully Fitted and Well Maintained",
-      "Fully Retractable Frontage",
-      "Limited Outside Seating",
-      "New Lease May be Available",
-      "Premises License in Place"
-    ],
-    "sections": [
-      {
-        "title": "Description",
-        "content": "The premises are fully fit to a good standard and are well maintained, trading over ground floor and basement with a limited space for outside seating across the front over the designated pavement lights demised to the premises.<br />\n<br />\nThere is a fully fitted kitchen, cold room, customer, toilets and storage in the basement."
-      },
-      {
-        "title": "Tenure",
-        "content": "The original full repairing and insuring lease is granted from 29th of September 1999 for a term of 20 years with rent reviews every 5 years. There was a reversion for a further ten years from September 2019. The lease is granted inside the Security of Tenure Provisions of The Landlord and Tenant Act 1954 and a New Lease may be available."
-      },
-      {
-        "title": "Passing Rent",
-        "content": "£140,000pax"
-      },
-      {
-        "title": "Vat",
-        "content": "All prices quoted may be subject to VAT if applicable."
-      },
-      {
-        "title": "Premium",
-        "content": "Upon Application"
-      },
-      {
-        "title": "Premises License",
-        "content": "We understand the premises benefit from A3 use with a premises licence allowing the sale of alcohol until midnight every day of the week except Sundays until 23.30 all with standard restaurant conditions applied."
-      },
-      {
-        "title": "Holding Deposit",
-        "content": "A holding deposit will be required to secure the property; the deposit will buy a period of exclusivity and will be held in the CDG Leisure client account."
-      },
-      {
-        "title": "Confidentiality",
-        "content": "Highly confidential and under no circumstances should a direct approach be made to staff as they are unaware of an impending sale."
-      }
-    ],
-    "agent_name": "Morris Greenberg",
-    "agent_email": "morris@cdgleisure.com",
-    "agent_phone": "0207 100 5520",
-    "agent_photo": "https://as-images.imgix.net/600c00648e2a5fd30d8e13c5f877c55b-mo%20pic.jpg",
-    "images": [
-      {
-        "url": "https://as-images.imgix.net/e518b636aebc45a15c9ab03c0aafdc82-food-and-wine.jpg",
-        "alt": "Kensington High Street, London, Restaurant Lease Assignment - Food  and Wine.jpg",
-        "source_url": "https://as-images.imgix.net/e518b636aebc45a15c9ab03c0aafdc82-food-and-wine.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      }
-    ],
-    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/bafe580f05c76e8d4cead34f876b4254.pdf"
-  },
-  {
-    "source": "cdg",
-    "source_ref": "345843",
-    "source_url": "https://www.cdgleisure.com/find-a-property/properties/345843-55-57-exmouth-market-london",
-    "status": "Under Offer",
-    "source_updated_at": "2026-03-05T16:38:14+00:00",
-    "title": "55-57 Exmouth Market",
-    "summary": "Double Fronted Restaurant in Exmouth Market",
-    "address_line": "55-57 Exmouth Market",
-    "area": "Exmouth Market",
-    "city": "London",
-    "postcode": "EC1R 4QL",
-    "lat": 51.526092,
-    "lng": -0.108969,
-    "property_type": "Bar / Restaurant",
-    "use_class": null,
-    "disposal_type": "lease_assignment",
-    "to_let": true,
-    "for_sale": false,
-    "rent_pa": null,
-    "rent_raw": null,
-    "rent_period": null,
-    "premium": null,
-    "premium_raw": null,
-    "guide_price": null,
-    "price_qualifier": "offers_in_excess",
-    "vat_applicable": true,
-    "rateable_value": null,
-    "business_rates": null,
-    "service_charge": null,
-    "estate_charge": null,
-    "parking_charge": null,
-    "tenure_raw": "An assignment of the existing FRI lease expiring in January 2031, subject to 5 yearly rent reviews. It is understood that the lease is granted within the L&T Act 1954.",
-    "lease_term_years": null,
-    "lease_expiry": "2031-01-01",
-    "rent_review_basis": "5 yearly",
-    "next_rent_review": null,
-    "inside_1954_act": null,
-    "size_sqft": 2510,
-    "size_sqm": 233.18,
-    "covers_internal": 60,
-    "covers_external": null,
-    "floors": [
-      {
-        "name": "Ground",
-        "sqft": 1630,
-        "sqm": 151.43
-      },
-      {
-        "name": "Basement",
-        "sqft": 880,
-        "sqm": 81.75
-      }
-    ],
-    "licensing_notes": "The premises benefit from E Class planning and Premises Licence allowing the sale of alcohol until 22:30 Monday to Thursday, 00:00 Friday to Saturday and 23:00 on Sunday.",
-    "fit_out_state": null,
-    "epc_rating": null,
-    "description": "The restaurant/bar is arranged over ground floor and basement with an excellent out throughout. The layout accommodates approximately 60 covers on the ground floor, 20 in the basement and a further 20 external covers to the front of the premises.",
-    "location_description": "The double fronted restaurant/bar is prominently located in Exmouth Market, one of Clerkenwell’s most lively and established foodie thoroughfares, benefitting from a vibrant mix of cafés, bars, restaurants and artisanal shops. The market draws regular footfall throughout the week and offers an exciting destination for local residents, students and office workers.",
-    "key_features": [
-      "Great Location",
-      "Double Fronted Restaurant",
-      "Outside Seating",
-      "Full Extraction",
-      "Midnight with Live Music",
-      "Premium Offers in Excess of £50,000"
-    ],
-    "sections": [
-      {
-        "title": "Description",
-        "content": "The restaurant/bar is arranged over ground floor and basement with an excellent out throughout. The layout accommodates approximately 60 covers on the ground floor, 20 in the basement and a further 20 external covers to the front of the premises."
-      },
-      {
-        "title": "Tenure",
-        "content": "An assignment of the existing FRI lease expiring in January 2031, subject to 5 yearly rent reviews. It is understood that the lease is granted within the L&T Act 1954."
-      },
-      {
-        "title": "Passing Rent",
-        "content": "£75,000 per annum exclusive, subject to 5 yearly reviews."
-      },
-      {
-        "title": "Premium",
-        "content": "Premium offers in excess of £50,000 invited."
-      },
-      {
-        "title": "VAT",
-        "content": "VAT is applicable to the rent, premium and all other figures quoted."
-      },
-      {
-        "title": "Planning/Licence",
-        "content": "The premises benefit from E Class planning and Premises Licence allowing the sale of alcohol until 22:30 Monday to Thursday, 00:00 Friday to Saturday and 23:00 on Sunday."
-      },
-      {
-        "title": "Holding Deposit",
-        "content": "A holding deposit will be required to secure the property which will allow a period of exclusivity and will be held in the CDG Leisure client account."
-      },
-      {
-        "title": "Confidentiality",
-        "content": "Highly confidential and under no circumstances should a direct approach be made to staff as they are unaware of an impending sale."
-      }
-    ],
-    "agent_name": "David Kornbluth",
-    "agent_email": "davidk@cdgleisure.com",
-    "agent_phone": "07507880040",
-    "agent_photo": "https://as-images.imgix.net/f926c6d488c8444a371fad6bac112331-dovvy%20pic%20for%20property%20details.jpg",
-    "images": [
-      {
-        "url": "https://as-images.imgix.net/da826c5ad53497933de207d32686cc00-img-0155.jpg",
-        "alt": "55-57 Exmouth Market, London, Bar / Restaurant Lease Assignment - IMG_0155.jpg",
-        "source_url": "https://as-images.imgix.net/da826c5ad53497933de207d32686cc00-img-0155.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/b836dbfb62ed184c45225309456b00e6-internal-2.jpg",
-        "alt": "55-57 Exmouth Market, London, Bar / Restaurant Lease Assignment - Internal 2.jpg",
-        "source_url": "https://as-images.imgix.net/b836dbfb62ed184c45225309456b00e6-internal-2.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/69f0da539035433feaa87d68eb5bf3e8-internal.jpg",
-        "alt": "55-57 Exmouth Market, London, Bar / Restaurant Lease Assignment - Internal.jpg",
-        "source_url": "https://as-images.imgix.net/69f0da539035433feaa87d68eb5bf3e8-internal.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      }
-    ],
-    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/2d92d39ac0001bb36bce4bbdfe06b8e3.pdf"
   },
   {
     "source": "cdg",
@@ -7759,126 +8098,6 @@
       }
     ],
     "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/4a982b37f1a731b3886e551999dd26e8.pdf"
-  },
-  {
-    "source": "cdg",
-    "source_ref": "336181",
-    "source_url": "https://www.cdgleisure.com/find-a-property/properties/336181-242-hoe-street-london",
-    "status": "Available",
-    "source_updated_at": "2025-11-07T17:12:31+00:00",
-    "title": "242 Hoe Street",
-    "summary": "Fully Fitted Sit down and Grab & Go Style Fast Food Premises on Busy East London High Street",
-    "address_line": "242 Hoe Street",
-    "area": "Walthamstow",
-    "city": "London",
-    "postcode": "E17 3AX",
-    "lat": 51.583784,
-    "lng": -0.019332,
-    "property_type": "Restaurant",
-    "use_class": null,
-    "disposal_type": "lease_assignment",
-    "to_let": true,
-    "for_sale": false,
-    "rent_pa": 33000,
-    "rent_raw": "£33,000 per annum",
-    "rent_period": "per annum",
-    "premium": null,
-    "premium_raw": null,
-    "guide_price": null,
-    "price_qualifier": "on_application",
-    "vat_applicable": true,
-    "rateable_value": null,
-    "business_rates": null,
-    "service_charge": null,
-    "estate_charge": null,
-    "parking_charge": null,
-    "tenure_raw": "An assignment of the existing lease with 12 years remaining, subject to a rent review in 2 years and then 5 yearly thereafter.",
-    "lease_term_years": null,
-    "lease_expiry": null,
-    "rent_review_basis": null,
-    "next_rent_review": null,
-    "inside_1954_act": null,
-    "size_sqft": 1100,
-    "size_sqm": 102.19,
-    "covers_internal": null,
-    "covers_external": null,
-    "floors": [
-      {
-        "name": "Ground - Restaurant",
-        "sqft": 1100,
-        "sqm": 102.19
-      }
-    ],
-    "licensing_notes": null,
-    "fit_out_state": "fully_fitted",
-    "epc_rating": null,
-    "description": "The property comprises a ground floor restaurant unit forming part of a traditional terrace on the east side of Hoe Street. The unit benefits from excellent street frontage, strong visibility, and consistent local trade from the surrounding residential and commercial community.<br />\n<br />\nThe accommodation is arranged on the ground floor, currently fitted to a good restaurant specification, providing both dine-in and takeaway capability.<br />\n<br />\nKey features include:<br />\n<br />\nWide glazed shopfront with excellent street presence<br />\n<br />\nCustomer seating area with counter servery<br />\n<br />\nFully fitted commercial kitchen with extract system (Electric) <br />\n<br />\nAir conditioning and modern lighting throughout<br />\n<br />\nAncillary storage and WC facilities to the rear<br />\n<br />\nThe premises are in good condition and suitable for continued use as a restaurant, café, or takeaway.",
-    "location_description": "The property is prominently located on Hoe Street, in the heart of Walthamstow, one of East London’s most vibrant and fast-evolving neighbourhoods. Hoe Street serves as a key arterial route through Walthamstow, linking Walthamstow Central with Lea Bridge Road, and benefits from high pedestrian and vehicular traffic throughout the day.<br />\n<br />\nWalthamstow Central Station (Victoria Line and London Overground) is less than a 5-minute walk away, offering direct connections to King’s Cross, Oxford Circus, and Liverpool Street, making the location highly accessible to both local residents and visitors.<br />\n<br />\nNearby occupiers include Franco Manca, Nando’s, Pizza Express, and a variety of independent cafés, breweries, and creative studios, contributing to the area’s dynamic and youthful atmosphere.",
-    "key_features": [
-      "High Footfall Location",
-      "Fully Fitted Grab & Go Style Food Premises",
-      "Close to Key Name Operators",
-      "Recently Refurbished",
-      "Busy Location Every Day Of The Week"
-    ],
-    "sections": [
-      {
-        "title": "Description",
-        "content": "The property comprises a ground floor restaurant unit forming part of a traditional terrace on the east side of Hoe Street. The unit benefits from excellent street frontage, strong visibility, and consistent local trade from the surrounding residential and commercial community.<br />\n<br />\nThe accommodation is arranged on the ground floor, currently fitted to a good restaurant specification, providing both dine-in and takeaway capability.<br />\n<br />\nKey features include:<br />\n<br />\nWide glazed shopfront with excellent street presence<br />\n<br />\nCustomer seating area with counter servery<br />\n<br />\nFully fitted commercial kitchen with extract system (Electric) <br />\n<br />\nAir conditioning and modern lighting throughout<br />\n<br />\nAncillary storage and WC facilities to the rear<br />\n<br />\nThe premises are in good condition and suitable for continued use as a restaurant, café, or takeaway."
-      },
-      {
-        "title": "Tenure",
-        "content": "An assignment of the existing lease with 12 years remaining, subject to a rent review in 2 years and then 5 yearly thereafter."
-      },
-      {
-        "title": "Passing Rent",
-        "content": "£33,000pax"
-      },
-      {
-        "title": "Premium",
-        "content": "Upon Application to include the leasehold interest and all fixtures and fittings"
-      },
-      {
-        "title": "VAT",
-        "content": "All figures quoted may be subject to VAT"
-      },
-      {
-        "title": "Holding Deposit",
-        "content": "A holding deposit will be required to secure the property which will allow a period of exclusivity and will be held in the CDG Leisure client account."
-      }
-    ],
-    "agent_name": "Morris Greenberg",
-    "agent_email": "morris@cdgleisure.com",
-    "agent_phone": "0207 100 5520",
-    "agent_photo": "https://as-images.imgix.net/600c00648e2a5fd30d8e13c5f877c55b-mo%20pic.jpg",
-    "images": [
-      {
-        "url": "https://as-images.imgix.net/1d78529760fc8d5b2240c8e8bb9cacd7-pic-1.jpg",
-        "alt": "242 Hoe Street, London, Restaurant Lease Assignment - pic 1.jpg",
-        "source_url": "https://as-images.imgix.net/1d78529760fc8d5b2240c8e8bb9cacd7-pic-1.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/5b331e9826b6dbcce69fe8544b4e9cbd-pic-2.jpg",
-        "alt": "242 Hoe Street, London, Restaurant Lease Assignment - pic 2.jpg",
-        "source_url": "https://as-images.imgix.net/5b331e9826b6dbcce69fe8544b4e9cbd-pic-2.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/d0301a43373c7ed2073bacda3d4a364d-pic-3.jpg",
-        "alt": "242 Hoe Street, London, Restaurant Lease Assignment - pic 3.jpg",
-        "source_url": "https://as-images.imgix.net/d0301a43373c7ed2073bacda3d4a364d-pic-3.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/db6e7b7b93482d97d99b5c52c3f76a00-pic-4.jpg",
-        "alt": "242 Hoe Street, London, Restaurant Lease Assignment - pic 4.jpg",
-        "source_url": "https://as-images.imgix.net/db6e7b7b93482d97d99b5c52c3f76a00-pic-4.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/65a01486ef58280054e1e99d8ec298a7-pic-5.jpg",
-        "alt": "242 Hoe Street, London, Restaurant Lease Assignment - pic 5.jpg",
-        "source_url": "https://as-images.imgix.net/65a01486ef58280054e1e99d8ec298a7-pic-5.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      }
-    ],
-    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/20fc7b7a487d8d41a0aece7733dd05d6.pdf"
   },
   {
     "source": "cdg",
@@ -8135,102 +8354,6 @@
       }
     ],
     "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/f918a5c0e146d7e32ee90188e73be47c.pdf"
-  },
-  {
-    "source": "cdg",
-    "source_ref": "328273",
-    "source_url": "https://www.cdgleisure.com/find-a-property/properties/328273-finchley-road-london-nw11-london",
-    "status": "Available",
-    "source_updated_at": "2025-09-03T22:27:54+00:00",
-    "title": "Finchley Road, London NW11",
-    "summary": "Prominent North West London Showroom/Gym/Mini Supermarket Premises with Large Window Frontages onto Busy High Road",
-    "address_line": "Finchley Road, London NW11",
-    "area": null,
-    "city": "London",
-    "postcode": "NW11 8DL",
-    "lat": 51.564221,
-    "lng": -0.197002,
-    "property_type": "Other Leisure",
-    "use_class": null,
-    "disposal_type": "new_lease",
-    "to_let": true,
-    "for_sale": false,
-    "rent_pa": null,
-    "rent_raw": null,
-    "rent_period": null,
-    "premium": null,
-    "premium_raw": null,
-    "guide_price": null,
-    "price_qualifier": "on_application",
-    "vat_applicable": null,
-    "rateable_value": null,
-    "business_rates": null,
-    "service_charge": null,
-    "estate_charge": null,
-    "parking_charge": null,
-    "tenure_raw": "New Sub Lease availbale from my clients 999 year Head Lease",
-    "lease_term_years": null,
-    "lease_expiry": null,
-    "rent_review_basis": null,
-    "next_rent_review": null,
-    "inside_1954_act": null,
-    "size_sqft": 4674,
-    "size_sqm": 434.23,
-    "covers_internal": null,
-    "covers_external": null,
-    "floors": [
-      {
-        "name": "Ground",
-        "sqft": 4674,
-        "sqm": 434.23
-      }
-    ],
-    "licensing_notes": null,
-    "fit_out_state": null,
-    "epc_rating": null,
-    "description": "The premises benefit from a huge window frontage on a corner therefore benefitting from a good return frontage as well. Currently trading as a Showroom laid out over ground floor only in mainly opne plan space with good ceiling height. The premises lend themselves for a variety of users such as Gyms / Mini Supermarket / Showroom / Studio type operators.",
-    "location_description": "The premises are ideally located on the busy Finchley Road in North West London in the affluent location of Hampstead Garden Suburb.",
-    "key_features": [
-      "Prominent Corner Premises",
-      "Affluent Location",
-      "Open Plan Ground Floor",
-      "Good Ceiling Height",
-      "New Sub Lease"
-    ],
-    "sections": [
-      {
-        "title": "Description",
-        "content": "The premises benefit from a huge window frontage on a corner therefore benefitting from a good return frontage as well. Currently trading as a Showroom laid out over ground floor only in mainly opne plan space with good ceiling height. The premises lend themselves for a variety of users such as Gyms / Mini Supermarket / Showroom / Studio type operators."
-      },
-      {
-        "title": "Tenure",
-        "content": "New Sub Lease availbale from my clients 999 year Head Lease"
-      },
-      {
-        "title": "Rent",
-        "content": "Rent Upon Application"
-      },
-      {
-        "title": "Holding Deposit",
-        "content": "Upon agreement of a transaction we would request a holding deposit to be paid to CDG Leisure client account released upon completion of a transaction."
-      },
-      {
-        "title": "Confidentiality",
-        "content": "These premises are confidential - pls enquire within for full info and under no Circumstance is anyone to approach staff about this opportunity"
-      }
-    ],
-    "agent_name": "Morris Greenberg",
-    "agent_email": "morris@cdgleisure.com",
-    "agent_phone": "0207 100 5520",
-    "agent_photo": "https://as-images.imgix.net/600c00648e2a5fd30d8e13c5f877c55b-mo%20pic.jpg",
-    "images": [
-      {
-        "url": "https://as-images.imgix.net/0fa984e130a483bd4217598c0fa6d327-emptyinteriorsupermarketgrocerystorewithnopeople-641503102434.jpg",
-        "alt": "Finchley Road, London NW11, London, Other Leisure To Let - emptyinteriorsupermarketgrocerystorewithnopeople_641503102434.jpg",
-        "source_url": "https://as-images.imgix.net/0fa984e130a483bd4217598c0fa6d327-emptyinteriorsupermarketgrocerystorewithnopeople-641503102434.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      }
-    ],
-    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/96e0daee7820ce7d8827c5158bd75e32.pdf"
   },
   {
     "source": "cdg",
@@ -8581,120 +8704,6 @@
       }
     ],
     "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/c47f6280a677577d96a95dfe6b758407.pdf"
-  },
-  {
-    "source": "cdg",
-    "source_ref": "295559",
-    "source_url": "https://www.cdgleisure.com/find-a-property/properties/295559-bellevue-road-wandsworth",
-    "status": "Available",
-    "source_updated_at": "2025-04-23T14:38:23+00:00",
-    "title": "Bellevue Road",
-    "summary": "Beautiful Fully Fitted Restaurant with 1am Alcohol and Live Music Licence",
-    "address_line": "Bellevue Road",
-    "area": null,
-    "city": "Wandsworth",
-    "postcode": "SW17",
-    "lat": 51.4444511,
-    "lng": -0.167394,
-    "property_type": "",
-    "use_class": null,
-    "disposal_type": "lease_assignment",
-    "to_let": true,
-    "for_sale": false,
-    "rent_pa": 87000,
-    "rent_raw": "£87,000 per annum",
-    "rent_period": "per annum",
-    "premium": null,
-    "premium_raw": null,
-    "guide_price": null,
-    "price_qualifier": null,
-    "vat_applicable": true,
-    "rateable_value": null,
-    "business_rates": null,
-    "service_charge": null,
-    "estate_charge": null,
-    "parking_charge": null,
-    "tenure_raw": "The premises are held under an existing lease expiring in August 2029, granted inside the security of the Landlord & Tenant Act 1954.",
-    "lease_term_years": null,
-    "lease_expiry": "2029-08-01",
-    "rent_review_basis": null,
-    "next_rent_review": null,
-    "inside_1954_act": null,
-    "size_sqft": 3705,
-    "size_sqm": 344.2,
-    "covers_internal": null,
-    "covers_external": null,
-    "floors": [
-      {
-        "name": "Ground",
-        "sqft": 2760,
-        "sqm": 256.41
-      },
-      {
-        "name": "Basement",
-        "sqft": 945,
-        "sqm": 87.79
-      }
-    ],
-    "licensing_notes": "The premises benefit from E Class use, with a premises licence to serve alcohol with the provision of food with the following times:<br />\nMonday to Saturday from 10am to 1am, Sunday from 12pm to 12.30am. The premises also benefit from a provision for live music and entertainment with the same hours.",
-    "fit_out_state": "fully_fitted",
-    "epc_rating": null,
-    "description": "The premises feature a spacious, open-plan layout with a contemporary design, an open kitchen, and a well-appointed bar area. There is ample seating for diners as well as a large capacity for an audience to benefit from the live music and entertainment facilities.",
-    "location_description": "Located on the sought-after Bellevue Road, the unit benefits from an imposing position. The area is known for its affluent residential community and proximity to other popular dining establishments, such as the Michelin-starred Chez Bruce .The restaurant benefits from excellent transport links, with Wandsworth Common station just a short walk away.",
-    "key_features": [
-      "Prominent Corner Location",
-      "Fully Fitted Open Kitchen and Bar",
-      "Alcohol Licence until 1am.",
-      "Inside the Act Lease",
-      "Large Outdoor Seating Area",
-      "Live Music licence"
-    ],
-    "sections": [
-      {
-        "title": "Description",
-        "content": "The premises feature a spacious, open-plan layout with a contemporary design, an open kitchen, and a well-appointed bar area. There is ample seating for diners as well as a large capacity for an audience to benefit from the live music and entertainment facilities."
-      },
-      {
-        "title": "Tenure",
-        "content": "The premises are held under an existing lease expiring in August 2029, granted inside the security of the Landlord & Tenant Act 1954."
-      },
-      {
-        "title": "Passing Rent",
-        "content": "£87,000 per annum exclusive."
-      },
-      {
-        "title": "Premium",
-        "content": "Offers invited in the region of £100,000."
-      },
-      {
-        "title": "VAT",
-        "content": "VAT may be applicable to the rent, premium and other outgoings."
-      },
-      {
-        "title": "Planning/Licence",
-        "content": "The premises benefit from E Class use, with a premises licence to serve alcohol with the provision of food with the following times:<br />\nMonday to Saturday from 10am to 1am, Sunday from 12pm to 12.30am. The premises also benefit from a provision for live music and entertainment with the same hours."
-      },
-      {
-        "title": "Holding Deposit",
-        "content": "A holding deposit will be required to secure the property, will grant a period of exclusivity and will be held in the CDG Leisure client account."
-      },
-      {
-        "title": "Confidentiality",
-        "content": "This sale is highly confidential and under no circumstances should a direct approach be made to staff as they are unaware of an impending sale."
-      }
-    ],
-    "agent_name": "Salvatore Di Natale",
-    "agent_email": "salvatore@cdgleisure.com",
-    "agent_phone": "07989 471288",
-    "agent_photo": "https://as-images.imgix.net/0c80fd529148bd3060556967a6287ef8-salv%20pic%20for%20property%20details.jpg",
-    "images": [
-      {
-        "url": "https://as-images.imgix.net/2af696a0cc145c3ae0bd32f85d31496a-confidential-picture.jpg",
-        "alt": "Bellevue Road, Wandsworth Lease Assignment - Confidential picture.jpg",
-        "source_url": "https://as-images.imgix.net/2af696a0cc145c3ae0bd32f85d31496a-confidential-picture.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      }
-    ],
-    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/5b9fe00ab5ee4cb9f198eb667ada069d.pdf"
   },
   {
     "source": "cdg",
@@ -9340,135 +9349,6 @@
   },
   {
     "source": "cdg",
-    "source_ref": "277121",
-    "source_url": "https://www.cdgleisure.com/find-a-property/properties/277121-8-market-place-newark",
-    "status": "Available",
-    "source_updated_at": "2025-01-16T16:25:30+00:00",
-    "title": "8 Market Place",
-    "summary": "Beautiful Restaurant/Pub in Historic Newark - Vacant Possession With Partial Income",
-    "address_line": "8 Market Place",
-    "area": null,
-    "city": "Newark",
-    "postcode": "NG24 1DU",
-    "lat": 53.0765,
-    "lng": -0.809656,
-    "property_type": "Bar / Pub / Restaurant",
-    "use_class": "Sui Generis",
-    "disposal_type": "new_lease",
-    "to_let": true,
-    "for_sale": true,
-    "rent_pa": 60000,
-    "rent_raw": "£60,000 per annum",
-    "rent_period": "per annum",
-    "premium": null,
-    "premium_raw": null,
-    "guide_price": 1000000,
-    "price_qualifier": "offers_in_region",
-    "vat_applicable": true,
-    "rateable_value": null,
-    "business_rates": null,
-    "service_charge": null,
-    "estate_charge": null,
-    "parking_charge": null,
-    "tenure_raw": "We are offering a new, free of tie, Full Repairing and Insuring lease for a term of years to be agreed. The freehold with vacant possession is also available. There is currently an aspect of the property which produces an annual rental income of £33,000 pax.",
-    "lease_term_years": null,
-    "lease_expiry": null,
-    "rent_review_basis": null,
-    "next_rent_review": null,
-    "inside_1954_act": null,
-    "size_sqft": 6850,
-    "size_sqm": 636.39,
-    "covers_internal": null,
-    "covers_external": null,
-    "floors": [
-      {
-        "name": "Ground",
-        "sqft": 2200,
-        "sqm": 204.39
-      },
-      {
-        "name": "1st",
-        "sqft": 2000,
-        "sqm": 185.81
-      },
-      {
-        "name": "2nd",
-        "sqft": 1665,
-        "sqm": 154.68
-      },
-      {
-        "name": "Basement",
-        "sqft": 985,
-        "sqm": 91.51
-      }
-    ],
-    "licensing_notes": "The premises benefit from Sui Generis planning use and a premises license allowing the sale of alcohol until 1am on Sunday to Thursday and 2am Friday to Saturday.",
-    "fit_out_state": "fully_fitted",
-    "epc_rating": null,
-    "description": "The 16th century building has been fully refurbished with the the ground floor laid out as a modern public house and Thai restaurant with a range of table, bar and couch seating. The first floor includes a spacious bar area. The second floor houses a double height event room and a fully fitted commercial kitchen. There is a great outside seating space to the front of the premises.",
-    "location_description": "Newark-on-Trent is an attractive historic market town and this property occupies a prominent position in Market Place, with the bustling market trading 5 days a week. Operators in Market Place include JD Wetherspoon, Starbucks, Toni & Guy, Greggs and Boots among a host of national and independent cafés and retailers.",
-    "key_features": [
-      "Beautiful Condition Throughout",
-      "Grade II Tudor Pub, Now Trading as a Restaurant",
-      "2am Licence",
-      "100+ Covers",
-      "Event Spaces"
-    ],
-    "sections": [
-      {
-        "title": "Description",
-        "content": "The 16th century building has been fully refurbished with the the ground floor laid out as a modern public house and Thai restaurant with a range of table, bar and couch seating. The first floor includes a spacious bar area. The second floor houses a double height event room and a fully fitted commercial kitchen. There is a great outside seating space to the front of the premises."
-      },
-      {
-        "title": "Tenure",
-        "content": "We are offering a new, free of tie, Full Repairing and Insuring lease for a term of years to be agreed. The freehold with vacant possession is also available. There is currently an aspect of the property which produces an annual rental income of £33,000 pax."
-      },
-      {
-        "title": "Quoting Rent",
-        "content": "Offers in the region of £60,000 per annum exclusive."
-      },
-      {
-        "title": "Freehold Price",
-        "content": "Offers in the region of £1m."
-      },
-      {
-        "title": "VAT",
-        "content": "The rent and any other price quoted may be subject to VAT."
-      },
-      {
-        "title": "Planning/Licence",
-        "content": "The premises benefit from Sui Generis planning use and a premises license allowing the sale of alcohol until 1am on Sunday to Thursday and 2am Friday to Saturday."
-      },
-      {
-        "title": "Holding Deposit",
-        "content": "A holding deposit will be required to secure the property; the deposit will buy a period of exclusivity and will be held in the CDG Leisure client account."
-      }
-    ],
-    "agent_name": "David Kornbluth",
-    "agent_email": "davidk@cdgleisure.com",
-    "agent_phone": "07507880040",
-    "agent_photo": "https://as-images.imgix.net/f926c6d488c8444a371fad6bac112331-dovvy%20pic%20for%20property%20details.jpg",
-    "images": [
-      {
-        "url": "https://as-images.imgix.net/35ad02ce6de4698b4cf7ac6ff7e1e0b5-frontage-4.jpg",
-        "alt": "8 Market Place, Newark, Bar / Pub / Restaurant To Let / For Sale - Frontage 4.jpg",
-        "source_url": "https://as-images.imgix.net/35ad02ce6de4698b4cf7ac6ff7e1e0b5-frontage-4.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/a9bca21ce0f28d9c25876bc404882892-interna.jpg",
-        "alt": "8 Market Place, Newark, Bar / Pub / Restaurant To Let / For Sale - Interna.jpg",
-        "source_url": "https://as-images.imgix.net/a9bca21ce0f28d9c25876bc404882892-interna.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/dad821052a8bc2f889af764b641a8130-frontage-late.jpg",
-        "alt": "8 Market Place, Newark, Bar / Pub / Restaurant To Let / For Sale - Frontage Late.jpg",
-        "source_url": "https://as-images.imgix.net/dad821052a8bc2f889af764b641a8130-frontage-late.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      }
-    ],
-    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/cd336749f089af68931f49472d740075.pdf"
-  },
-  {
-    "source": "cdg",
     "source_ref": "273438",
     "source_url": "https://www.cdgleisure.com/find-a-property/properties/273438-fully-fitted-chelsea-restaurant-kings-road-london",
     "status": "Available",
@@ -9579,259 +9459,6 @@
       }
     ],
     "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/606d3781f38ddfb982a1e14db97499ee.pdf"
-  },
-  {
-    "source": "cdg",
-    "source_ref": "272000",
-    "source_url": "https://www.cdgleisure.com/find-a-property/properties/272000-princes-dock-hull",
-    "status": "Available",
-    "source_updated_at": "2024-11-20T13:47:17+00:00",
-    "title": "Princes Dock",
-    "summary": "Prime Hull Restaurant & Event Space",
-    "address_line": "Princes Dock",
-    "area": null,
-    "city": "Hull",
-    "postcode": "HU1",
-    "lat": 53.74338417594957,
-    "lng": -0.3359317724609445,
-    "property_type": "Bar / Restaurant",
-    "use_class": "Sui Generis",
-    "disposal_type": "new_lease",
-    "to_let": true,
-    "for_sale": false,
-    "rent_pa": 75000,
-    "rent_raw": "£75,000 per annum",
-    "rent_period": "per annum",
-    "premium": null,
-    "premium_raw": null,
-    "guide_price": null,
-    "price_qualifier": "offers_in_region",
-    "vat_applicable": true,
-    "rateable_value": null,
-    "business_rates": null,
-    "service_charge": null,
-    "estate_charge": null,
-    "parking_charge": null,
-    "tenure_raw": "A new FRI lease to be granted with periodic rent reviews and terms to be agreed.",
-    "lease_term_years": null,
-    "lease_expiry": null,
-    "rent_review_basis": null,
-    "next_rent_review": null,
-    "inside_1954_act": null,
-    "size_sqft": 8000,
-    "size_sqm": 743.22,
-    "covers_internal": null,
-    "covers_external": null,
-    "floors": [
-      {
-        "name": "Ground",
-        "sqft": 8000,
-        "sqm": 743.22
-      }
-    ],
-    "licensing_notes": "The premises benefits from Class E/Sui Generis use with a LATE premises license in place to supply alcohol with or without the provision of food every day of the week.",
-    "fit_out_state": null,
-    "epc_rating": null,
-    "description": "The premises are laid out entirely on one level and trading as a beautiful restaurant and event space. The internal capacity is 180 internal covers and 25 external covers.",
-    "location_description": "Positioned in arguably the best location in Hull, close to the Waterside Marina.  Nearby occupiers include Nandos, Connexion Arena, Vue Cinema, Superbowl, The Mission, Steinbeck & Shaw and ASK Italian, to name a few.",
-    "key_features": [
-      "New Lease Available",
-      "Beautiful Outdoor Seating Area",
-      "Full Service Kitchen With Extraction",
-      "Late Licence 7 days a Week",
-      "Perfect for Large Parties & Wedding Receptions"
-    ],
-    "sections": [
-      {
-        "title": "Description",
-        "content": "The premises are laid out entirely on one level and trading as a beautiful restaurant and event space. The internal capacity is 180 internal covers and 25 external covers."
-      },
-      {
-        "title": "Tenure",
-        "content": "A new FRI lease to be granted with periodic rent reviews and terms to be agreed."
-      },
-      {
-        "title": "Asking Rent",
-        "content": "Offers in the region of £75,000 per annum exclusive."
-      },
-      {
-        "title": "Premium",
-        "content": "Offers in the region of £200,000."
-      },
-      {
-        "title": "VAT",
-        "content": "VAT may be applicable to the rent, premium and all other figures quoted."
-      },
-      {
-        "title": "Planning/Licence",
-        "content": "The premises benefits from Class E/Sui Generis use with a LATE premises license in place to supply alcohol with or without the provision of food every day of the week."
-      },
-      {
-        "title": "Confidentiality",
-        "content": "This sale is highly confidential and under no circumstances should a direct approach be made to staff as they are unaware of an impending sale."
-      },
-      {
-        "title": "Holding Deposit",
-        "content": "A holding deposit will be required to secure the property which will grant a period of exclusivity and will be held in the CDG Leisure client account."
-      }
-    ],
-    "agent_name": "Salvatore Di Natale",
-    "agent_email": "salvatore@cdgleisure.com",
-    "agent_phone": "07989 471288",
-    "agent_photo": "https://as-images.imgix.net/0c80fd529148bd3060556967a6287ef8-salv%20pic%20for%20property%20details.jpg",
-    "images": [
-      {
-        "url": "https://as-images.imgix.net/76c435d28620b697639d0baccff1a3c9-food-and-wine.jpg",
-        "alt": "Princes Dock, Hull, Bar / Restaurant To Let - Food  and Wine.jpg",
-        "source_url": "https://as-images.imgix.net/76c435d28620b697639d0baccff1a3c9-food-and-wine.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      }
-    ],
-    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/37e72d180077856699220a11c2e5ffe0.pdf"
-  },
-  {
-    "source": "cdg",
-    "source_ref": "272170",
-    "source_url": "https://www.cdgleisure.com/find-a-property/properties/272170-the-legitimate-brewery-10-weaver-street-leeds",
-    "status": "Available",
-    "source_updated_at": "2024-11-20T13:48:35+00:00",
-    "title": "The Legitimate Brewery, 10 Weaver Street",
-    "summary": "Fully Fitted Brewery/Restaurant/Events Space with 9 Street Food/Bar Units",
-    "address_line": "10 Weaver Street",
-    "area": null,
-    "city": "Leeds",
-    "postcode": "LS4 2AU",
-    "lat": 53.804478,
-    "lng": -1.578029,
-    "property_type": "Bar / Other Leisure / Pub / Restaurant",
-    "use_class": "Sui Generis",
-    "disposal_type": "lease_assignment",
-    "to_let": true,
-    "for_sale": false,
-    "rent_pa": 40000,
-    "rent_raw": "£40,000 per annum",
-    "rent_period": "per annum",
-    "premium": 350000,
-    "premium_raw": "£350,000",
-    "guide_price": null,
-    "price_qualifier": "offers_in_region",
-    "vat_applicable": true,
-    "rateable_value": null,
-    "business_rates": null,
-    "service_charge": null,
-    "estate_charge": null,
-    "parking_charge": null,
-    "tenure_raw": "An assignment of the existing FRI lease which is extended to 2034, with 5 yearly rent reviews.",
-    "lease_term_years": null,
-    "lease_expiry": null,
-    "rent_review_basis": "5 yearly",
-    "next_rent_review": null,
-    "inside_1954_act": null,
-    "size_sqft": 11600,
-    "size_sqm": 1077.67,
-    "covers_internal": 135,
-    "covers_external": null,
-    "floors": [
-      {
-        "name": "Ground",
-        "sqft": 10000,
-        "sqm": 929.03
-      },
-      {
-        "name": "Mezzanine",
-        "sqft": 1600,
-        "sqm": 148.64
-      }
-    ],
-    "licensing_notes": "The premises benefit from a Sui Generis use and have a premises licence in place allowing the sale of alcohol from 10am until 11.30pm, every day of the week.",
-    "fit_out_state": "fully_fitted",
-    "epc_rating": null,
-    "description": "The premises are fully fitted as a Brewery with 7 Street Food units and 2 bars, as well as shared seating space over the ground floor and mezzanine levels. Fully fitted to a very good standard and ready for an operator to carry on trading in a similar manner. The central seating  area can accommodate approximately 135 covers There is outdoor covered seating for a further 125 covers.",
-    "location_description": "Located on Weaver Street close to the junction of Kirkstall Road which is the busy A65 access road. Situated in amongst many operators such as The Vue Cinema, The Climbing Lab, Hollywood Bowl, and the Leeds Industrial Museum. The premises also benefit from ample onsite parking.",
-    "key_features": [
-      "Turnkey Operation",
-      "Fully Fitted to a Very High Standard",
-      "Low rent",
-      "Premises Licence In Place",
-      "Ample Parking for Vehicles",
-      "Close to Cardigan Fields Leisure Park"
-    ],
-    "sections": [
-      {
-        "title": "Description",
-        "content": "The premises are fully fitted as a Brewery with 7 Street Food units and 2 bars, as well as shared seating space over the ground floor and mezzanine levels. Fully fitted to a very good standard and ready for an operator to carry on trading in a similar manner. The central seating  area can accommodate approximately 135 covers There is outdoor covered seating for a further 125 covers."
-      },
-      {
-        "title": "Tenure",
-        "content": "An assignment of the existing FRI lease which is extended to 2034, with 5 yearly rent reviews."
-      },
-      {
-        "title": "Rent",
-        "content": "£40,000 per annum exclusive."
-      },
-      {
-        "title": "Premium",
-        "content": "Offers in the region of £350,000."
-      },
-      {
-        "title": "VAT",
-        "content": "VAT may be applicable to the rent, premium and all other figures quoted."
-      },
-      {
-        "title": "Planning/Licencing",
-        "content": "The premises benefit from a Sui Generis use and have a premises licence in place allowing the sale of alcohol from 10am until 11.30pm, every day of the week."
-      },
-      {
-        "title": "Holding Deposit",
-        "content": "A holding deposit will be required to secure the property which will allow a period of exclusivity and will be held in the CDG Leisure client account."
-      }
-    ],
-    "agent_name": "Salvatore Di Natale",
-    "agent_email": "salvatore@cdgleisure.com",
-    "agent_phone": "07989 471288",
-    "agent_photo": "https://as-images.imgix.net/0c80fd529148bd3060556967a6287ef8-salv%20pic%20for%20property%20details.jpg",
-    "images": [
-      {
-        "url": "https://as-images.imgix.net/8626ded482155a2e1cdfa4ef3f9fd1fc-4.jpg",
-        "alt": "The Legitimate Brewery, 10 Weaver Street, Leeds, Bar / Other Leisure / Pub / Restaurant Lease Assignment - 4.jpg",
-        "source_url": "https://as-images.imgix.net/8626ded482155a2e1cdfa4ef3f9fd1fc-4.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/01beb0ec09b90166187a674964adf832-8.jpg",
-        "alt": "The Legitimate Brewery, 10 Weaver Street, Leeds, Bar / Other Leisure / Pub / Restaurant Lease Assignment - 8.jpg",
-        "source_url": "https://as-images.imgix.net/01beb0ec09b90166187a674964adf832-8.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/8faee85671ee05c1087f52b75239d7a5-brewery.jpg",
-        "alt": "The Legitimate Brewery, 10 Weaver Street, Leeds, Bar / Other Leisure / Pub / Restaurant Lease Assignment - Brewery.jpg",
-        "source_url": "https://as-images.imgix.net/8faee85671ee05c1087f52b75239d7a5-brewery.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/850cc7bc0d1e79e3e989dd14720d9cd1-1.jpg",
-        "alt": "The Legitimate Brewery, 10 Weaver Street, Leeds, Bar / Other Leisure / Pub / Restaurant Lease Assignment - 1.jpg",
-        "source_url": "https://as-images.imgix.net/850cc7bc0d1e79e3e989dd14720d9cd1-1.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/bc73004c2b3fe879ee6fba8c4f326b75-2.jpg",
-        "alt": "The Legitimate Brewery, 10 Weaver Street, Leeds, Bar / Other Leisure / Pub / Restaurant Lease Assignment - 2.jpg",
-        "source_url": "https://as-images.imgix.net/bc73004c2b3fe879ee6fba8c4f326b75-2.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/507251022d5c42233ccc84489ec49741-7.jpg",
-        "alt": "The Legitimate Brewery, 10 Weaver Street, Leeds, Bar / Other Leisure / Pub / Restaurant Lease Assignment - 7.jpg",
-        "source_url": "https://as-images.imgix.net/507251022d5c42233ccc84489ec49741-7.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/de40410cb8607da691893b5833cefa66-9.jpg",
-        "alt": "The Legitimate Brewery, 10 Weaver Street, Leeds, Bar / Other Leisure / Pub / Restaurant Lease Assignment - 9.jpg",
-        "source_url": "https://as-images.imgix.net/de40410cb8607da691893b5833cefa66-9.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      },
-      {
-        "url": "https://as-images.imgix.net/990959775dcb92077e99715f98620e73-10.jpg",
-        "alt": "The Legitimate Brewery, 10 Weaver Street, Leeds, Bar / Other Leisure / Pub / Restaurant Lease Assignment - 10.jpg",
-        "source_url": "https://as-images.imgix.net/990959775dcb92077e99715f98620e73-10.jpg?mark=https%3A%2F%2Fas-images.imgix.net%2F5fcc3b7220158f27f85989bfa2708db8-screenshot-2024-06-19-at-14-54-05-removebg-preview.png&mark-alpha=90&mark-scale=30&mark-align=right,bottom"
-      }
-    ],
-    "brochure_url": "https://s3-eu-west-1.amazonaws.com/agents-society-assets-files/pdf/5786d37f48cc2afb418fa60fb3b3933b.pdf"
   },
   {
     "source": "cdg",

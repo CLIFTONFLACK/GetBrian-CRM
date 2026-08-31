@@ -828,3 +828,35 @@ correctly fell 100% -> 78%.
   `fix-requirement-locations.mjs` will regress the target locations.
 - Missing listing data still scores as a pass (`d.rent_pa == null || ...`), so a
   listing with no rent is indistinguishable from one that genuinely fits.
+
+### 2026-08-31 (later) - Listings book counts live stock only
+
+Brian: "I still see 95 CDG listings". All 95 were genuine (every row has a
+distinct cdgleisure.com URL) - 87 from the 11 Aug scrape plus 8 picked up when
+the CDG sweep re-ran on 31 Aug. But 11 of them are Withdrawn.
+
+Both sweeps already do the right thing: `resyncIntelSource` and
+`scripts/load-cdg-listings.ts` each mark a listing Withdrawn the moment its ref
+disappears from the agent's site, and neither deletes, because deals and send
+history point at those rows. The intel one also, correctly, leaves rows alone
+when their detail page merely FAILED to scrape - absence isn't evidence there.
+
+So nothing was wrong with the pipeline. The listings page was the only surface
+still counting dead stock: the dashboard, /matches and reports all already use
+`isListingMatchable`. Wired that same test into the listings page, so:
+
+    tab counts   All 148 -> 137,  CDG 95 -> 84,  Market Intel 53 (unchanged)
+    CDG tiles    All 84 (= Available 75 + Under Offer 9), Withdrawn 11 outside
+
+Withdrawn rows stay reachable: selecting a dead status from the tiles brings
+them back (`showingDead`), otherwise an agent could never review what dropped
+off the market.
+
+Market Intel shows 53 either way today because nothing has yet vanished from
+those partner books - the mechanism is in place for when it does.
+
+Verified: tsc + eslint clean; expected counts computed independently from the
+database through the same `isListingMatchable`; the `showingDead` predicate
+checked over all seven status cases with an inverted-predicate control. NOT
+verified: the rendered page - /listings is behind auth (it serves a 307, so it
+compiles and runs, but the redirect fires before the count logic does).

@@ -16,6 +16,7 @@ import { SiloTabs } from "@/components/silo-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { auth } from "@/lib/auth";
+import { isListingMatchable } from "@/lib/badges";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
 import { getDisposalsByIds, listDisposalFacetRows } from "@/lib/db/queries/disposals";
@@ -127,15 +128,35 @@ export default async function ListingsPage({
   // day to day, and scraped Market Intel used to bulk it out by default. "All"
   // therefore needs an explicit value that survives in the URL.
   const activeSilo = silo ?? "cdg";
-  // `rows` stays unscoped by silo so the tab counts reflect all three options;
-  // `siloRows` is what the heatmap/tiles/table below actually render.
-  const siloRows = rows.filter(
-    (r) => activeSilo === "all" || (r.listing_type ?? "cdg") === activeSilo,
-  );
+
+  // Stock that is actually on the market. Both sweeps mark a listing Withdrawn
+  // the moment it disappears from the agent's site — resyncIntelSource for the
+  // partner books, scripts/load-cdg-listings.ts for our own — and neither ever
+  // deletes, because deals and send history point at those rows. They are still
+  // not stock, so the book counts and shows live listings only, the same test
+  // the dashboard, /matches and reports already apply (isListingMatchable).
+  //
+  // Picking a dead status from the tiles below is the way back to them: without
+  // that, an agent could never review what dropped off the market.
+  const isLive = (r: { status: string | null }) => isListingMatchable(r.status);
+  const showingDead =
+    !!status && status !== OTHER_STATUS && !isListingMatchable(status);
+  const bookRows = showingDead ? rows : rows.filter(isLive);
+  const inSilo = <T extends { listing_type: string | null }>(set: T[]) =>
+    set.filter((r) => activeSilo === "all" || (r.listing_type ?? "cdg") === activeSilo);
+
+  // `siloRows` is what the heatmap/table render; `siloAll` keeps the withdrawn
+  // rows visible to the status tiles so their count stays clickable.
+  const siloRows = inSilo(bookRows);
+  const siloAll = inSilo(rows);
+  const liveRows = rows.filter(isLive);
+  // Tab counts always describe live stock, whatever the status facet is doing —
+  // "how much have I got on" should not change because someone clicked
+  // Withdrawn.
   const siloCounts = {
-    all: rows.length,
-    cdg: rows.filter((r) => (r.listing_type ?? "cdg") === "cdg").length,
-    intel: rows.filter((r) => r.listing_type === "intel").length,
+    all: liveRows.length,
+    cdg: liveRows.filter((r) => (r.listing_type ?? "cdg") === "cdg").length,
+    intel: liveRows.filter((r) => r.listing_type === "intel").length,
   };
 
   const CANONICAL_STATUSES = ["Available", "Under Offer", "Let", "Sold", "Withdrawn"];
@@ -192,14 +213,16 @@ export default async function ListingsPage({
   ];
   // Catch-all for scraped statuses outside the canonical five ("Sold STC",
   // "Let Agreed", blank, …) so they're countable and selectable, not invisible.
-  const otherCount = siloRows.filter(
+  const otherCount = siloAll.filter(
     (r) => !CANONICAL_STATUSES.includes(r.status ?? ""),
   ).length;
   const statusTiles = [
-    { value: "", label: "All", count: siloRows.length },
+    // "All" is the live book — it deliberately excludes the dead statuses, so
+    // Available + Under Offer add up to it and Withdrawn sits outside it.
+    { value: "", label: "All", count: inSilo(liveRows).length },
     ...STATUS_TILES.map((t) => ({
       ...t,
-      count: siloRows.filter((r) => (r.status ?? "") === t.value).length,
+      count: siloAll.filter((r) => (r.status ?? "") === t.value).length,
     })),
     ...(otherCount > 0
       ? [{ value: OTHER_STATUS, label: "Other", count: otherCount }]

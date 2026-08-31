@@ -69,29 +69,44 @@ export async function resyncIntelSource(
     return { error: `${source.label} doesn't have a scraper yet — coming soon.` };
   }
 
-  let urls: string[];
-  try {
-    urls = await source.scraper.fetchUrls();
-  } catch (err) {
-    return { error: `Couldn't enumerate ${source.label}: ${(err as Error).message}` };
-  }
-
+  // Two scraper shapes (see intel/sources.ts): "detail" enumerates unit pages
+  // and is fetched with retries under a worker pool; "list" returns the whole
+  // book from its index in one call.
+  const scraper = source.scraper;
   const failures: string[] = [];
   const failedUrls = new Set<string>();
-  const rows = await pool(urls, CONCURRENCY, async (url) => {
-    for (let attempt = 1; attempt <= RETRIES; attempt++) {
-      try {
-        return await source.scraper!.fetchDetail(url);
-      } catch (err) {
-        if (attempt === RETRIES) {
-          failures.push(`${url}: ${(err as Error).message}`);
-          failedUrls.add(url);
-        } else await sleep(400 * attempt);
-      }
+  let good: DisposalInsert[];
+
+  if (scraper.kind === "list") {
+    try {
+      good = await scraper.fetchAll();
+    } catch (err) {
+      return { error: `Couldn't scrape ${source.label}: ${(err as Error).message}` };
     }
-    return null;
-  });
-  const good = rows.filter((r): r is DisposalInsert => r !== null);
+  } else {
+    let listings;
+    try {
+      listings = await scraper.fetchListings();
+    } catch (err) {
+      return { error: `Couldn't enumerate ${source.label}: ${(err as Error).message}` };
+    }
+
+    const rows = await pool(listings, CONCURRENCY, async (listing) => {
+      for (let attempt = 1; attempt <= RETRIES; attempt++) {
+        try {
+          return await scraper.fetchDetail(listing);
+        } catch (err) {
+          if (attempt === RETRIES) {
+            failures.push(`${listing.url}: ${(err as Error).message}`);
+            failedUrls.add(listing.url);
+          } else await sleep(400 * attempt);
+        }
+      }
+      return null;
+    });
+    good = rows.filter((r): r is DisposalInsert => r !== null);
+  }
+
   if (good.length === 0) {
     return { error: `Scrape of ${source.label} produced no listings — kept existing data.` };
   }

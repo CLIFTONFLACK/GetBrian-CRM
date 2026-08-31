@@ -20,7 +20,7 @@ import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
 import { getDisposalsByIds, listDisposalFacetRows } from "@/lib/db/queries/disposals";
 import { getMapLayers } from "@/lib/db/queries/map-points";
-import { intelSourceById } from "@/lib/intel/sources";
+import { listingAgentLabel, OWN_BOOK_LABEL } from "@/lib/intel/sources";
 import { deriveCounty, HOME_COUNTIES } from "@/lib/locations";
 import { filterHref, resolveSort } from "@/lib/sort";
 import { cn } from "@/lib/utils";
@@ -45,6 +45,7 @@ export default async function ListingsPage({
     disposal_type?: string;
     town?: string;
     county?: string;
+    agent?: string;
     silo?: string;
     page?: string;
   }>;
@@ -57,6 +58,7 @@ export default async function ListingsPage({
     disposal_type,
     town,
     county,
+    agent,
     silo,
     page: pageParam,
   } = await searchParams;
@@ -114,7 +116,7 @@ export default async function ListingsPage({
   const rows = facetRows.map((r) => ({
     ...r,
     county: r.county ?? deriveCounty({ postcode: r.postcode, city: r.city }),
-    source_label: intelSourceById.get(r.source)?.label ?? "CDG Leisure",
+    source_label: listingAgentLabel(r.source),
   }));
   const matchesCounty = (rowCounty: string | null) =>
     !county ||
@@ -143,11 +145,14 @@ export default async function ListingsPage({
       ? !CANONICAL_STATUSES.includes(rowStatus ?? "")
       : (rowStatus ?? "—") === status);
 
+  // The Agent facet keys off the displayed label, not the raw `source` slug:
+  // several slugs (manual entries, our own CDG scrape) are one book to a user.
   const listRows = siloRows.filter(
     (r) =>
       (!town || (r.city ?? "—") === town) &&
       matchesStatus(r.status) &&
-      matchesCounty(r.county),
+      matchesCounty(r.county) &&
+      (!agent || r.source_label === agent),
   );
   // `sort=source` sorts by the displayed label (CDG Leisure / partner name),
   // not the raw slug — the DB order on `source` is meaningless to users.
@@ -159,11 +164,16 @@ export default async function ListingsPage({
     );
   }
 
-  const params = { q, sort, dir, status, disposal_type, town, county, silo: activeSilo };
+  const params = { q, sort, dir, status, disposal_type, town, county, agent, silo: activeSilo };
 
   const townOptions = [...new Set(siloRows.map((r) => r.city).filter(Boolean))]
     .sort()
     .map((v) => ({ value: v as string, label: v as string }));
+  // Our own book first, then partner agents alphabetically.
+  const agentLabels = [...new Set(siloRows.map((r) => r.source_label))].sort((a, b) =>
+    a === OWN_BOOK_LABEL ? -1 : b === OWN_BOOK_LABEL ? 1 : a.localeCompare(b),
+  );
+  const agentOptions = agentLabels.map((v) => ({ value: v, label: v }));
   const countyValues = [...new Set(siloRows.map((r) => r.county).filter(Boolean))].sort();
   const countyOptions = [
     ...(countyValues.some((c) => HOME_COUNTIES.includes(c as string))
@@ -268,8 +278,14 @@ export default async function ListingsPage({
         dir={dir}
         placeholder="Search by title or town…"
         basePath="/listings"
-        hasActiveFilters={Boolean(status || disposal_type || town || county) || activeSilo !== "cdg"}
+        hasActiveFilters={
+          Boolean(status || disposal_type || town || county || agent) || activeSilo !== "cdg"
+        }
       >
+        {/* The tab is part of the current view — a GET filter submit must not
+            silently drop the user back to CDG's own book. */}
+        <input type="hidden" name="silo" value={activeSilo} />
+        <FilterSelect name="agent" label="Agent" value={agent} options={agentOptions} />
         <FilterSelect name="town" label="Town" value={town} options={townOptions} />
         <FilterSelect name="county" label="County" value={county} options={countyOptions} />
         <FilterSelect
@@ -342,12 +358,12 @@ export default async function ListingsPage({
         <EmptyState
           icon={Store}
           title={
-            q || status || town || county || disposal_type || activeSilo !== "cdg"
+            q || status || town || county || agent || disposal_type || activeSilo !== "cdg"
               ? "No matches"
               : "No listings yet"
           }
           description={
-            q || status || town || county || disposal_type || activeSilo !== "cdg"
+            q || status || town || county || agent || disposal_type || activeSilo !== "cdg"
               ? "Try a different search or filter."
               : "Click “New listing” to add your first premises."
           }
@@ -360,7 +376,7 @@ export default async function ListingsPage({
               title: d.title,
               city: d.city,
               use_class: d.use_class,
-              source_label: intelSourceById.get(d.source)?.label ?? "CDG Leisure",
+              source_label: listingAgentLabel(d.source),
               size_sqft: d.size_sqft,
               rent_pa: d.rent_pa,
               premium: d.premium,

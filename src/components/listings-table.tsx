@@ -190,7 +190,7 @@ export function ListingsTable({
             />
             <SortHeader
               column="source"
-              label="Source"
+              label="Agent"
               params={params}
               className="hidden lg:table-cell"
             />

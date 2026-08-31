@@ -15,6 +15,8 @@ export interface IntelSourceStatus {
   label: string;
   website: string;
   hasScraper: boolean;
+  /** Why this source is narrowed or unscrapeable, shown under the name. */
+  note?: string | null;
   count: number;
   lastSynced: string | null; // ISO
 }
@@ -55,8 +57,11 @@ function SourceRow({ source }: { source: IntelSourceStatus }) {
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
-            {!source.hasScraper ? <Badge tone="slate">Scraper coming soon</Badge> : null}
+            {!source.hasScraper ? <Badge tone="slate">No public book</Badge> : null}
           </p>
+          {source.note ? (
+            <p className="mt-0.5 text-xs text-muted-foreground">{source.note}</p>
+          ) : null}
           <p className="mt-0.5 text-xs text-muted-foreground">
             {source.count} listing{source.count === 1 ? "" : "s"}
             {source.lastSynced

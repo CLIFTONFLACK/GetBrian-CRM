@@ -28,8 +28,11 @@ export function FilterBar({
   children?: React.ReactNode;
 }) {
   return (
-    <form className="mb-4 flex flex-wrap items-end gap-3">
-      <div className="relative w-full max-w-xs">
+    // gap-2 and the widths below are load-bearing, not taste: with five selects
+    // (Listings on the Market Intel tab) the bar wrapped onto three rows inside
+    // the page's max-w-6xl container.
+    <form className="mb-4 flex flex-wrap items-end gap-2">
+      <div className="relative w-full max-w-[15rem]">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           name="q"
@@ -93,7 +96,9 @@ export function FilterSelect({
         name={name}
         defaultValue={value ?? ""}
         className={cn(
-          "h-9 rounded-md border px-3 text-sm focus-visible:outline-none focus-visible:ring-2",
+          // Capped so one long option ("Bruce Gillingham Pollard", "Kingston
+          // upon Thames") can't stretch the control and wrap the whole bar.
+          "h-9 max-w-[10rem] rounded-md border px-2 text-sm focus-visible:outline-none focus-visible:ring-2",
           teal
             ? "border-teal-300 bg-teal-50 text-teal-900 focus-visible:ring-teal-500 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-100"
             : "border-input bg-background text-foreground focus-visible:ring-ring",

@@ -104,6 +104,15 @@ export async function createCompany(
 
   const name = str(formData, "name");
   if (!name) return { error: "Company name is required." };
+  // Every company must have a point of contact — enforced here as well as by
+  // the form's `required` picker, because a Server Action is directly
+  // POST-reachable and a client attribute is not a security boundary.
+  // (`quickCreateCompany` below is deliberately exempt: it backs the "+ New
+  // company" modal that opens *inside* another form, where a nested contact
+  // picker isn't allowed. Companies made that way are stubs to be completed.)
+  if (!nullable(formData, "link_contact")) {
+    return { error: "Pick a contact for this company, or add a new one." };
+  }
 
   if (formData.get("allow_duplicate") == null) {
     const dup = await findDuplicateCompanyByName(agencyId, name);
@@ -181,6 +190,10 @@ export async function updateCompany(
 
   const name = str(formData, "name");
   if (!name) return { error: "Company name is required." };
+  const linkContact = nullable(formData, "link_contact");
+  if (!linkContact) {
+    return { error: "Pick a contact for this company, or add a new one." };
+  }
 
   const caller = await requireCaller();
   if ("error" in caller) return { error: caller.error };
@@ -202,6 +215,12 @@ export async function updateCompany(
   }
 
   await syncCompanyAgents(agencyId, id, extra);
+
+  // Keep the chosen contact attached. `linkContactToCompany` is agency-scoped
+  // and idempotent, so re-saving an unchanged company is a no-op; picking a
+  // different contact attaches that one without detaching the others.
+  await linkContactToCompany(agencyId, linkContact, id);
+  revalidatePath(`/contacts/${linkContact}`);
 
   revalidatePath("/companies");
   revalidatePath(`/companies/${id}`);

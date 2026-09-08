@@ -379,10 +379,18 @@ export async function createDisposal(
   input: DisposalWriteInput,
   geo: { lat: number | null; lng: number | null },
   source: string = "manual",
+  /**
+   * Caller-supplied identity within `source`, covered by
+   * unique (agency_id, source, source_ref) from 0004. The CSV importer passes
+   * the spreadsheet's `external_ref` so a re-upload updates the row it created
+   * last time; left null everywhere else, and NULLs never conflict, so listings
+   * without a reference stay independently insertable.
+   */
+  sourceRef: string | null = null,
 ): Promise<{ id: string }> {
   const rows = await sql`
     insert into public.disposals (
-      agency_id, created_by, source, title, listing_type, status, disposal_type,
+      agency_id, created_by, source, source_ref, title, listing_type, status, disposal_type,
       to_let, for_sale, address_line, area, city, postcode, county,
       property_type, use_class, size_sqft, size_sqm, covers_internal, covers_external,
       fit_out_state, epc_rating, tenure_raw, rent_pa, premium, guide_price,
@@ -392,7 +400,7 @@ export async function createDisposal(
       lease_expiry, rent_review_basis, next_rent_review, inside_1954_act, rent_period,
       price_qualifier, brochure_url, lat, lng
     ) values (
-      ${agencyId}, ${createdBy}, ${source}, ${input.title}, ${input.listingType}, ${input.status}, ${input.disposalType},
+      ${agencyId}, ${createdBy}, ${source}, ${sourceRef}, ${input.title}, ${input.listingType}, ${input.status}, ${input.disposalType},
       ${input.toLet}, ${input.forSale}, ${input.addressLine}, ${input.area}, ${input.city}, ${input.postcode}, ${input.county},
       ${input.propertyType}, ${input.useClass}, ${input.sizeSqft}, ${input.sizeSqm}, ${input.coversInternal}, ${input.coversExternal},
       ${input.fitOutState}, ${input.epcRating}, ${input.tenureRaw}, ${input.rentPa}, ${input.premium}, ${input.guidePrice},

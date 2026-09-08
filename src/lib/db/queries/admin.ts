@@ -162,11 +162,16 @@ export async function removeMember(agencyId: string, userId: string): Promise<vo
   await sql`delete from public.agency_members where agency_id = ${agencyId} and user_id = ${userId}`;
 }
 
-export type AgencySettings = { openrouter_api_key: string | null; openrouter_model: string };
+export type AgencySettings = {
+  openrouter_api_key: string | null;
+  openrouter_model: string;
+  /** Null = use the built-in default brief (see src/lib/deep-dive/report.ts). */
+  deep_dive_prompt: string | null;
+};
 
 export async function getAgencySettings(agencyId: string): Promise<AgencySettings | null> {
   const rows = await sql`
-    select openrouter_api_key, openrouter_model
+    select openrouter_api_key, openrouter_model, deep_dive_prompt
     from public.agency_settings
     where agency_id = ${agencyId}
     limit 1
@@ -181,21 +186,28 @@ export async function upsertAgencySettings(
   agencyId: string,
   model: string,
   apiKey: string | null,
+  /** The Deep Dive research brief. null clears it, restoring the built-in
+   *  default (DEFAULT_DEEP_DIVE_PROMPT) — that is what "Reset to default"
+   *  posts. Written on every save, unlike the key. */
+  deepDivePrompt: string | null = null,
 ): Promise<void> {
   if (apiKey) {
     await sql`
-      insert into public.agency_settings (agency_id, openrouter_model, openrouter_api_key)
-      values (${agencyId}, ${model}, ${apiKey})
+      insert into public.agency_settings
+        (agency_id, openrouter_model, openrouter_api_key, deep_dive_prompt)
+      values (${agencyId}, ${model}, ${apiKey}, ${deepDivePrompt})
       on conflict (agency_id) do update
         set openrouter_model = excluded.openrouter_model,
-            openrouter_api_key = excluded.openrouter_api_key
+            openrouter_api_key = excluded.openrouter_api_key,
+            deep_dive_prompt = excluded.deep_dive_prompt
     `;
   } else {
     await sql`
-      insert into public.agency_settings (agency_id, openrouter_model)
-      values (${agencyId}, ${model})
+      insert into public.agency_settings (agency_id, openrouter_model, deep_dive_prompt)
+      values (${agencyId}, ${model}, ${deepDivePrompt})
       on conflict (agency_id) do update
-        set openrouter_model = excluded.openrouter_model
+        set openrouter_model = excluded.openrouter_model,
+            deep_dive_prompt = excluded.deep_dive_prompt
     `;
   }
 }

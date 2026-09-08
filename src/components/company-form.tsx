@@ -21,6 +21,7 @@ export function CompanyForm({
   contacts = [],
   types = [],
   contactRoles = [],
+  defaultContactId,
 }: {
   action: (state: FormState, formData: FormData) => Promise<FormState>;
   company?: Company;
@@ -30,6 +31,13 @@ export function CompanyForm({
   types?: { slug: string; label: string }[];
   /** Editable contact-role list — feeds the full "+ New contact" form. */
   contactRoles?: { slug: string; label: string }[];
+  /**
+   * On edit, the company's existing (primary, else first) contact — pre-selects
+   * the required picker so saving an already-compliant company needs no extra
+   * clicks. A legacy company with no contacts arrives empty and must be given
+   * one before it will save.
+   */
+  defaultContactId?: string;
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     action,
@@ -48,9 +56,12 @@ export function CompanyForm({
         types={types}
         contactPicker={
           <ContactCreatableSelect
-            label="Add contact"
+            label="Contact"
+            required
             options={contacts}
+            defaultValue={defaultContactId ?? ""}
             full={{ agents, roles: contactRoles }}
+            hint="Every company needs a point of contact — pick one or add a new one."
           />
         }
       />

@@ -70,3 +70,74 @@ export async function createDeepDiveReport(
     )
   `;
 }
+
+// ── deep_dive_messages — the follow-up Q&A thread about a company's report
+//    (db/migrations/0040). Keyed to the company rather than to one report, so
+//    the conversation survives re-running the Deep Dive. ────────────────────
+
+export type DeepDiveMessageRow = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+};
+
+/** The whole thread for a company, oldest first — it is both what the page
+ *  renders and what gets replayed to the model as conversation context. */
+export async function listDeepDiveMessages(
+  agencyId: string,
+  companyId: string,
+): Promise<DeepDiveMessageRow[]> {
+  return (await sql`
+    select id, role, content, created_at::text as created_at
+    from public.deep_dive_messages
+    where agency_id = ${agencyId} and company_id = ${companyId}
+    order by created_at asc
+  `) as DeepDiveMessageRow[];
+}
+
+/** Appends the question and its answer as one unit — a half-written exchange
+ *  (a question with no answer, or an answer with no question) would corrupt
+ *  the context replayed on the next turn. */
+export async function addDeepDiveExchange(
+  agencyId: string,
+  input: {
+    companyId: string;
+    reportId: string | null;
+    question: string;
+    answer: string;
+    createdBy: string;
+  },
+): Promise<void> {
+  await sql.transaction((tx) => [
+    tx`
+      insert into public.deep_dive_messages
+        (agency_id, company_id, report_id, role, content, created_by)
+      values
+        (${agencyId}, ${input.companyId}, ${input.reportId}, 'user', ${input.question},
+         ${input.createdBy})
+    `,
+    tx`
+      insert into public.deep_dive_messages
+        (agency_id, company_id, report_id, role, content, created_by)
+      values
+        (${agencyId}, ${input.companyId}, ${input.reportId}, 'assistant', ${input.answer},
+         ${input.createdBy})
+    `,
+  ]);
+}
+
+/** The latest complete report's id — recorded against each exchange so it is
+ *  clear which version of the research a question was asked about. */
+export async function getLatestDeepDiveReportId(
+  agencyId: string,
+  companyId: string,
+): Promise<string | null> {
+  const rows = await sql`
+    select id from public.deep_dive_reports
+    where agency_id = ${agencyId} and company_id = ${companyId} and status = 'complete'
+    order by created_at desc
+    limit 1
+  `;
+  return (rows[0] as { id: string } | undefined)?.id ?? null;
+}

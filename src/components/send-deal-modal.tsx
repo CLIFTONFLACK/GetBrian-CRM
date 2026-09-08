@@ -12,7 +12,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   CompanyCreatableSelect,
-  ContactCreatableSelect,
   type EntityOption,
 } from "@/components/creatable-select";
 import { listContactEmails, sendDealExternal } from "@/lib/actions/deal-send";
@@ -51,6 +50,7 @@ export function SendDealModal({
   listingTitle,
   requirements,
   previousSends,
+  defaultContactIds,
   size = "sm",
   label = "Send deal",
 }: {
@@ -73,6 +73,8 @@ export function SendDealModal({
   requirements?: { id: string; title: string }[];
   /** Prior external sends of this exact pair — surfaced to prevent double-sending. */
   previousSends?: { name: string; at: string }[];
+  /** Ticked on open — the company's primary contact, where the caller knows it. */
+  defaultContactIds?: string[];
   size?: "sm" | "default";
   label?: string;
 }) {
@@ -201,6 +203,7 @@ export function SendDealModal({
             defaultSubject={subject}
             defaultBody={isBulk || isMultiListing ? defaultBody : ""}
             previousSends={previousSends}
+            defaultContactIds={defaultContactIds}
             onBack={() => setStep("choose")}
             onDone={close}
           />
@@ -324,6 +327,7 @@ function ExternalStep({
   defaultSubject,
   defaultBody,
   previousSends,
+  defaultContactIds,
   onBack,
   onDone,
 }: {
@@ -336,6 +340,8 @@ function ExternalStep({
   defaultSubject: string;
   defaultBody: string;
   previousSends?: { name: string; at: string }[];
+  /** Ticked on open — the company's primary contact, where the caller knows it. */
+  defaultContactIds?: string[];
   onBack: () => void;
   onDone: () => void;
 }) {
@@ -396,18 +402,42 @@ function ExternalStep({
         types={companyTypes}
         placeholder="— Optional —"
       />
-      <ContactCreatableSelect
-        name="contact_id"
-        label="Contact"
-        required
-        placeholder="Select a contact…"
-        options={sendable}
-        hint={
-          hidden > 0
-            ? `Only contacts with an email address are listed — ${hidden} hidden. Add an address to their record to email them.`
-            : "The email goes to this contact — they need an email address on file."
-        }
-      />
+      {/* Multi-recipient: one email addressed to everyone ticked.
+          NOTE: they are all in the To: line, so every recipient can see who
+          else received it — that is the agreed behaviour, but it means not
+          ticking competing operators into the same send. */}
+      <div className="space-y-2">
+        <Label>Recipients</Label>
+        {sendable.length === 0 ? (
+          <p className="rounded-md border p-3 text-sm text-muted-foreground">
+            No contacts with an email address yet — add one to a contact record
+            to email them.
+          </p>
+        ) : (
+          <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto rounded-md border p-2 sm:grid-cols-2">
+            {sendable.map((c) => (
+              <label
+                key={c.id}
+                className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-muted/60"
+              >
+                <input
+                  type="checkbox"
+                  name="contact_ids"
+                  value={c.id}
+                  defaultChecked={defaultContactIds?.includes(c.id) ?? false}
+                  className="h-4 w-4 rounded border-input accent-primary"
+                />
+                <span className="truncate">{c.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          {hidden > 0
+            ? `Everyone ticked receives the same email and can see the other recipients. Only contacts with an email address are listed — ${hidden} hidden.`
+            : "Everyone ticked receives the same email and can see the other recipients."}
+        </p>
+      </div>
 
       <div className="space-y-2">
         <Label htmlFor="sd-ext-subject">Subject</Label>

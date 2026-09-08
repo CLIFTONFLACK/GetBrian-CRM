@@ -2,7 +2,7 @@ import * as React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, ShieldCheck } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -28,6 +28,8 @@ import { LocationMap } from "@/components/location-map";
 import { LogActivityForm } from "@/components/log-activity-form";
 import { SendToTeam } from "@/components/send-to-team";
 import { DeepDiveView } from "@/components/deep-dive-view";
+import { DeepDiveChat } from "@/components/deep-dive-chat";
+import { listDeepDiveMessages } from "@/lib/db/queries/deep-dive";
 import { getContactRoles, roleLabel } from "@/lib/contact-roles";
 import { getCompanyTypes, typeLabel } from "@/lib/company-types";
 import { isDbConfigured } from "@/lib/db/client";
@@ -40,6 +42,12 @@ import { listActivitiesForEntity } from "@/lib/db/queries/activities";
 import { getLatestKycSummary } from "@/lib/db/queries/kyc";
 import { getLatestCompleteDeepDive } from "@/lib/db/queries/deep-dive";
 import { cn } from "@/lib/utils";
+
+// The Deep Dive action on this page calls a web-search model that researches
+// the company live — the same reason the admin page raises its budget for the
+// Market Intel resync. Server Actions inherit their route segment's config, so
+// this is what actually governs `runDeepDive`.
+export const maxDuration = 120;
 
 export async function generateMetadata({
   params,
@@ -83,9 +91,10 @@ export default async function CompanyDetailPage({
     listActivitiesForEntity(agencyId, "company", id, 20),
   ]);
 
-  const [kycReport, deepDive] = await Promise.all([
+  const [kycReport, deepDive, deepDiveMessages] = await Promise.all([
     getLatestKycSummary(agencyId, id),
     getLatestCompleteDeepDive(agencyId, id),
+    listDeepDiveMessages(agencyId, id),
   ]);
 
   const nameOf = new Map(members.map((m) => [m.id, m.name]));
@@ -218,6 +227,9 @@ export default async function CompanyDetailPage({
                         {[ct.first_name, ct.last_name].filter(Boolean).join(" ")}
                       </Link>
                       <span className="flex items-center gap-2">
+                        {/* Label, not colour alone — the primary is who the
+                            send flows default to, so it has to be readable. */}
+                        {ct.is_primary ? <Badge tone="teal">Primary</Badge> : null}
                         <Badge tone={r.tone}>{r.label}</Badge>
                         {ct.email ? (
                           <span className="text-muted-foreground">{ct.email}</span>
@@ -232,17 +244,23 @@ export default async function CompanyDetailPage({
         </Card>
       </div>
 
+      {/* Laid out to match the Deep Dive card below: description under the
+          title, and the action as a full-size primary button at the top of the
+          card body rather than a small secondary one in the header. */}
       <Card className="mt-4">
-        <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardHeader>
           <CardTitle>KYC</CardTitle>
-          <Link
-            href={`/kyc?company=${company.id}`}
-            className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
-          >
-            {kycReport ? "View / refresh" : "Run KYC report"}
-          </Link>
+          <CardDescription>
+            Due diligence — company status, ownership and sanctions screening.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="text-sm">
+        <CardContent className="space-y-4 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href={`/kyc?company=${company.id}`} className={cn(buttonVariants())}>
+              <ShieldCheck />
+              {kycReport ? "View / refresh KYC" : "Run KYC report"}
+            </Link>
+          </div>
           {kycReport ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
@@ -294,8 +312,20 @@ export default async function CompanyDetailPage({
             AI company research — long-term client value and how to close.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-6">
           <DeepDiveView companyId={company.id} report={deepDive} />
+          {/* Follow-up Q&A, stored against the company so it persists on the
+              profile and survives re-running the report. */}
+          <div className="border-t pt-6">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">
+              Questions
+            </h3>
+            <DeepDiveChat
+              companyId={company.id}
+              messages={deepDiveMessages}
+              disabled={!deepDive?.markdown}
+            />
+          </div>
         </CardContent>
       </Card>
 

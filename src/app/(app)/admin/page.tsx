@@ -52,6 +52,8 @@ export default async function AdminPage() {
 
   const hasOpenRouterKey = Boolean(settings?.openrouter_api_key);
   const openRouterModel = settings?.openrouter_model ?? "perplexity/sonar";
+  // Null means "no override" — the editor shows the built-in default instead.
+  const deepDivePrompt = settings?.deep_dive_prompt ?? null;
 
   // Market Intel per-source stats: row count + newest created_at per source.
   const intelSources: IntelSourceStatus[] = INTEL_SOURCES.map((s) => {
@@ -102,6 +104,7 @@ export default async function AdminPage() {
         currentUserId={userId}
         hasOpenRouterKey={hasOpenRouterKey}
         openRouterModel={openRouterModel}
+        deepDivePrompt={deepDivePrompt}
         contactRoles={contactRoles}
         companyTypes={companyTypes}
       />

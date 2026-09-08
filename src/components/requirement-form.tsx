@@ -29,6 +29,16 @@ const TENURES: Option[] = [
   ["freehold", "Freehold"],
   ["leasehold", "Leasehold"],
 ];
+/**
+ * Pre-selected on a NEW requirement only — most briefs are leasehold, so this
+ * saves a click. An existing requirement always shows what was saved, including
+ * a deliberately empty set, so editing never silently re-adds leasehold. The
+ * column default stays '{}' (see db/migrations/0001_init.sql) because the public
+ * intake form and the CSV importer write requirements too, and for them "no
+ * preference" has to keep meaning exactly that.
+ */
+const DEFAULT_TENURES: readonly string[] = ["leasehold"];
+
 const STATUSES: Option[] = [
   ["active", "Active"],
   ["on_hold", "On hold"],
@@ -43,6 +53,7 @@ export function RequirementForm({
   contacts = [],
   companyTypes,
   defaultCompanyId,
+  defaultContactId,
   agents = [],
   additionalAgentIds,
 }: {
@@ -53,6 +64,7 @@ export function RequirementForm({
   /** Editable company_types list — feeds the "+ New company" quick-create modal. */
   companyTypes?: { slug: string; label: string }[];
   defaultCompanyId?: string;
+  defaultContactId?: string;
   agents?: AgentOption[];
   additionalAgentIds?: string[];
 }) {
@@ -62,8 +74,34 @@ export function RequirementForm({
   );
   const r = requirement;
 
+  /**
+   * A requirement must be linked to a company or a contact — either alone is
+   * fine, both together is the common case, neither is not. Neither picker can
+   * carry a bare `required`, because that would demand *both*; instead the pair
+   * is checked here on submit and again server-side in createRequirement /
+   * updateRequirement, which is the real guard.
+   */
+  const [linkError, setLinkError] = React.useState<string | null>(null);
+
   return (
-    <form action={formAction} className="space-y-6">
+    <form
+      action={formAction}
+      className="space-y-6"
+      onSubmit={(e) => {
+        const fd = new FormData(e.currentTarget);
+        const linked =
+          String(fd.get("company_id") ?? "").trim() !== "" ||
+          String(fd.get("contact_id") ?? "").trim() !== "";
+        if (!linked) {
+          e.preventDefault();
+          setLinkError(
+            "Link this requirement to a company or a contact — at least one is required.",
+          );
+          return;
+        }
+        setLinkError(null);
+      }}
+    >
       {r ? <input type="hidden" name="id" value={r.id} /> : null}
 
       <Section
@@ -100,12 +138,12 @@ export function RequirementForm({
         <ContactCreatableSelect
           name="contact_id"
           label="Contact"
-          required
           placeholder="Select a contact…"
           options={contacts}
-          defaultValue={r?.contact_id ?? ""}
-          hint="Point of contact for this operator — required"
+          defaultValue={r?.contact_id ?? defaultContactId ?? ""}
+          hint="Point of contact for this operator. Set a company, a contact, or both — at least one is required."
         />
+        {linkError ? <Alert tone="error">{linkError}</Alert> : null}
       </Section>
 
       <Section
@@ -160,7 +198,7 @@ export function RequirementForm({
           legend="Tenure"
           name="tenure_prefs"
           options={TENURES}
-          selected={r?.tenure_prefs ?? []}
+          selected={r?.tenure_prefs ?? DEFAULT_TENURES}
         />
         <div className="grid gap-5 sm:grid-cols-3">
           <Field label="Max rent (£ pa)" htmlFor="max_rent">

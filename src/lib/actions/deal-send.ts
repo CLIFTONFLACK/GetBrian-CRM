@@ -66,8 +66,17 @@ export async function sendDealExternal(
     };
   }
 
-  const contactId = str(formData, "contact_id");
-  if (!contactId) return { error: "Pick a contact to send to." };
+  // `contact_ids` is the multi-recipient form; `contact_id` is the single-value
+  // shape older callers still post (mirrors how listing_ids/listing_id work).
+  const contactIds = Array.from(
+    new Set(
+      [
+        ...formData.getAll("contact_ids").map((v) => String(v)),
+        str(formData, "contact_id"),
+      ].filter(Boolean),
+    ),
+  );
+  if (contactIds.length === 0) return { error: "Pick at least one contact to send to." };
   // company_id comes from the form; only keep it if this agency owns it, so a
   // foreign id can't be stamped onto external_sends and later surface another
   // agency's name in the send-history join (no RLS backstop — see AGENTS.md).
@@ -97,9 +106,23 @@ export async function sendDealExternal(
   if (!subject) return { error: "A subject is required." };
   const body = str(formData, "body");
 
-  const contact = await getContactById(agencyId, contactId);
-  if (!contact) return { error: "Contact not found." };
-  if (!contact.email) return { error: "That contact has no email address — add one first." };
+  // Resolve every recipient BEFORE sending anything: a half-sent batch, where
+  // some contacts got the email and the rest failed on a missing address, is
+  // worse than sending nothing and saying which records need fixing.
+  const contacts = [];
+  const withoutEmail: string[] = [];
+  for (const id of contactIds) {
+    const c = await getContactById(agencyId, id);
+    if (!c) return { error: "Contact not found." };
+    const name = [c.first_name, c.last_name].filter(Boolean).join(" ") || "Unnamed contact";
+    if (!c.email) withoutEmail.push(name);
+    else contacts.push({ id: c.id, email: c.email, name, firstName: c.first_name });
+  }
+  if (withoutEmail.length > 0) {
+    return {
+      error: `No email address for ${withoutEmail.join(", ")} — add one, or untick them.`,
+    };
+  }
 
   // Attach a particulars PDF per listing, up to MAX_ATTACHMENTS.
   const attachments: { filename: string; content: Buffer }[] = [];
@@ -154,7 +177,13 @@ export async function sendDealExternal(
         ? "Full property particulars are attached."
         : `Particulars for ${attachments.length} of these are attached.`;
 
-  const greeting = contact.first_name ? `Hi ${contact.first_name},` : "Hi,";
+  // One email, several recipients — it can only carry one greeting, so it stays
+  // personal for a single recipient and turns neutral for a group rather than
+  // greeting everyone by the first person's name.
+  const greeting =
+    contacts.length === 1 && contacts[0].firstName
+      ? `Hi ${contacts[0].firstName},`
+      : "Hi,";
   const text = [
     greeting,
     "",
@@ -176,12 +205,20 @@ export async function sendDealExternal(
 
   // A network/SDK fault throws rather than returning `error` — catch it so the
   // agent sees why the send failed instead of a crashed action.
+  // Named in the result so the agent can see exactly who it went to.
+  const recipientList =
+    contacts.length <= 3
+      ? contacts.map((c) => c.email).join(", ")
+      : `${contacts.length} contacts`;
+
   const resend = new Resend(apiKey);
   let sent: { id: string } | null = null;
   try {
     const { data, error: sendError } = await resend.emails.send({
       from,
-      to: contact.email,
+      // Every recipient in one To: line — they can see each other. Agreed
+      // behaviour, but the reason the modal says so next to the picker.
+      to: contacts.map((c) => c.email),
       replyTo,
       subject,
       text,
@@ -198,30 +235,38 @@ export async function sendDealExternal(
   const baseRow = {
     dealId,
     companyId,
-    contactId,
-    recipientEmail: contact.email,
     subject,
     body: body || null,
     providerId: sent?.id ?? null,
   };
-  const rows = (requirementIds.length > 0 ? requirementIds : [null]).flatMap((requirementId) =>
-    (listingIds.length > 0 ? listingIds : [null]).map((listingId) => ({
-      ...baseRow,
-      requirementId,
-      listingId,
-      pdfKind: listingId ? (pdfKindOf.get(listingId) ?? null) : null,
-    })),
+  // One row per recipient × requirement × listing. The recipient is now a third
+  // dimension of the same fan-out, so the "already sent" chips on both records
+  // stay accurate and each contact's own send history is complete. All rows
+  // share one provider_id because it really was one email — the Resend
+  // engagement webhook therefore reports delivery/opens for the send as a
+  // whole, not per recipient. That is the trade-off of a shared To: line.
+  const rows = contacts.flatMap((c) =>
+    (requirementIds.length > 0 ? requirementIds : [null]).flatMap((requirementId) =>
+      (listingIds.length > 0 ? listingIds : [null]).map((listingId) => ({
+        ...baseRow,
+        contactId: c.id,
+        recipientEmail: c.email,
+        requirementId,
+        listingId,
+        pdfKind: listingId ? (pdfKindOf.get(listingId) ?? null) : null,
+      })),
+    ),
   );
   try {
     await createExternalSends(agencyId, session.user.id, rows);
   } catch (e) {
     // The email is already out — surface success but note the logging failure.
     const msg = e instanceof Error ? e.message : "unknown error";
-    return { message: `Sent to ${contact.email} (logging failed: ${msg})` };
+    return { message: `Sent to ${recipientList} (logging failed: ${msg})` };
   }
 
   const capped = notAttached.length
     ? ` ${notAttached.length} particulars weren't attached (${MAX_ATTACHMENTS} max per email).`
     : "";
-  return { message: `Sent to ${contact.email}.${capped}` };
+  return { message: `Sent to ${recipientList}.${capped}` };
 }

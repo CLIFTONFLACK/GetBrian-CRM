@@ -59,7 +59,7 @@ export function DeepDiveView({
 
       {pending ? (
         <p className="text-sm text-muted-foreground">
-          Researching the web with AI — this can take up to a minute.
+          Researching the web with AI — this usually takes 20–60 seconds.
         </p>
       ) : null}
 

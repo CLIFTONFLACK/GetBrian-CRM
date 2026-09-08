@@ -88,10 +88,13 @@ export const IMPORT_TEMPLATES: Record<
 > = {
   companies: {
     label: "Companies",
-    // county is derived from postcode/town when left blank. Rows whose name
-    // already exists (case-insensitively) are skipped on import.
+    // county is derived from postcode/town when left blank. A row matching an
+    // existing company — by company_number when supplied, else by name —
+    // UPDATES it; blank cells leave the stored value alone.
     headers: [
       "name",
+      "company_number",
+      "vat_number",
       "type",
       "sector_tags",
       "website",
@@ -104,6 +107,8 @@ export const IMPORT_TEMPLATES: Record<
     ],
     example: [
       "Riverside Taverns Ltd",
+      "09876543",
+      "GB123456789",
       "operator",
       "Pub;Bar",
       "https://example.co.uk",
@@ -114,13 +119,14 @@ export const IMPORT_TEMPLATES: Record<
       "",
       "Key operator",
     ],
-    hint: `sector_tags: ${USE_CLASS_HINT}. Anything else is kept as a free tag. county is derived from postcode/town when blank.`,
+    hint: `sector_tags: ${USE_CLASS_HINT}. Anything else is kept as a free tag. county is derived from postcode/town when blank. Re-uploading updates matching companies (company_number first, then name) — blank cells never clear existing data.`,
   },
   contacts: {
     label: "Contacts",
     // company_name links (or creates) the contact's company; county is derived
-    // from postcode/town when left blank. Rows whose email already exists
-    // (case-insensitively) are skipped on import.
+    // from postcode/town when left blank. A row matching an existing contact —
+    // by email when supplied, else by first+last name within the same company —
+    // UPDATES it; blank cells leave the stored value alone.
     headers: [
       "first_name",
       "last_name",
@@ -153,11 +159,17 @@ export const IMPORT_TEMPLATES: Record<
   },
   requirements: {
     label: "Requirements",
-    // contact_email is REQUIRED — must match an existing contact (every requirement
-    // must have a contact). Import contacts first, then reference them by email.
+    // A requirement must be linked to a company or a contact — supply
+    // contact_email (matched against an existing contact) or company_name, or
+    // both. Import contacts/companies first, then reference them here.
+    //
+    // external_ref is optional: give a row your own reference and re-uploading
+    // the file UPDATES that requirement instead of adding a second copy.
     headers: [
+      "external_ref",
       "title",
       "contact_email",
+      "company_name",
       "status",
       "target_london_zones",
       "target_neighbourhoods",
@@ -177,8 +189,10 @@ export const IMPORT_TEMPLATES: Record<
       "notes",
     ],
     example: [
+      "REQ-1042",
       "Wet-led bar, Central London",
       "james@example.co.uk",
+      "Riverside Taverns Ltd",
       "active",
       "Zone 1;Zone 2",
       "Soho;Shoreditch",
@@ -197,16 +211,22 @@ export const IMPORT_TEMPLATES: Record<
       "",
       "Needs late licence",
     ],
-    hint: `contact_email is required and must match an existing contact — import Contacts first. use_classes: ${USE_CLASS_HINT}. tenure_prefs: freehold, leasehold. target_london_zones: Zone 1 … Zone 9.`,
+    hint: `Supply contact_email (must match an existing contact) or company_name — at least one. Import Contacts/Companies first. use_classes: ${USE_CLASS_HINT}. tenure_prefs: freehold, leasehold. target_london_zones: Zone 1 … Zone 9. external_ref is optional: set it and a re-upload updates that row instead of duplicating it.`,
   },
   listings: {
     label: "Listings",
     // contact_email is REQUIRED — must match an existing contact (every listing
     // must have a contact). Company is optional and not set via CSV.
     //
+    // external_ref is optional: give a row your own reference and re-uploading
+    // the file UPDATES that listing instead of adding a second copy. It is
+    // stored as disposals.source_ref under source='import', which the
+    // unique (agency_id, source, source_ref) index from 0004 already covers.
+    //
     // `use_classes` replaced the old free-text `use_class` column: the importer
     // derives both stored fields from it, exactly as the listing form does.
     headers: [
+      "external_ref",
       "title",
       "contact_email",
       "listing_type",
@@ -226,6 +246,7 @@ export const IMPORT_TEMPLATES: Record<
       "description",
     ],
     example: [
+      "LST-2291",
       "Corner bar, Soho",
       "james@example.co.uk",
       "cdg",
@@ -337,6 +358,14 @@ const ENTITY_ALIASES: Record<ImportEntity, Record<string, string>> = {
     sector: "sector_tags",
     sectors: "sector_tags",
     tags: "sector_tags",
+    companynumber: "company_number",
+    companieshousenumber: "company_number",
+    crn: "company_number",
+    registrationnumber: "company_number",
+    regno: "company_number",
+    vat: "vat_number",
+    vatno: "vat_number",
+    vatnumber: "vat_number",
   },
   contacts: {
     forename: "first_name",
@@ -353,6 +382,14 @@ const ENTITY_ALIASES: Record<ImportEntity, Record<string, string>> = {
     marketingpropertyalerts: "marketing_opt_in",
   },
   requirements: {
+    ref: "external_ref",
+    reference: "external_ref",
+    externalref: "external_ref",
+    externalreference: "external_ref",
+    id: "external_ref",
+    company: "company_name",
+    companyname: "company_name",
+    operator: "company_name",
     tenant: "title",
     tenantname: "title",
     requirement: "title",
@@ -380,6 +417,11 @@ const ENTITY_ALIASES: Record<ImportEntity, Record<string, string>> = {
     postcodedistricts: "target_postcode_districts",
   },
   listings: {
+    ref: "external_ref",
+    reference: "external_ref",
+    externalref: "external_ref",
+    externalreference: "external_ref",
+    id: "external_ref",
     property: "title",
     propertyname: "title",
     propertytype: "use_classes",
@@ -478,10 +520,20 @@ export function splitList(cell: string): string[] {
   return cell.split(sep).map((s) => s.trim()).filter(Boolean);
 }
 
-/** The columns a row cannot be built without, per entity. */
+/**
+ * The columns a row cannot be built without, per entity — checked once against
+ * the header row, so a missing column is reported as one clear message instead
+ * of N identical per-row errors.
+ *
+ * Requirements no longer demand `contact_email`: a requirement needs a company
+ * OR a contact (see src/lib/requirement-rules.ts), so a file may carry either
+ * column. That pair can't be expressed here — this list is an AND — so the
+ * "one of" check lives in the importer alongside the row-level rule, and the
+ * header check only insists on the title.
+ */
 export const REQUIRED_COLUMNS: Record<ImportEntity, string[]> = {
   companies: ["name"],
   contacts: ["first_name"],
-  requirements: ["title", "contact_email"],
+  requirements: ["title"],
   listings: ["title", "contact_email"],
 };

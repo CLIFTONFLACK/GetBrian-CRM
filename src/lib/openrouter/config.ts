@@ -1,6 +1,11 @@
 import { getAgencySettings } from "@/lib/db/queries/admin";
 
-export type OpenRouterConfig = { apiKey: string; model: string };
+export type OpenRouterConfig = {
+  apiKey: string;
+  model: string;
+  /** Agency override for the Deep Dive research brief; null = built-in default. */
+  deepDivePrompt: string | null;
+};
 
 /**
  * Fetch the caller's agency OpenRouter config (agency_settings, set in
@@ -20,5 +25,9 @@ export type OpenRouterConfig = { apiKey: string; model: string };
 export async function getAgencyOpenRouter(agencyId: string): Promise<OpenRouterConfig | null> {
   const settings = await getAgencySettings(agencyId);
   if (!settings?.openrouter_api_key) return null;
-  return { apiKey: settings.openrouter_api_key, model: settings.openrouter_model || "perplexity/sonar" };
+  return {
+    apiKey: settings.openrouter_api_key,
+    model: settings.openrouter_model || "perplexity/sonar",
+    deepDivePrompt: settings.deep_dive_prompt,
+  };
 }

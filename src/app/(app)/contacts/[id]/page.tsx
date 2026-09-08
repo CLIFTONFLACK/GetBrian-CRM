@@ -2,7 +2,7 @@ import * as React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Pencil } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -21,6 +21,8 @@ import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
 import { getCompanyName } from "@/lib/db/queries/companies";
 import { getContactAgentIds, getContactById } from "@/lib/db/queries/contacts";
 import { listActivitiesForEntity } from "@/lib/db/queries/activities";
+import { listRequirementsForContact } from "@/lib/db/queries/requirements";
+import { requirementStatusBadge } from "@/lib/badges";
 import { cn } from "@/lib/utils";
 
 export async function generateMetadata({
@@ -56,11 +58,12 @@ export default async function ContactDetailPage({
   const contact = await getContactById(agencyId, id);
   if (!contact) notFound();
 
-  const [companyName, agentRows, members, activities] = await Promise.all([
+  const [companyName, agentRows, members, activities, requirements] = await Promise.all([
     contact.company_id ? getCompanyName(agencyId, contact.company_id) : Promise.resolve(null),
     getContactAgentIds(agencyId, id),
     getAgencyMembers(agencyId),
     listActivitiesForEntity(agencyId, "contact", id, 20),
+    listRequirementsForContact(agencyId, id),
   ]);
 
   const nameOf = new Map(members.map((m) => [m.id, m.name]));
@@ -176,6 +179,52 @@ export default async function ContactDetailPage({
           <Row label="Notes">
             <span className="whitespace-pre-wrap">{contact.notes ?? "—"}</span>
           </Row>
+        </CardContent>
+      </Card>
+
+      {/* Requirements briefed against this person. The contact_id link has
+          existed since 0001 but was write-only — you could brief a requirement
+          against someone and never see it from their record. Mirrors the
+          company page's Requirements card. */}
+      <Card className="mt-4">
+        <CardHeader className="flex-row items-center justify-between space-y-0">
+          <CardTitle>Requirements</CardTitle>
+          <Link
+            href={`/requirements/new?contact=${contact.id}${
+              contact.company_id ? `&company=${contact.company_id}` : ""
+            }`}
+            className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
+          >
+            <Plus />
+            Add requirement
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {requirements.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No requirements briefed against this contact yet.
+            </p>
+          ) : (
+            <ul className="divide-y">
+              {requirements.map((rq) => {
+                const rs = requirementStatusBadge(rq.status);
+                return (
+                  <li
+                    key={rq.id}
+                    className="flex items-center justify-between gap-2 py-2 text-sm"
+                  >
+                    <Link
+                      href={`/requirements/${rq.id}`}
+                      className="font-medium text-foreground hover:text-info hover:underline"
+                    >
+                      {rq.title}
+                    </Link>
+                    <Badge tone={rs.tone}>{rs.label}</Badge>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </CardContent>
       </Card>
 

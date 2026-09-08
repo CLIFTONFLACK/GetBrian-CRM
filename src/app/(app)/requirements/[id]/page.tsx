@@ -7,7 +7,13 @@ import { Pencil } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   isListingMatchable,
   requirementStatusBadge,
@@ -33,7 +39,10 @@ import {
   getRequirementAgentIds,
   getRequirementById,
   getRequirementTitle,
+  listRequirementDocuments,
 } from "@/lib/db/queries/requirements";
+import { RequirementDocuments } from "@/components/requirement-documents";
+import { signRequirementDocUrl } from "@/lib/requirement-docs";
 import { getExternalSendPairRows } from "@/lib/db/queries/deals";
 import { cn } from "@/lib/utils";
 
@@ -128,6 +137,20 @@ export default async function RequirementDetailPage({
     listContactOptions(agencyId),
     getCompanyTypes(),
   ]);
+
+  // Landlord pack / brief documents. `file_path` (the raw, never-expiring Blob
+  // URL) is deliberately dropped here: only the signed, 1-hour proxy link
+  // crosses to the client. See src/lib/requirement-docs.ts.
+  const documentRows = await listRequirementDocuments(agencyId, id);
+  const documents = await Promise.all(
+    documentRows.map(async (d) => ({
+      id: d.id,
+      name: d.name,
+      doc_type: d.doc_type,
+      size_bytes: d.size_bytes,
+      url: await signRequirementDocUrl(agencyId, d.id),
+    })),
+  );
 
   // External send history — history card + per-match chips.
   const sendHistory = await getSendHistory(agencyId, { requirementId: id });
@@ -305,6 +328,19 @@ export default async function RequirementDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Landlord pack</CardTitle>
+          <CardDescription>
+            Documents held against this brief. Download links are private and
+            expire after an hour.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RequirementDocuments requirementId={r.id} docs={documents} />
+        </CardContent>
+      </Card>
 
       <Card className="mt-4">
         <CardHeader className="flex flex-row items-center justify-between gap-4">

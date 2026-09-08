@@ -35,7 +35,11 @@ export function CompanyFormFields({
   agents: AgentOption[];
   additionalAgentIds?: string[];
   types?: { slug: string; label: string }[];
-  /** "Add contact" field, rendered only when creating and only if supplied. */
+  /**
+   * Contact picker. Rendered whenever supplied — on create *and* on edit, since
+   * every company must have a contact and a legacy company with none has to be
+   * fixable from the edit form.
+   */
   contactPicker?: React.ReactNode;
   /** Keeps input ids unique when the fields render inside a modal over a page form. */
   idPrefix?: string;
@@ -159,7 +163,7 @@ export function CompanyFormFields({
         <Textarea id={id("notes")} name="notes" defaultValue={company?.notes ?? ""} />
       </Field>
 
-      {!company && contactPicker ? contactPicker : null}
+      {contactPicker ?? null}
 
       <AgentFields
         agents={agents}

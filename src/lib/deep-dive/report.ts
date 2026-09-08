@@ -1,6 +1,12 @@
 import { openRouterChat } from "@/lib/openrouter/client";
+import {
+  DEEP_DIVE_SYSTEM_PROMPT,
+  DEFAULT_DEEP_DIVE_PROMPT,
+} from "@/lib/deep-dive/prompt";
 import type { OpenRouterConfig } from "@/lib/openrouter/config";
 import { createDeepDiveReport } from "@/lib/db/queries/deep-dive";
+
+export { DEEP_DIVE_SYSTEM_PROMPT, DEFAULT_DEEP_DIVE_PROMPT };
 
 export type DeepDiveCompany = {
   id: string;
@@ -11,35 +17,22 @@ export type DeepDiveCompany = {
   company_number: string | null;
 };
 
-const SYSTEM =
-  "You are a commercial-property research analyst at CDG Leisure, a UK leisure & " +
-  "licensed-property agency. Produce a concise, factual, well-structured markdown " +
-  "report on the target company for the agent handling the relationship. Use " +
-  "headings, short paragraphs and bullet lists. Be specific and practical. If a " +
-  "fact is uncertain, say so — never invent figures. Cite sources inline where you can.";
-
-function userPrompt(c: DeepDiveCompany): string {
-  const lines = [
-    `Research this company and write a "Deep Dive" report.`,
-    ``,
+/** The company's own facts, always prepended to whatever brief is in force. */
+function companyFacts(c: DeepDiveCompany): string {
+  return [
     `Company: ${c.name}`,
     c.website ? `Website: ${c.website}` : "",
     c.address ? `Address: ${c.address}` : "",
     c.sector_tags.length ? `Sectors: ${c.sector_tags.join(", ")}` : "",
     c.company_number ? `Companies House no.: ${c.company_number}` : "",
-    ``,
-    `Structure the report with these sections:`,
-    `1. **Overview** — what they do, size, footprint, ownership.`,
-    `2. **Market position & competitors** — where they sit and key rivals.`,
-    `3. **Recent news & signals** — openings/closings, funding, leadership, expansion (last 12–24 months).`,
-    `4. **Financial & growth indicators** — anything public (turnover, sites, trajectory).`,
-    `5. **Long-term client value to CDG** — why this is (or isn't) a valuable long-term account.`,
-    `6. **How to win the deal** — specific, practical insight the agent can use to open doors and close.`,
-    `7. **Risks & watch-outs**.`,
-    ``,
-    `Keep it under ~900 words.`,
-  ];
-  return lines.filter((l) => l !== "").join("\n");
+  ]
+    .filter((l) => l !== "")
+    .join("\n");
+}
+
+function userPrompt(c: DeepDiveCompany, prompt?: string | null): string {
+  const brief = (prompt ?? "").trim() || DEFAULT_DEEP_DIVE_PROMPT;
+  return [companyFacts(c), ``, brief].join("\n");
 }
 
 /**
@@ -52,13 +45,15 @@ export async function runDeepDiveReport(
   agencyId: string,
   userId: string,
   cfg: OpenRouterConfig,
+  /** Agency override for the research brief; null or blank uses the default. */
+  prompt?: string | null,
 ): Promise<void> {
   try {
     const markdown = await openRouterChat({
       apiKey: cfg.apiKey,
       model: cfg.model,
-      system: SYSTEM,
-      user: userPrompt(company),
+      system: DEEP_DIVE_SYSTEM_PROMPT,
+      user: userPrompt(company, prompt),
     });
     await createDeepDiveReport(agencyId, {
       companyId: company.id,

@@ -204,6 +204,25 @@ export async function listRequirementsForCompany(
   `) as { id: string; title: string; status: string }[];
 }
 
+/**
+ * Feeds the contact detail page's "Requirements" card.
+ *
+ * Requirements have always carried a contact_id, but nothing ever queried by
+ * it: the link was write-only, so you could brief a requirement against a
+ * person and then never see it from their record.
+ */
+export async function listRequirementsForContact(
+  agencyId: string,
+  contactId: string,
+): Promise<{ id: string; title: string; status: string }[]> {
+  return (await sql`
+    select id, title, status
+    from public.requirements
+    where agency_id = ${agencyId} and contact_id = ${contactId}
+    order by title
+  `) as { id: string; title: string; status: string }[];
+}
+
 /** Row shape used by the MatchMaker scorer. */
 export type MatchRequirement = {
   id: string;
@@ -296,6 +315,12 @@ export async function createRequirement(
   agencyId: string,
   createdBy: string,
   input: RequirementWriteInput,
+  /**
+   * Caller-supplied import reference (db/migrations/0036). Set by the CSV
+   * importer from the sheet's `external_ref` column so a re-upload updates the
+   * row it created last time; null for requirements created in the UI.
+   */
+  externalRef: string | null = null,
 ): Promise<{ id: string }> {
   const rows = await sql`
     insert into public.requirements (
@@ -303,13 +328,13 @@ export async function createRequirement(
       target_towns, target_regions, target_counties, target_postcode_districts,
       target_neighbourhoods, target_london_zones, use_classes, tenure_prefs,
       min_sqft, max_sqft, min_covers, max_covers, max_rent, max_premium,
-      max_guide_price, notes, lead_agent_id
+      max_guide_price, notes, lead_agent_id, external_ref
     ) values (
       ${agencyId}, ${createdBy}, ${input.title}, ${input.companyId}, ${input.contactId}, ${input.status},
       ${input.targetTowns}, ${input.targetRegions}, ${input.targetCounties}, ${input.targetPostcodeDistricts},
       ${input.targetNeighbourhoods}, ${input.targetLondonZones}, ${input.useClasses}::public.use_class[], ${input.tenurePrefs}::public.tenure_type[],
       ${input.minSqft}, ${input.maxSqft}, ${input.minCovers}, ${input.maxCovers}, ${input.maxRent}, ${input.maxPremium},
-      ${input.maxGuidePrice}, ${input.notes}, ${input.leadAgentId}
+      ${input.maxGuidePrice}, ${input.notes}, ${input.leadAgentId}, ${externalRef}
     )
     returning id
   `;
@@ -427,4 +452,114 @@ export async function syncRequirementAgents(
   ]);
 
   return { added: userIds.filter((id) => !had.has(id)) };
+}
+
+// ── requirement_documents — landlord packs and other files attached to a brief
+//    (db/migrations/0039). Mirrors the disposal_documents DAO exactly: the file
+//    itself lives in Vercel Blob and is private by convention — no raw Blob URL
+//    is ever handed to the browser (see src/lib/requirement-docs.ts's signed
+//    proxy and src/app/api/requirement-docs/[id]/route.ts). ─────────────────
+
+export type RequirementDocumentRow = {
+  id: string;
+  name: string;
+  doc_type: string;
+  size_bytes: number | null;
+  file_path: string;
+};
+
+export async function listRequirementDocuments(
+  agencyId: string,
+  requirementId: string,
+): Promise<RequirementDocumentRow[]> {
+  return (await sql`
+    select id, name, doc_type, size_bytes::float8 as size_bytes, file_path
+    from public.requirement_documents
+    where agency_id = ${agencyId} and requirement_id = ${requirementId}
+    order by created_at
+  `) as RequirementDocumentRow[];
+}
+
+/** Single-document lookup, agency-scoped — the authorization boundary for a
+ *  download. Returns null for both "no such document" and "belongs to another
+ *  agency", deliberately indistinguishable so a cross-tenant probe can't be
+ *  used to learn whether an id exists. */
+export async function getRequirementDocumentById(
+  agencyId: string,
+  id: string,
+): Promise<RequirementDocumentRow | null> {
+  const rows = await sql`
+    select id, name, doc_type, size_bytes::float8 as size_bytes, file_path
+    from public.requirement_documents
+    where id = ${id} and agency_id = ${agencyId}
+    limit 1
+  `;
+  return (rows[0] as RequirementDocumentRow | undefined) ?? null;
+}
+
+/**
+ * Unscoped by agency — safe ONLY because the caller already proved
+ * authorization some other way. The one legitimate caller is the
+ * `/api/requirement-docs/[id]` route's signed-token path: the HMAC signature in
+ * that URL can only have been minted by `signRequirementDocUrl`, which did the
+ * agency-scoped check at sign time. Never call this anywhere that hasn't
+ * independently verified access first.
+ */
+export async function getRequirementDocumentByIdUnsafe(
+  id: string,
+): Promise<RequirementDocumentRow | null> {
+  const rows = await sql`
+    select id, name, doc_type, size_bytes::float8 as size_bytes, file_path
+    from public.requirement_documents
+    where id = ${id}
+    limit 1
+  `;
+  return (rows[0] as RequirementDocumentRow | undefined) ?? null;
+}
+
+export async function addRequirementDocumentRow(
+  agencyId: string,
+  requirementId: string,
+  uploadedBy: string,
+  input: { name: string; docType: string; filePath: string; sizeBytes: number | null },
+): Promise<{ id: string }> {
+  const rows = await sql`
+    insert into public.requirement_documents
+      (agency_id, requirement_id, name, doc_type, file_path, size_bytes, uploaded_by)
+    values
+      (${agencyId}, ${requirementId}, ${input.name}, ${input.docType}, ${input.filePath},
+       ${input.sizeBytes}, ${uploadedBy})
+    returning id
+  `;
+  return rows[0] as { id: string };
+}
+
+/** Deletes the metadata row scoped to the caller's agency FIRST; the caller
+ *  only removes the underlying Blob object if a row it actually owned came
+ *  back — so it can never delete another agency's file. */
+export async function deleteRequirementDocumentRow(
+  agencyId: string,
+  id: string,
+): Promise<{ file_path: string } | null> {
+  const rows = await sql`
+    delete from public.requirement_documents
+    where id = ${id} and agency_id = ${agencyId}
+    returning file_path
+  `;
+  return (rows[0] as { file_path: string } | undefined) ?? null;
+}
+
+/** Ownership check for the Blob upload-token route — confirms the requirement
+ *  the browser wants to upload into belongs to the caller's agency. This is
+ *  what stops a signed-in user of one agency writing into another's folder. */
+export async function requirementBelongsToAgency(
+  agencyId: string,
+  requirementId: string,
+): Promise<boolean> {
+  const rows = await sql`
+    select 1 from public.requirements
+    where id = ${requirementId} and agency_id = ${agencyId}
+    limit 1
+  `;
+  return rows.length > 0;
 }

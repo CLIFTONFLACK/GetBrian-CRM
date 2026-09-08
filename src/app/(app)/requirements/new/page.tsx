@@ -17,9 +17,11 @@ export const metadata: Metadata = { title: "New requirement" };
 export default async function NewRequirementPage({
   searchParams,
 }: {
-  searchParams: Promise<{ company?: string }>;
+  searchParams: Promise<{ company?: string; contact?: string }>;
 }) {
-  const { company } = await searchParams;
+  // ?company= comes from the company page, ?contact= from the contact page —
+  // either (or both) pre-selects the corresponding picker.
+  const { company, contact } = await searchParams;
 
   if (!isDbConfigured) redirect("/login");
   const session = await auth();
@@ -49,6 +51,7 @@ export default async function NewRequirementPage({
             contacts={contacts}
             companyTypes={companyTypes}
             defaultCompanyId={company}
+            defaultContactId={contact}
             agents={agents}
           />
         </CardContent>

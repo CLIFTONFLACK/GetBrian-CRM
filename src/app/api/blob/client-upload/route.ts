@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { currentAgencyId } from "@/lib/db/queries/agencies";
 import { getDisposalById } from "@/lib/db/queries/disposals";
+import { requirementBelongsToAgency } from "@/lib/db/queries/requirements";
 
 /**
  * POST /api/blob/client-upload
@@ -28,11 +29,14 @@ import { getDisposalById } from "@/lib/db/queries/disposals";
  *     URL (disposal-images.ts / disposal-documents.ts) — this is what
  *     prevents a signed-in user from one agency uploading into another
  *     agency's listing folder.
+ *   - "requirement-doc": the landlord pack and friends, same check against the
+ *     requirement instead of the disposal (requirement-documents.ts).
  */
 type UploadContext =
   | { kind: "avatar" }
   | { kind: "disposal-image"; disposalId: string }
-  | { kind: "disposal-doc"; disposalId: string };
+  | { kind: "disposal-doc"; disposalId: string }
+  | { kind: "requirement-doc"; requirementId: string };
 
 function parseContext(clientPayload: string | null): UploadContext {
   if (!clientPayload) throw new Error("Missing upload context.");
@@ -40,7 +44,8 @@ function parseContext(clientPayload: string | null): UploadContext {
   if (
     ctx.kind !== "avatar" &&
     ctx.kind !== "disposal-image" &&
-    ctx.kind !== "disposal-doc"
+    ctx.kind !== "disposal-doc" &&
+    ctx.kind !== "requirement-doc"
   ) {
     throw new Error("Unknown upload context.");
   }
@@ -79,6 +84,25 @@ export async function POST(request: Request): Promise<NextResponse> {
             addRandomSuffix: true,
             allowOverwrite: false,
             maximumSizeInBytes: 5 * 1024 * 1024,
+            tokenPayload: clientPayload,
+          };
+        }
+
+        // Requirement documents — scoped to a requirement the caller's agency
+        // actually owns, so a signed-in user of one agency can't write into
+        // another's folder. Same shape as the disposal checks below.
+        if (ctx.kind === "requirement-doc") {
+          if (!pathname.startsWith(`${ctx.requirementId}/`)) {
+            throw new Error("Invalid upload path.");
+          }
+          if (!(await requirementBelongsToAgency(agencyId, ctx.requirementId))) {
+            throw new Error("Requirement not found.");
+          }
+          return {
+            allowedContentTypes: ["application/pdf"],
+            addRandomSuffix: false,
+            allowOverwrite: false,
+            maximumSizeInBytes: 10 * 1024 * 1024,
             tokenPayload: clientPayload,
           };
         }

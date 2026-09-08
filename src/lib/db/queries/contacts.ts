@@ -20,6 +20,7 @@ export type Contact = {
   updated_at: string;
   lead_agent_id: string | null;
   marketing_opt_in: boolean;
+  is_primary: boolean;
   address_line: string | null;
   city: string | null;
   postcode: string | null;
@@ -111,14 +112,31 @@ export async function listContactsByCompany(
   agencyId: string,
   companyId: string,
 ): Promise<
-  { id: string; first_name: string; last_name: string | null; role: string; email: string | null }[]
+  {
+    id: string;
+    first_name: string;
+    last_name: string | null;
+    role: string;
+    email: string | null;
+    is_primary: boolean;
+  }[]
 > {
+  // Primary first, so callers that just take [0] — the company edit form's
+  // pre-selected contact, the send flows' default recipient — get the right one
+  // without every one of them having to know the rule.
   return (await sql`
-    select id, first_name, last_name, role, email
+    select id, first_name, last_name, role, email, is_primary
     from public.contacts
     where agency_id = ${agencyId} and company_id = ${companyId}
-    order by first_name asc
-  `) as { id: string; first_name: string; last_name: string | null; role: string; email: string | null }[];
+    order by is_primary desc, first_name asc
+  `) as {
+    id: string;
+    first_name: string;
+    last_name: string | null;
+    role: string;
+    email: string | null;
+    is_primary: boolean;
+  }[];
 }
 
 export async function getContactById(agencyId: string, id: string): Promise<Contact | null> {
@@ -128,7 +146,7 @@ export async function getContactById(agencyId: string, id: string): Promise<Cont
     select
       id, agency_id, company_id, first_name, last_name, email, phone, role, notes,
       created_by, created_at::text as created_at, updated_at::text as updated_at,
-      lead_agent_id, marketing_opt_in, address_line, city, postcode, lat, lng, county
+      lead_agent_id, marketing_opt_in, is_primary, address_line, city, postcode, lat, lng, county
     from public.contacts
     where id = ${id} and agency_id = ${agencyId}
     limit 1
@@ -384,6 +402,57 @@ export async function linkContactToCompany(
     returning id
   `;
   return rows.length > 0;
+}
+
+/**
+ * Set or clear a contact's "primary contact for their company" flag
+ * (db/migrations/0038).
+ *
+ * Promoting one demotes whoever held it, in a single transaction — the partial
+ * unique index `contacts_one_primary_per_company` would otherwise reject the
+ * second UPDATE, and doing it in two round trips would leave a window with two
+ * primaries (or, if the second failed, none).
+ *
+ * A contact with no company can't be primary — there is nothing to be primary
+ * of — so that case just clears the flag.
+ */
+export async function setContactPrimary(
+  agencyId: string,
+  contactId: string,
+  companyId: string | null,
+  isPrimary: boolean,
+): Promise<void> {
+  if (!isPrimary || !companyId) {
+    await sql`
+      update public.contacts set is_primary = false
+      where id = ${contactId} and agency_id = ${agencyId}
+    `;
+    return;
+  }
+  await sql.transaction((tx) => [
+    tx`
+      update public.contacts set is_primary = false
+      where agency_id = ${agencyId} and company_id = ${companyId} and id <> ${contactId}
+        and is_primary
+    `,
+    tx`
+      update public.contacts set is_primary = true
+      where id = ${contactId} and agency_id = ${agencyId} and company_id = ${companyId}
+    `,
+  ]);
+}
+
+/** The company's primary contact, or null when none has been nominated. */
+export async function getPrimaryContactForCompany(
+  agencyId: string,
+  companyId: string,
+): Promise<string | null> {
+  const rows = await sql`
+    select id from public.contacts
+    where agency_id = ${agencyId} and company_id = ${companyId} and is_primary
+    limit 1
+  `;
+  return (rows[0] as { id: string } | undefined)?.id ?? null;
 }
 
 /** Additional-agent (collaborator) user ids for a contact. */

@@ -21,6 +21,8 @@ import { CollapsibleCard } from "@/components/ui/collapsible-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { DEFAULT_DEEP_DIVE_PROMPT } from "@/lib/deep-dive/prompt";
 import {
   createAgent,
   removeAgent,
@@ -71,6 +73,7 @@ export function AdminPanel({
   currentUserId,
   hasOpenRouterKey,
   openRouterModel,
+  deepDivePrompt,
   contactRoles,
   companyTypes,
 }: {
@@ -78,6 +81,8 @@ export function AdminPanel({
   currentUserId: string;
   hasOpenRouterKey: boolean;
   openRouterModel: string;
+  /** Agency override for the Deep Dive brief; null = built-in default. */
+  deepDivePrompt: string | null;
   contactRoles: ContactRoleItem[];
   companyTypes: CompanyTypeItem[];
 }) {
@@ -89,7 +94,11 @@ export function AdminPanel({
 
       <EditCompanyTypesCard types={companyTypes} />
 
-      <AgencySettingsCard hasKey={hasOpenRouterKey} model={openRouterModel} />
+      <AgencySettingsCard
+        hasKey={hasOpenRouterKey}
+        model={openRouterModel}
+        prompt={deepDivePrompt}
+      />
 
       <ConnectorsCard />
     </div>
@@ -769,11 +778,25 @@ function AddRoleForm() {
   );
 }
 
-function AgencySettingsCard({ hasKey, model }: { hasKey: boolean; model: string }) {
+function AgencySettingsCard({
+  hasKey,
+  model,
+  prompt,
+}: {
+  hasKey: boolean;
+  model: string;
+  prompt: string | null;
+}) {
   const [state, action, pending] = useActionState<FormState, FormData>(
     saveAgencySettings,
     {},
   );
+  // Null in the database means "no override"; the editor shows the built-in
+  // brief so there is always something concrete to edit rather than a blank box.
+  const [promptValue, setPromptValue] = React.useState(
+    prompt ?? DEFAULT_DEEP_DIVE_PROMPT,
+  );
+  const isDefault = promptValue.trim() === DEFAULT_DEEP_DIVE_PROMPT.trim();
 
   return (
     <CollapsibleCard
@@ -812,6 +835,44 @@ function AgencySettingsCard({ hasKey, model }: { hasKey: boolean; model: string 
               </p>
             </div>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="deep_dive_prompt">Deep Dive prompt</Label>
+            <Textarea
+              id="deep_dive_prompt"
+              name="deep_dive_prompt"
+              rows={12}
+              defaultValue={promptValue}
+              onChange={(e) => setPromptValue(e.target.value)}
+              className="font-mono text-xs"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setPromptValue(DEFAULT_DEEP_DIVE_PROMPT)}
+                disabled={promptValue === DEFAULT_DEEP_DIVE_PROMPT}
+              >
+                Reset to default
+              </Button>
+              {isDefault ? (
+                <span className="text-xs text-muted-foreground">
+                  Using the built-in brief.
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  Customised — differs from the built-in brief.
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              The research instructions sent with every Deep Dive. The company&rsquo;s
+              own details (name, website, address, CRN) are always added
+              automatically, so they can&rsquo;t be edited out by mistake. Save with
+              this box emptied to go back to the default.
+            </p>
+          </div>
+
           <Notice state={state} />
           <Button type="submit" disabled={pending}>
             {pending ? "Saving…" : "Save AI settings"}

@@ -15,6 +15,7 @@ import {
   syncContactAgents,
   updateContact as updateContactRow,
   type ContactWriteInput,
+  setContactPrimary,
 } from "@/lib/db/queries/contacts";
 import { contactRoleSlugExists } from "@/lib/db/queries/lookups";
 import { getCompanyName } from "@/lib/db/queries/companies";
@@ -113,6 +114,9 @@ export async function createContact(
   const { id } = await createContactRow(agencyId, userId, input, geo ?? { lat: null, lng: null });
 
   await syncContactAgents(agencyId, id, agents(formData).extra);
+  // Runs after the insert (it needs the new id) and demotes the previous
+  // primary in the same transaction — see setContactPrimary.
+  await setContactPrimary(agencyId, id, input.companyId, formData.get("is_primary") != null);
 
   revalidatePath("/contacts");
   redirect(`/contacts/${id}`);
@@ -147,6 +151,7 @@ export async function updateContact(
   }
 
   await syncContactAgents(agencyId, id, agents(formData).extra);
+  await setContactPrimary(agencyId, id, input.companyId, formData.get("is_primary") != null);
 
   revalidatePath("/contacts");
   revalidatePath(`/contacts/${id}`);

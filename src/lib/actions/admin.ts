@@ -160,8 +160,12 @@ export async function updateAgentRole(formData: FormData): Promise<void> {
 }
 
 /**
- * Save the agency's AI settings (OpenRouter key + model). A blank key keeps
- * the existing one (so the masked field never has to echo the secret back).
+ * Save the agency's AI settings (OpenRouter key, model and Deep Dive brief).
+ *
+ * A blank key keeps the existing one, so the masked field never has to echo the
+ * secret back. A blank *prompt*, by contrast, is meaningful: it clears the
+ * override and restores the built-in default, which is what the "Reset to
+ * default" button posts.
  */
 export async function saveAgencySettings(
   _prev: FormState,
@@ -172,8 +176,9 @@ export async function saveAgencySettings(
 
   const model = str(formData, "openrouter_model") || "perplexity/sonar";
   const key = str(formData, "openrouter_api_key") || null;
+  const prompt = str(formData, "deep_dive_prompt") || null;
 
-  await upsertAgencySettings(ctx.agencyId, model, key);
+  await upsertAgencySettings(ctx.agencyId, model, key, prompt);
 
   revalidatePath("/admin");
   return { message: "AI settings saved." };

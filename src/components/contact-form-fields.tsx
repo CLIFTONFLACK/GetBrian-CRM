@@ -127,6 +127,22 @@ export function ContactFormFields({
         Approves receiving marketing communications
       </label>
 
+      {/* Only meaningful once the contact belongs to a company — there is
+          nothing to be the primary contact of otherwise, and the server drops
+          the flag in that case (setContactPrimary). */}
+      <label className="flex cursor-pointer items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          name="is_primary"
+          defaultChecked={c?.is_primary ?? false}
+          className="h-4 w-4 cursor-pointer rounded border-input accent-primary"
+        />
+        Primary contact for this company
+        <span className="text-xs text-muted-foreground">
+          — pre-selected when sending. Replaces the current primary, if any.
+        </span>
+      </label>
+
       <AgentFields
         agents={agents}
         leadAgentId={c?.lead_agent_id}

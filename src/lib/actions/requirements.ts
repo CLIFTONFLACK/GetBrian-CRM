@@ -17,6 +17,7 @@ import {
 } from "@/lib/db/queries/requirements";
 import { createNotifications } from "@/lib/db/queries/messages";
 import { Constants, type Database } from "@/lib/database.types";
+import { requirementLinkError } from "@/lib/requirement-rules";
 import type { FormState } from "@/lib/actions/types";
 
 type UseClass = Database["public"]["Enums"]["use_class"];
@@ -144,9 +145,8 @@ export async function createRequirement(
   const { userId, agencyId } = caller;
 
   const data = payload(formData);
-  if (!data.title) return { error: "A requirement title is required." };
-  if (!data.contactId)
-    return { error: "A contact is required for every requirement." };
+  const invalid = requirementLinkError(data);
+  if (invalid) return { error: invalid };
 
   const { id } = await createRequirementRow(agencyId, userId, data);
 
@@ -184,9 +184,8 @@ export async function updateRequirement(
   const { userId, agencyId } = caller;
 
   const data = payload(formData);
-  if (!data.title) return { error: "A requirement title is required." };
-  if (!data.contactId)
-    return { error: "A contact is required for every requirement." };
+  const invalid = requirementLinkError(data);
+  if (invalid) return { error: invalid };
 
   // Previous lead agent: a hand-off should ping the incoming agent. Also
   // drives the optimistic-concurrency check (see companies.ts's

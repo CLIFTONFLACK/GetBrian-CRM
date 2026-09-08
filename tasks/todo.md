@@ -862,3 +862,9 @@ checked over all seven status cases with an inverted-predicate control.
 The rendered page could not be checked from here - /listings is behind auth (it
 serves a 307, so the route compiles and runs, but the redirect fires before the
 count logic does). Brian confirmed the CDG tab reads 84 on the deployed site.
+
+---
+
+# Feature batch 2026-09-08 (requirements / companies / contacts / matchmaker / deep dive)
+
+Plan lives in its own file: tasks/feature-batch-2026-09-08.md

@@ -2,7 +2,7 @@ import * as React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { ActivityTimeline } from "@/components/activity-timeline";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { LocationMap } from "@/components/location-map";
 import { LogActivityForm } from "@/components/log-activity-form";
+import { QuickRequirementModal } from "@/components/quick-requirement-modal";
 import { SendToTeam } from "@/components/send-to-team";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
@@ -189,15 +190,13 @@ export default async function ContactDetailPage({
       <Card className="mt-4">
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Requirements</CardTitle>
-          <Link
-            href={`/requirements/new?contact=${contact.id}${
+          <QuickRequirementModal
+            contactId={contact.id}
+            companyId={contact.company_id}
+            fullFormHref={`/requirements/new?contact=${contact.id}${
               contact.company_id ? `&company=${contact.company_id}` : ""
             }`}
-            className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
-          >
-            <Plus />
-            Add requirement
-          </Link>
+          />
         </CardHeader>
         <CardContent>
           {requirements.length === 0 ? (

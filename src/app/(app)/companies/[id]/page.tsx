@@ -29,6 +29,7 @@ import { LogActivityForm } from "@/components/log-activity-form";
 import { SendToTeam } from "@/components/send-to-team";
 import { DeepDiveView } from "@/components/deep-dive-view";
 import { DeepDiveChat } from "@/components/deep-dive-chat";
+import { QuickRequirementModal } from "@/components/quick-requirement-modal";
 import { listDeepDiveMessages } from "@/lib/db/queries/deep-dive";
 import { getContactRoles, roleLabel } from "@/lib/contact-roles";
 import { getCompanyTypes, typeLabel } from "@/lib/company-types";
@@ -332,13 +333,10 @@ export default async function CompanyDetailPage({
       <Card className="mt-4">
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Requirements</CardTitle>
-          <Link
-            href={`/requirements/new?company=${company.id}`}
-            className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
-          >
-            <Plus />
-            Add requirement
-          </Link>
+          <QuickRequirementModal
+            companyId={company.id}
+            fullFormHref={`/requirements/new?company=${company.id}`}
+          />
         </CardHeader>
         <CardContent>
           {requirements.length === 0 ? (

@@ -194,6 +194,39 @@ export async function createRequirement(
   redirect(`/requirements/${id}`);
 }
 
+/**
+ * Quick-create from the company or contact page (#c2/#ct2): title, status and
+ * notes only, with the company/contact link inherited from the page. Returns
+ * `created` instead of redirecting so the modal can close and the page refresh
+ * in place. Anything beyond the basics is edited on the brief afterwards.
+ *
+ * Tenure defaults to Leasehold, the same pre-selection the full form makes for
+ * a new brief; the column default stays '{}' for the intake form and importer.
+ */
+export async function quickCreateRequirement(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const caller = await requireCaller();
+  if ("error" in caller) return { error: caller.error };
+  const { userId, agencyId } = caller;
+
+  const data: RequirementWriteInput = {
+    ...payload(formData),
+    tenurePrefs: ["leasehold"] as Tenure[],
+  };
+  const invalid = await requirementPayloadError(agencyId, data);
+  if (invalid) return { error: invalid };
+
+  const { id } = await createRequirementRow(agencyId, userId, data);
+  await refreshMatchesForRequirement(id);
+
+  revalidatePath("/requirements");
+  if (data.companyId) revalidatePath(`/companies/${data.companyId}`);
+  if (data.contactId) revalidatePath(`/contacts/${data.contactId}`);
+  return { created: { id, name: data.title }, message: `Added ${data.title}.` };
+}
+
 export async function updateRequirement(
   _prev: FormState,
   formData: FormData,

@@ -39,6 +39,53 @@ Patterns captured to avoid repeating mistakes. Review at session start.
 - **Never `git add -A` here.** Parallel sessions (e.g. the disposals / agent-assignments
   workstreams) drop untracked files into this same working tree; `git add -A` sweeps their
   WIP into your commit. Stage explicit paths for the files you actually changed.
-- The global `gh` active account flips between `slapharma` and `dominicmerlow` (other
-  sessions switch it). Before any push run `gh auth switch --user slapharma` — only that
-  account can push to slapharma/SLC-CRM.
+- The global `gh` active account drifts between `CLIFTONFLACK`, `slapharma` and
+  `dominicmerlow` (other sessions switch it). Switch unconditionally before every push —
+  a status check first is a verification that cannot fail, because the account can drift
+  between the check and the push.
+- **This repo's remote is `CLIFTONFLACK/GetBrian-CRM`, so the account is `CLIFTONFLACK`:**
+
+  ```
+  gh auth switch --user CLIFTONFLACK
+  ```
+
+  **Corrected 2026-09-09.** This note previously said `slapharma` / `slapharma/SLC-CRM`,
+  which is a repo this project no longer pushes to. Acting on it produced a push command
+  that could only 403 — handed over twice in one session before anyone ran `git remote -v`.
+  Match the account to the *current* remote owner, read from `git remote -v`, not from a
+  note written when the repo lived somewhere else.
+
+## A migration runner with no version table is not a migration runner
+
+`scripts/run-migrations.mjs` reads as "applies db/migrations/*.sql in filename
+order" and is easy to hand over as *the* way to migrate. It replays **every**
+file from 0001 on every run and tracks nothing, and twelve of those files carry
+unguarded `create table` / `create type` / `create index`. Against a database
+that already has a schema it dies on `0001_init.sql` with "relation already
+exists" and never reaches the new migrations.
+
+**Cost (2026-09-08):** handed Brian `node scripts/run-migrations.mjs` as the
+deploy step for five new migrations. It could only ever have failed on the first
+file. Caught before he ran it, by checking the older files for `if not exists`
+rather than trusting the script's own docstring.
+
+**Rules:**
+- Before recommending any migration runner, check whether it records what it has
+  already applied. No version table means it is a build-from-empty tool.
+- Grep the existing migrations for unguarded DDL (`create table` /
+  `create type` / `create index` without `if not exists` or an
+  `exception when duplicate_object` guard) before assuming a replay is safe.
+- Write new migrations idempotently anyway — `add column if not exists`,
+  `create table if not exists`, guarded enum creation — so re-applying one
+  costs nothing.
+- Put the migration that *can* legitimately fail last in filename order. A
+  single-pass runner takes every later file down with it.
+
+## Verify a constraint by trying to violate it, not by checking it exists
+
+Confirming `pg_indexes` contains `companies_agency_name_uniq` proves a row in a
+catalogue, not that anything is enforced — a non-unique index of the same name
+would pass that check. After applying the 0038/0041 indexes, the real check was
+to `insert` a duplicate company name and a second primary contact inside a
+transaction, watch both get rejected, `rollback`, and then confirm no test rows
+survived. That is three assertions where the catalogue query was zero.

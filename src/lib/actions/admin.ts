@@ -19,6 +19,7 @@ import {
 import type { FormState } from "@/lib/actions/types";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
+import { DEFAULT_DEEP_DIVE_PROMPT } from "@/lib/deep-dive/prompt";
 const asRole = (v: string): MemberRole =>
   v === "admin" ? "admin" : v === "manager" ? "manager" : "agent";
 
@@ -176,7 +177,11 @@ export async function saveAgencySettings(
 
   const model = str(formData, "openrouter_model") || "perplexity/sonar";
   const key = str(formData, "openrouter_api_key") || null;
-  const prompt = str(formData, "deep_dive_prompt") || null;
+  // A brief identical to the built-in default is stored as NULL, so later
+  // improvements to the code default reach this agency instead of a frozen copy.
+  const rawPrompt = str(formData, "deep_dive_prompt");
+  const prompt =
+    rawPrompt && rawPrompt.trim() !== DEFAULT_DEEP_DIVE_PROMPT.trim() ? rawPrompt : null;
 
   await upsertAgencySettings(ctx.agencyId, model, key, prompt);
 

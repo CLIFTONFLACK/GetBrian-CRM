@@ -841,7 +841,7 @@ function AgencySettingsCard({
               id="deep_dive_prompt"
               name="deep_dive_prompt"
               rows={12}
-              defaultValue={promptValue}
+              value={promptValue}
               onChange={(e) => setPromptValue(e.target.value)}
               className="font-mono text-xs"
             />

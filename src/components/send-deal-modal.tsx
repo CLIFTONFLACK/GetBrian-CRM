@@ -21,6 +21,9 @@ import type { AgentOption } from "@/lib/db/queries/agencies";
 
 type Step = "choose" | "internal" | "external";
 
+/** Mirrors MAX_RECIPIENTS in src/lib/actions/deal-send.ts — keep them in step. */
+const MAX_RECIPIENTS = 20;
+
 /**
  * Contact option, optionally carrying the address the email would go to.
  * Callers that already select `email` can pass it; otherwise the wizard looks
@@ -378,6 +381,24 @@ function ExternalStep({
     : contacts;
   const hidden = contacts.length - sendable.length;
 
+  // Controlled only so the cap can be enforced client-side: once
+  // MAX_RECIPIENTS are ticked the rest lock until one is unticked. Seeded from
+  // defaultContactIds exactly as `defaultChecked` was.
+  const [checked, setChecked] = React.useState<Set<string>>(
+    () => new Set(defaultContactIds ?? []),
+  );
+  const toggle = (id: string, on: boolean) =>
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  // Count only contacts actually listed — a default id that was hidden (no
+  // email) mustn't eat a slot.
+  const selectedCount = sendable.filter((c) => checked.has(c.id)).length;
+  const atCap = selectedCount >= MAX_RECIPIENTS;
+
   React.useEffect(() => {
     if (!state.message) return;
     const t = setTimeout(onDone, 1200);
@@ -407,7 +428,16 @@ function ExternalStep({
           else received it — that is the agreed behaviour, but it means not
           ticking competing operators into the same send. */}
       <div className="space-y-2">
-        <Label>Recipients</Label>
+        <div className="flex items-baseline justify-between">
+          <Label>Recipients</Label>
+          {sendable.length > 0 ? (
+            <span
+              className={`text-xs ${atCap ? "font-medium text-foreground" : "text-muted-foreground"}`}
+            >
+              {selectedCount} of {MAX_RECIPIENTS} selected
+            </span>
+          ) : null}
+        </div>
         {sendable.length === 0 ? (
           <p className="rounded-md border p-3 text-sm text-muted-foreground">
             No contacts with an email address yet — add one to a contact record
@@ -415,27 +445,38 @@ function ExternalStep({
           </p>
         ) : (
           <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto rounded-md border p-2 sm:grid-cols-2">
-            {sendable.map((c) => (
-              <label
-                key={c.id}
-                className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-muted/60"
-              >
-                <input
-                  type="checkbox"
-                  name="contact_ids"
-                  value={c.id}
-                  defaultChecked={defaultContactIds?.includes(c.id) ?? false}
-                  className="h-4 w-4 rounded border-input accent-primary"
-                />
-                <span className="truncate">{c.name}</span>
-              </label>
-            ))}
+            {sendable.map((c) => {
+              const isChecked = checked.has(c.id);
+              const locked = atCap && !isChecked;
+              return (
+                <label
+                  key={c.id}
+                  className={`flex items-center gap-2 rounded px-1.5 py-1 text-sm ${
+                    locked
+                      ? "cursor-not-allowed opacity-50"
+                      : "cursor-pointer hover:bg-muted/60"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    name="contact_ids"
+                    value={c.id}
+                    checked={isChecked}
+                    disabled={locked}
+                    onChange={(e) => toggle(c.id, e.target.checked)}
+                    className="h-4 w-4 rounded border-input accent-primary"
+                  />
+                  <span className="truncate">{c.name}</span>
+                </label>
+              );
+            })}
           </div>
         )}
         <p className="text-xs text-muted-foreground">
           {hidden > 0
             ? `Everyone ticked receives the same email and can see the other recipients. Only contacts with an email address are listed — ${hidden} hidden.`
             : "Everyone ticked receives the same email and can see the other recipients."}
+          {atCap ? ` Maximum ${MAX_RECIPIENTS} per send — untick one to choose another.` : ""}
         </p>
       </div>
 

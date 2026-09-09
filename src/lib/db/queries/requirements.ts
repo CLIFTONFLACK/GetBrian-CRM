@@ -395,9 +395,34 @@ export async function updateRequirement(
   return (rows[0] as { id: string } | undefined) ?? null;
 }
 
-export async function deleteRequirement(agencyId: string, id: string): Promise<boolean> {
+/** Deletes a requirement (agency-scoped) and returns the Blob URLs of its
+ *  documents (`requirement_documents.file_path`) so the caller can delete the
+ *  underlying Blob objects — the FK cascade only removes the DB rows, not the
+ *  storage. Mirrors disposals.ts's `deleteDisposal`. */
+export async function deleteRequirement(agencyId: string, id: string): Promise<string[]> {
+  const urls = (await sql`
+    select file_path as url
+    from public.requirement_documents
+    where requirement_id = ${id} and agency_id = ${agencyId} and file_path is not null
+  `) as { url: string }[];
+  await sql`delete from public.requirements where id = ${id} and agency_id = ${agencyId}`;
+  return urls.map((r) => r.url);
+}
+
+/** Ownership checks for a requirement's company/contact links — a caller must
+ *  not be able to point a brief at another agency's record. Kept here (rather
+ *  than in companies.ts / contacts.ts) so this DAO owns everything the
+ *  requirement write path depends on. */
+export async function companyBelongsToAgency(agencyId: string, companyId: string): Promise<boolean> {
   const rows = await sql`
-    delete from public.requirements where id = ${id} and agency_id = ${agencyId} returning id
+    select 1 from public.companies where id = ${companyId} and agency_id = ${agencyId} limit 1
+  `;
+  return rows.length > 0;
+}
+
+export async function contactBelongsToAgency(agencyId: string, contactId: string): Promise<boolean> {
+  const rows = await sql`
+    select 1 from public.contacts where id = ${contactId} and agency_id = ${agencyId} limit 1
   `;
   return rows.length > 0;
 }

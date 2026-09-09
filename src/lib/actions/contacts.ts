@@ -75,6 +75,16 @@ async function ownedCompanyId(agencyId: string, companyId: string | null): Promi
 }
 
 /** Resolves the signed-in caller's user id + agency id, or an error message. */
+/** A contact can only be primary *of* a company. The form's checkbox is always
+ *  rendered, so say why the tick was rejected rather than silently dropping it. */
+function primaryFlag(fd: FormData, companyId: string | null): boolean | { error: string } {
+  const ticked = fd.get("is_primary") != null;
+  if (ticked && !companyId) {
+    return { error: "Pick a company before marking this contact as primary." };
+  }
+  return ticked;
+}
+
 async function requireCaller(): Promise<
   { userId: string; agencyId: string } | { error: string }
 > {
@@ -100,6 +110,8 @@ export async function createContact(
   const input = writeInput(formData, role);
   if (!input.firstName) return { error: "A first name is required." };
   input.companyId = await ownedCompanyId(agencyId, input.companyId);
+  const isPrimary = primaryFlag(formData, input.companyId);
+  if (typeof isPrimary !== "boolean") return isPrimary;
 
   if (formData.get("allow_duplicate") == null) {
     const dup = await findDuplicateContactByEmail(agencyId, input.email);
@@ -116,9 +128,10 @@ export async function createContact(
   await syncContactAgents(agencyId, id, agents(formData).extra);
   // Runs after the insert (it needs the new id) and demotes the previous
   // primary in the same transaction — see setContactPrimary.
-  await setContactPrimary(agencyId, id, input.companyId, formData.get("is_primary") != null);
+  await setContactPrimary(agencyId, id, input.companyId, isPrimary);
 
   revalidatePath("/contacts");
+  revalidatePath("/companies");
   redirect(`/contacts/${id}`);
 }
 
@@ -137,6 +150,8 @@ export async function updateContact(
   const input = writeInput(formData, role);
   if (!input.firstName) return { error: "A first name is required." };
   input.companyId = await ownedCompanyId(agencyId, input.companyId);
+  const isPrimary = primaryFlag(formData, input.companyId);
+  if (typeof isPrimary !== "boolean") return isPrimary;
 
   const existing = await getContactForUpdate(agencyId, id);
   if (!existing) return { error: "This contact no longer exists." };
@@ -151,9 +166,10 @@ export async function updateContact(
   }
 
   await syncContactAgents(agencyId, id, agents(formData).extra);
-  await setContactPrimary(agencyId, id, input.companyId, formData.get("is_primary") != null);
+  await setContactPrimary(agencyId, id, input.companyId, isPrimary);
 
   revalidatePath("/contacts");
+  revalidatePath("/companies");
   revalidatePath(`/contacts/${id}`);
   redirect(`/contacts/${id}`);
 }

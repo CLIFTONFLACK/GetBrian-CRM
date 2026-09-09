@@ -1,13 +1,17 @@
 "use server";
 
+import { del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { refreshMatchesForRequirement } from "@/lib/actions/matches";
 import { auth } from "@/lib/auth";
+import { isBlobHostedUrl } from "@/lib/blob-url";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId } from "@/lib/db/queries/agencies";
 import {
+  companyBelongsToAgency,
+  contactBelongsToAgency,
   createRequirement as createRequirementRow,
   deleteRequirement as deleteRequirementRow,
   getRequirementForUpdate,
@@ -95,6 +99,24 @@ const agentsFromForm = (fd: FormData) => {
   return { lead, extra };
 };
 
+/**
+ * The company/contact ids arrive from the form and were never checked against
+ * the caller's agency — a crafted POST could link a brief to another tenant's
+ * record. Ownership is confirmed here before the shape rules run.
+ */
+async function requirementPayloadError(
+  agencyId: string,
+  data: RequirementWriteInput,
+): Promise<string | null> {
+  if (data.companyId && !(await companyBelongsToAgency(agencyId, data.companyId))) {
+    return "That company was not found in your agency.";
+  }
+  if (data.contactId && !(await contactBelongsToAgency(agencyId, data.contactId))) {
+    return "That contact was not found in your agency.";
+  }
+  return requirementLinkError(data);
+}
+
 /** Resolves the signed-in caller's user id + agency id, or an error message. */
 async function requireCaller(): Promise<
   { userId: string; agencyId: string } | { error: string }
@@ -145,7 +167,7 @@ export async function createRequirement(
   const { userId, agencyId } = caller;
 
   const data = payload(formData);
-  const invalid = requirementLinkError(data);
+  const invalid = await requirementPayloadError(agencyId, data);
   if (invalid) return { error: invalid };
 
   const { id } = await createRequirementRow(agencyId, userId, data);
@@ -184,7 +206,7 @@ export async function updateRequirement(
   const { userId, agencyId } = caller;
 
   const data = payload(formData);
-  const invalid = requirementLinkError(data);
+  const invalid = await requirementPayloadError(agencyId, data);
   if (invalid) return { error: invalid };
 
   // Previous lead agent: a hand-off should ping the incoming agent. Also
@@ -236,11 +258,17 @@ export async function deleteRequirement(formData: FormData): Promise<void> {
     const session = await auth();
     const agencyId = session?.user ? await currentAgencyId(session.user.id) : null;
     if (agencyId) {
+      let blobUrls: string[];
       try {
-        await deleteRequirementRow(agencyId, id);
+        blobUrls = await deleteRequirementRow(agencyId, id);
       } catch (err) {
         redirect(`/requirements/${id}?error=${encodeURIComponent((err as Error).message)}`);
       }
+      // Remove the landlord-pack Blob objects the FK cascade left behind — only
+      // ones we host. Best-effort: the DB rows are already gone regardless
+      // (mirrors deleteDisposal in disposals.ts).
+      const ours = blobUrls.filter(isBlobHostedUrl);
+      if (ours.length > 0) await del(ours).catch(() => {});
       revalidatePath("/requirements");
     }
   }

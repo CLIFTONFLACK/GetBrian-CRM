@@ -4,6 +4,7 @@ import { del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
 
 import { auth } from "@/lib/auth";
+import { isOurBlobUrl } from "@/lib/blob-url";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId } from "@/lib/db/queries/agencies";
 import {
@@ -55,6 +56,13 @@ export async function addRequirementDocument(
   const filePath = str(formData, "file_path"); // the uploaded blob's URL
   const name = str(formData, "name");
   if (!requirementId || !filePath || !name) return { error: "Missing file details." };
+
+  // The URL comes from the browser; the proxy route redirects to it and delete
+  // passes it to `del()` with the server token, so it must be one of ours —
+  // hosted on Vercel Blob, under this requirement's upload folder.
+  if (!isOurBlobUrl(filePath, requirementId)) {
+    return { error: "That file is not one of ours." };
+  }
 
   if (!(await requirementBelongsToAgency(agencyId, requirementId))) {
     return { error: "Requirement not found." };

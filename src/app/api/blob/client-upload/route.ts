@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { currentAgencyId } from "@/lib/db/queries/agencies";
 import { getDisposalById } from "@/lib/db/queries/disposals";
 import { requirementBelongsToAgency } from "@/lib/db/queries/requirements";
+import { isUuid } from "@/lib/uuid";
 
 /**
  * POST /api/blob/client-upload
@@ -48,6 +49,17 @@ function parseContext(clientPayload: string | null): UploadContext {
     ctx.kind !== "requirement-doc"
   ) {
     throw new Error("Unknown upload context.");
+  }
+  // Validate the owner id before it reaches a DB call — a non-uuid would
+  // otherwise surface as a raw Postgres cast error.
+  if (ctx.kind === "requirement-doc" && !isUuid(String(ctx.requirementId ?? ""))) {
+    throw new Error("Invalid upload context.");
+  }
+  if (
+    (ctx.kind === "disposal-image" || ctx.kind === "disposal-doc") &&
+    !isUuid(String(ctx.disposalId ?? ""))
+  ) {
+    throw new Error("Invalid upload context.");
   }
   return ctx;
 }
@@ -135,6 +147,10 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     return NextResponse.json(jsonResponse);
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 400 });
+    // Fixed message: `handleUpload` rethrows whatever `onBeforeGenerateToken`
+    // (or a DB call inside it) threw, and raw Postgres error text must not
+    // reach the browser.
+    console.error("blob client-upload rejected:", error);
+    return NextResponse.json({ error: "Upload not permitted." }, { status: 400 });
   }
 }

@@ -26,6 +26,9 @@ export type RequirementRow = {
   operatorName: string | null;
   towns: string;
   maxRent: number | null;
+  /** Pre-ticked recipient(s) when this row is sent — its contact, else its
+   *  company's primary contact. Resolved server-side. */
+  defaultContactIds?: string[];
 };
 
 /**
@@ -75,6 +78,11 @@ export function RequirementsTable({
     setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)));
 
   const selectedRows = rows.filter((r) => selected.has(r.id));
+  // Union of the selected briefs' default recipients, de-duplicated — every
+  // ticked requirement's operator contact starts ticked in the wizard.
+  const defaultContactIds = [
+    ...new Set(selectedRows.flatMap((r) => r.defaultContactIds ?? [])),
+  ];
 
   return (
     <div className="space-y-3">
@@ -92,6 +100,7 @@ export function RequirementsTable({
               contacts={contacts}
               companyTypes={companyTypes}
               requirements={selectedRows.map((r) => ({ id: r.id, title: r.title }))}
+              defaultContactIds={defaultContactIds.length > 0 ? defaultContactIds : undefined}
             />
             <Button
               type="button"

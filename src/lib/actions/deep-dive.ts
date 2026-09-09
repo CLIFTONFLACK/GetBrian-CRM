@@ -141,14 +141,23 @@ export async function askDeepDive(
     return { error: (err as Error).message };
   }
 
-  const reportId = await getLatestDeepDiveReportId(agencyId, companyId);
-  await addDeepDiveExchange(agencyId, {
-    companyId,
-    reportId,
-    question,
-    answer,
-    createdBy: session.user.id,
-  });
+  try {
+    const reportId = await getLatestDeepDiveReportId(agencyId, companyId);
+    await addDeepDiveExchange(agencyId, {
+      companyId,
+      reportId,
+      question,
+      answer,
+      createdBy: session.user.id,
+    });
+  } catch (e) {
+    // The model has already been paid for and answered — surface the answer
+    // rather than lose it, but say plainly that it is not on the profile.
+    const msg = e instanceof Error ? e.message : "unknown error";
+    return {
+      message: `${answer}\n\n(This answer could not be saved to the company's profile: ${msg})`,
+    };
+  }
 
   revalidatePath(`/companies/${companyId}`);
   return { message: answer };

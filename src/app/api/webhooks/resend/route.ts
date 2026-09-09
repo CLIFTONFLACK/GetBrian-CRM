@@ -68,10 +68,19 @@ const STAMP: Record<string, "delivered_at" | "opened_at" | "clicked_at" | "bounc
     "email.bounced": "bounced_at",
   };
 
+/**
+ * Events that are about specific recipients, not the send as a whole. A
+ * multi-recipient send shares one provider_id across its rows, so these are
+ * narrowed to the addresses in `data.to` (which Resend populates per event —
+ * a bounce carries only the address that bounced). Delivered/opened/clicked
+ * stay send-wide: an accepted trade-off of the shared To: line.
+ */
+const PER_RECIPIENT = new Set(["email.bounced"]);
+
 type ResendEvent = {
   type?: string;
   created_at?: string;
-  data?: { email_id?: string; created_at?: string };
+  data?: { email_id?: string; created_at?: string; to?: unknown };
 };
 
 export async function POST(request: Request): Promise<Response> {
@@ -119,13 +128,26 @@ export async function POST(request: Request): Promise<Response> {
 
   const at = event.created_at ?? event.data?.created_at ?? new Date().toISOString();
   const status = type.replace(/^email\./, "");
+  // `data.to` is a string[] in Resend's payload; tolerate a bare string and
+  // drop anything that isn't a string. Only consulted for per-recipient events;
+  // if it's absent on one, fall back to stamping the whole send (as before).
+  const rawTo = event.data?.to;
+  const to = (Array.isArray(rawTo) ? rawTo : rawTo != null ? [rawTo] : []).filter(
+    (v): v is string => typeof v === "string",
+  );
+  const recipients = PER_RECIPIENT.has(type) && to.length > 0 ? to : undefined;
 
   // provider_id (Resend's own message id) is the sole correlation key and is
   // globally unique — no caller agencyId to scope by here (see AGENTS.md);
   // the DAO resolves the row purely from this id.
   let updated: boolean;
   try {
-    updated = await updateExternalSendTrackingByProviderId(emailId, { status, column, at });
+    updated = await updateExternalSendTrackingByProviderId(emailId, {
+      status,
+      column,
+      at,
+      recipients,
+    });
   } catch (err) {
     // 500 → Resend retries.
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

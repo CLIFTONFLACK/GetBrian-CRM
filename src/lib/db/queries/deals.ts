@@ -803,9 +803,13 @@ export async function getExternalSendHistoryRows(
  * POST /api/webhooks/resend uses. This is a service-role, cross-agency site
  * (no user session — see AGENTS.md): `provider_id` is globally unique (one
  * Resend message id per send), so it alone correctly scopes the update to
- * exactly one row without needing a caller agencyId. Returns false when no
- * row matched (unknown/not-yet-written provider id — the caller 500s so
- * Resend retries).
+ * exactly one send without needing a caller agencyId. A multi-recipient send
+ * shares one provider_id across its rows (one row per recipient × requirement
+ * × listing), so by default every row of the send is stamped. Pass
+ * `recipients` (the event's `data.to`) to narrow to those addresses' rows —
+ * used for bounces, which are per-recipient, unlike delivered/opened/clicked
+ * which are accepted as send-wide. Returns false when no row matched
+ * (unknown/not-yet-written provider id — the caller 500s so Resend retries).
  */
 export async function updateExternalSendTrackingByProviderId(
   providerId: string,
@@ -813,6 +817,7 @@ export async function updateExternalSendTrackingByProviderId(
     status: string;
     column: "delivered_at" | "opened_at" | "clicked_at" | "bounced_at";
     at: string;
+    recipients?: string[];
   },
 ): Promise<boolean> {
   // patch.column reaches sql.unsafe, so re-assert it against the 4-value
@@ -822,11 +827,20 @@ export async function updateExternalSendTrackingByProviderId(
   const ALLOWED = new Set(["delivered_at", "opened_at", "clicked_at", "bounced_at"]);
   if (!ALLOWED.has(patch.column)) throw new Error("Invalid tracking column.");
   const columnIdent = sql.unsafe(patch.column);
-  const rows = await sql`
-    update public.external_sends set status = ${patch.status}, ${columnIdent} = ${patch.at}
-    where provider_id = ${providerId}
-    returning id
-  `;
+  const recipients = patch.recipients?.map((e) => e.trim().toLowerCase()).filter(Boolean);
+  const rows =
+    recipients && recipients.length > 0
+      ? await sql`
+          update public.external_sends set status = ${patch.status}, ${columnIdent} = ${patch.at}
+          where provider_id = ${providerId}
+            and lower(recipient_email) = ANY(${recipients}::text[])
+          returning id
+        `
+      : await sql`
+          update public.external_sends set status = ${patch.status}, ${columnIdent} = ${patch.at}
+          where provider_id = ${providerId}
+          returning id
+        `;
   return rows.length > 0;
 }
 

@@ -41,8 +41,11 @@ function secret(): string {
   return s;
 }
 
+/** Note the "disp:" prefix — it namespaces this signature away from
+ *  requirement-docs' ("req:"), so a token for one document kind can never
+ *  validate for a same-numbered id of the other. */
 function sign(docId: string, exp: number): string {
-  return createHmac("sha256", secret()).update(`${docId}.${exp}`).digest("hex");
+  return createHmac("sha256", secret()).update(`disp:${docId}.${exp}`).digest("hex");
 }
 
 /**

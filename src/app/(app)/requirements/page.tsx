@@ -19,7 +19,10 @@ import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
 import { listCompanyOptions } from "@/lib/db/queries/companies";
-import { listContactOptions } from "@/lib/db/queries/contacts";
+import {
+  getDefaultSendContactsForRequirements,
+  listContactOptions,
+} from "@/lib/db/queries/contacts";
 import {
   getRequirementsByIds,
   listRequirementFacetRows,
@@ -158,11 +161,15 @@ export default async function RequirementsPage({
     .filter((r): r is NonNullable<typeof r> => r != null);
 
   // Companies double as the operator-name lookup and the Send Deal company picker.
-  const [members, companies, contacts, companyTypes] = await Promise.all([
+  const [members, companies, contacts, companyTypes, defaultContacts] = await Promise.all([
     agencyId ? getAgencyMembers(agencyId) : Promise.resolve([]),
     agencyId ? listCompanyOptions(agencyId) : Promise.resolve([]),
     agencyId ? listContactOptions(agencyId) : Promise.resolve([]),
     getCompanyTypes(),
+    // Who the Send Deal wizard pre-ticks per row (contact, else company primary).
+    agencyId
+      ? getDefaultSendContactsForRequirements(agencyId, pageIds)
+      : Promise.resolve(new Map<string, string>()),
   ]);
   const names = new Map(companies.map((c) => [c.id, c.name]));
 
@@ -245,6 +252,7 @@ export default async function RequirementsPage({
             operatorName: r.company_id ? (names.get(r.company_id) ?? null) : null,
             towns: r.target_towns.join(", "),
             maxRent: r.max_rent,
+            defaultContactIds: defaultContacts.has(r.id) ? [defaultContacts.get(r.id)!] : undefined,
           }))}
           params={params}
           agents={members}

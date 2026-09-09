@@ -1,4 +1,5 @@
 import { getAgencySettings } from "@/lib/db/queries/admin";
+import { DEFAULT_DEEP_DIVE_PROMPT } from "@/lib/deep-dive/prompt";
 
 export type OpenRouterConfig = {
   apiKey: string;
@@ -28,6 +29,17 @@ export async function getAgencyOpenRouter(agencyId: string): Promise<OpenRouterC
   return {
     apiKey: settings.openrouter_api_key,
     model: settings.openrouter_model || "perplexity/sonar",
-    deepDivePrompt: settings.deep_dive_prompt,
+    deepDivePrompt: normaliseDeepDivePrompt(settings.deep_dive_prompt),
   };
+}
+
+/** A stored prompt that is blank, or is the built-in default verbatim, is not
+ *  an override — Admin's save path writes the default back as text when the
+ *  editor is left untouched, and this keeps that reading as "unset" so the
+ *  default can later change in code without stale copies pinning agencies to
+ *  the old wording. */
+function normaliseDeepDivePrompt(stored: string | null): string | null {
+  const trimmed = (stored ?? "").trim();
+  if (!trimmed || trimmed === DEFAULT_DEEP_DIVE_PROMPT.trim()) return null;
+  return stored;
 }

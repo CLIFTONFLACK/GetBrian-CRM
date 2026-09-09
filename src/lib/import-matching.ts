@@ -69,6 +69,23 @@ export function companyFileKey(
 }
 
 /**
+ * EVERY in-file identity a company row answers to — the primary key from
+ * companyFileKey plus the CRN and name as aliases. Registering all of them
+ * means a NEW company written once with its CRN and once without still merges
+ * into one record: the name-only row finds the name alias the CRN row left.
+ */
+export function companyFileKeys(
+  existingId: string | null,
+  companyNumber: string,
+  name: string,
+): string[] {
+  const keys = [companyFileKey(existingId, companyNumber, name)];
+  if (companyNumber) keys.push(`crn:${normaliseKey(companyNumber)}`);
+  keys.push(`name:${normaliseKey(name)}`);
+  return [...new Set(keys)];
+}
+
+/**
  * Key for the contact name fallback, used when a spreadsheet carries no email
  * address: first + last name scoped to the owning company, so two people with
  * the same name at different companies stay distinct records.

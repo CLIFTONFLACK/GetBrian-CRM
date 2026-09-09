@@ -334,7 +334,13 @@ export async function getContactForUpdate(
 }
 
 /** See companies.ts's `updateCompany` for the `geo: null` = "leave
- *  untouched" convention and the optimistic-concurrency semantics. */
+ *  untouched" convention and the optimistic-concurrency semantics.
+ *
+ *  Moving a contact to another company clears `is_primary` in the same UPDATE
+ *  (the right-hand `company_id` reads the OLD value), otherwise a primary
+ *  re-parented onto a company that already has one trips
+ *  `contacts_one_primary_per_company`. `setContactPrimary` runs afterwards and
+ *  re-promotes if the form still has the box ticked. */
 export async function updateContact(
   agencyId: string,
   id: string,
@@ -351,6 +357,7 @@ export async function updateContact(
           phone = ${input.phone},
           role = ${input.role},
           company_id = ${input.companyId},
+          is_primary = case when company_id is distinct from ${input.companyId} then false else is_primary end,
           notes = ${input.notes},
           lead_agent_id = ${input.leadAgentId},
           marketing_opt_in = ${input.marketingOptIn},
@@ -371,6 +378,7 @@ export async function updateContact(
           phone = ${input.phone},
           role = ${input.role},
           company_id = ${input.companyId},
+          is_primary = case when company_id is distinct from ${input.companyId} then false else is_primary end,
           notes = ${input.notes},
           lead_agent_id = ${input.leadAgentId},
           marketing_opt_in = ${input.marketingOptIn},
@@ -396,8 +404,12 @@ export async function linkContactToCompany(
   contactId: string,
   companyId: string,
 ): Promise<boolean> {
+  // Same primary-flag guard as updateContact: a primary that changes company
+  // stops being primary, or the one-primary-per-company index rejects the move.
   const rows = await sql`
-    update public.contacts set company_id = ${companyId}
+    update public.contacts set
+      company_id = ${companyId},
+      is_primary = case when company_id = ${companyId} then is_primary else false end
     where id = ${contactId} and agency_id = ${agencyId}
     returning id
   `;
@@ -453,6 +465,30 @@ export async function getPrimaryContactForCompany(
     limit 1
   `;
   return (rows[0] as { id: string } | undefined)?.id ?? null;
+}
+
+/**
+ * Who the Send Deal wizard should pre-tick for each requirement: the
+ * requirement's own contact when it has one (and it is still in this agency),
+ * else the primary contact of the requirement's company. Requirements that
+ * resolve to nobody are absent from the map.
+ */
+export async function getDefaultSendContactsForRequirements(
+  agencyId: string,
+  requirementIds: string[],
+): Promise<Map<string, string>> {
+  if (requirementIds.length === 0) return new Map();
+  const rows = (await sql`
+    select r.id, coalesce(c.id, p.id) as contact_id
+    from public.requirements r
+    left join public.contacts c on c.id = r.contact_id and c.agency_id = r.agency_id
+    left join public.contacts p
+      on p.company_id = r.company_id and p.agency_id = r.agency_id and p.is_primary
+    where r.agency_id = ${agencyId} and r.id = ANY(${requirementIds}::uuid[])
+  `) as { id: string; contact_id: string | null }[];
+  return new Map(
+    rows.filter((r) => r.contact_id).map((r) => [r.id, r.contact_id as string]),
+  );
 }
 
 /** Additional-agent (collaborator) user ids for a contact. */

@@ -33,7 +33,11 @@ import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
 import { getCompanyName, listCompanyOptions } from "@/lib/db/queries/companies";
-import { getContactById, listContactOptions } from "@/lib/db/queries/contacts";
+import {
+  getContactById,
+  getPrimaryContactForCompany,
+  listContactOptions,
+} from "@/lib/db/queries/contacts";
 import { listDisposalsForMatching } from "@/lib/db/queries/disposals";
 import {
   getRequirementAgentIds,
@@ -102,6 +106,11 @@ export default async function RequirementDetailPage({
   const contactName = contact
     ? [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "View contact"
     : null;
+  // Who the Send Deal wizard pre-ticks: the brief's own contact, else the
+  // operator's primary contact, else nobody.
+  const defaultContactId =
+    contact?.id ??
+    (r.company_id ? await getPrimaryContactForCompany(agencyId, r.company_id) : null);
 
   const s = requirementStatusBadge(r.status);
 
@@ -370,6 +379,7 @@ export default async function RequirementDetailPage({
             companies={companyOptions}
             contacts={contactOptions}
             companyTypes={companyTypes}
+            defaultContactIds={defaultContactId ? [defaultContactId] : undefined}
           />
         </CardContent>
       </Card>

@@ -42,6 +42,13 @@ export async function listContactEmails(): Promise<{ id: string; email: string |
 const MAX_ATTACHMENTS = 8;
 
 /**
+ * Ceiling on recipients in one email. Resend rejects a To: line over 50
+ * addresses outright, and a shared To: line this long is a privacy problem
+ * anyway (every recipient sees every other). Enforced here AND in the modal.
+ */
+const MAX_RECIPIENTS = 20;
+
+/**
  * "Send Deal → External" — email one or more matched opportunities (or a batch
  * of requirement briefs) to a company contact, attaching each listing's
  * particulars PDF (branded for CDG stock, unbranded for intel). Every send is
@@ -77,6 +84,11 @@ export async function sendDealExternal(
     ),
   );
   if (contactIds.length === 0) return { error: "Pick at least one contact to send to." };
+  // Checked before any contact lookup or PDF render — a too-long list should
+  // fail instantly, not after rendering eight attachments.
+  if (contactIds.length > MAX_RECIPIENTS) {
+    return { error: `Choose at most ${MAX_RECIPIENTS} contacts per send.` };
+  }
   // company_id comes from the form; only keep it if this agency owns it, so a
   // foreign id can't be stamped onto external_sends and later surface another
   // agency's name in the send-history join (no RLS backstop — see AGENTS.md).

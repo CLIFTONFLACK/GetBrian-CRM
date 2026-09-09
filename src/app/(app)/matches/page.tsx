@@ -27,7 +27,10 @@ import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
 import { listCompanyOptions } from "@/lib/db/queries/companies";
-import { listContactOptions } from "@/lib/db/queries/contacts";
+import {
+  getDefaultSendContactsForRequirements,
+  listContactOptions,
+} from "@/lib/db/queries/contacts";
 import { listDealPairs } from "@/lib/db/queries/deals";
 import { listDisposalsForMatching } from "@/lib/db/queries/disposals";
 import { listMatches } from "@/lib/db/queries/matches";
@@ -182,6 +185,11 @@ export default async function MatchesPage({
         shown.map((p) => ({ requirementId: p.rq.id, listingId: p.d.id })),
       )
     : new Map<string, { name: string; at: string }[]>();
+  // Who the Send Deal wizard pre-ticks per requirement on screen (its contact,
+  // else its company's primary contact).
+  const defaultContacts = agencyId
+    ? await getDefaultSendContactsForRequirements(agencyId, [...new Set(shown.map((p) => p.rq.id))])
+    : new Map<string, string>();
 
   const params = { q, min, use_class, flex, silo, rejected, shortlisted };
 
@@ -298,6 +306,7 @@ export default async function MatchesPage({
             const accent = SCORE_ACCENT[ms.tone] ?? SCORE_ACCENT.slate;
             const pairKey = `${rq.id}:${d.id}`;
             const previousSends = sentByPair.get(pairKey);
+            const defaultContact = defaultContacts.get(rq.id);
             const converted = convertedPairs.has(pairKey);
             const status = statusByPair.get(pairKey);
             return (
@@ -436,6 +445,7 @@ export default async function MatchesPage({
                           requirementTitle={rq.title}
                           listingTitle={d.title ?? "Untitled listing"}
                           previousSends={previousSends}
+                          defaultContactIds={defaultContact ? [defaultContact] : undefined}
                         />
                         <CreateDealButton requirementId={rq.id} listingId={d.id} />
                       </div>

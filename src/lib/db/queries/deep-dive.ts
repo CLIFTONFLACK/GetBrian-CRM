@@ -83,7 +83,9 @@ export type DeepDiveMessageRow = {
 };
 
 /** The whole thread for a company, oldest first — it is both what the page
- *  renders and what gets replayed to the model as conversation context. */
+ *  renders and what gets replayed to the model as conversation context.
+ *  A question and its answer share a created_at (one transaction), so seq
+ *  (db/migrations/0043) breaks the tie. */
 export async function listDeepDiveMessages(
   agencyId: string,
   companyId: string,
@@ -92,7 +94,7 @@ export async function listDeepDiveMessages(
     select id, role, content, created_at::text as created_at
     from public.deep_dive_messages
     where agency_id = ${agencyId} and company_id = ${companyId}
-    order by created_at asc
+    order by created_at asc, seq asc
   `) as DeepDiveMessageRow[];
 }
 

@@ -24,7 +24,11 @@ import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
 import { listActivitiesForEntity } from "@/lib/db/queries/activities";
 import { getCompanyName, listCompanyOptions } from "@/lib/db/queries/companies";
-import { listContactOptions } from "@/lib/db/queries/contacts";
+import {
+  getDefaultSendContactsForRequirements,
+  getPrimaryContactForCompany,
+  listContactOptions,
+} from "@/lib/db/queries/contacts";
 import {
   getDealAgentIds,
   getDealById,
@@ -112,6 +116,20 @@ export default async function DealDetailPage({
   const [companyOptions, contactOptions, companyTypes] = canSendDeal
     ? await Promise.all([listCompanyOptions(agencyId), listContactOptions(agencyId), getCompanyTypes()])
     : [[], [], []];
+  // Pre-ticked recipient: the requirement's contact / its company's primary,
+  // else the deal's own operator's primary contact.
+  let defaultContactId: string | null = null;
+  if (canSendDeal) {
+    if (deal.requirement_id) {
+      defaultContactId =
+        (await getDefaultSendContactsForRequirements(agencyId, [deal.requirement_id])).get(
+          deal.requirement_id,
+        ) ?? null;
+    }
+    if (!defaultContactId && deal.company_id) {
+      defaultContactId = await getPrimaryContactForCompany(agencyId, deal.company_id);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -168,6 +186,7 @@ export default async function DealDetailPage({
               listingId={deal.listing_id ?? undefined}
               requirementTitle={requirement?.title}
               listingTitle={listing?.title ?? undefined}
+              defaultContactIds={defaultContactId ? [defaultContactId] : undefined}
             />
           ) : null}
           <DealShareActions

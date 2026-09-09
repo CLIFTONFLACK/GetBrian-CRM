@@ -2,9 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { auth } from "@/lib/auth";
-import { isDbConfigured } from "@/lib/db/client";
-import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { requireAgencyAdmin } from "@/lib/auth/require-admin";
 import { createCompany, type CompanyWriteInput } from "@/lib/db/queries/companies";
 import { createContact, type ContactWriteInput } from "@/lib/db/queries/contacts";
 import { createDisposal, type DisposalWriteInput } from "@/lib/db/queries/disposals";
@@ -29,7 +27,7 @@ import { createRequirement, type RequirementWriteInput } from "@/lib/db/queries/
 import { deriveCounty } from "@/lib/locations";
 import { addressQuery, geocodeAddress } from "@/lib/maps/geocode";
 import {
-  companyFileKey,
+  companyFileKeys,
   contactNameKey,
   matchCompanyId,
   mergePatch,
@@ -111,24 +109,31 @@ type ParsedAddress = {
   county: string | null;
 };
 
-/** Resolves the signed-in caller's user id + agency id, or an error message. */
-async function requireCaller(): Promise<
-  { userId: string; agencyId: string } | { error: string }
-> {
-  if (!isDbConfigured) return { error: "The database isn't configured yet." };
-  const session = await auth();
-  if (!session?.user) return { error: "You must be signed in." };
-  const agencyId = await currentAgencyId(session.user.id);
-  if (!agencyId) return { error: "No agency is linked to your account." };
-  return { userId: session.user.id, agencyId };
+/** Postgres SQLSTATE → a message safe to show the user. The raw driver text
+ *  names constraints and columns that mean nothing to an importer and can leak
+ *  schema detail, so only the class of failure is reported. */
+function writeErrorMessage(e: unknown): string {
+  const code = (e as { code?: unknown } | null)?.code;
+  switch (code) {
+    case "23505":
+      return "Duplicate: a record with this name/email/reference already exists";
+    case "23503":
+      return "Linked record not found";
+    case "22P02":
+      return "Invalid value";
+    default:
+      return "Could not save this row";
+  }
 }
 
-/** Bulk-import CSV rows into companies / contacts / requirements / listings (#8). */
+/** Bulk-import CSV rows into companies / contacts / requirements / listings
+ *  (#8). Admin only: a whole-book write (and a way to overwrite existing
+ *  records by matching key) is the same class of power as the admin panel. */
 export async function importEntityCsv(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const caller = await requireCaller();
+  const caller = await requireAgencyAdmin();
   if ("error" in caller) return { error: caller.error };
   const { userId, agencyId } = caller;
 
@@ -205,6 +210,7 @@ export async function importEntityCsv(
     fields: CompanyWriteInput;
     patch: CompanyImportPatch;
     existingId: string | null;
+    rowNo: number;
   };
   type ContactRecord = {
     address: ParsedAddress;
@@ -214,6 +220,7 @@ export async function importEntityCsv(
     /** Null until the name fallback runs, which needs the company resolved. */
     existingId: string | null;
     hadEmailMatch: boolean;
+    rowNo: number;
   };
   type RequirementRecord = {
     fields: RequirementWriteInput;
@@ -228,6 +235,7 @@ export async function importEntityCsv(
     patch: DisposalImportPatch;
     externalRef: string | null;
     existingId: string | null;
+    rowNo: number;
   };
 
   const companyRecords: CompanyRecord[] = [];
@@ -266,16 +274,22 @@ export async function importEntityCsv(
       return value;
     };
     /**
-     * Claim a key for this file. Returns the earlier record when this row is a
-     * repeat, in which case the caller merges into it and adds nothing new.
+     * Claim one or more keys for this file. Returns the earlier record when any
+     * of them is already taken, in which case the caller merges into it and
+     * adds nothing new. Several keys let a record answer to every identity a
+     * later row might use (a company's CRN and its name), so a row carrying
+     * only one of them still finds it.
      */
-    const claim = (k: string, rec: { patch: object }) => {
-      const prior = recordByFileKey.get(k);
+    const claim = (keys: string | string[], rec: { patch: object }) => {
+      const ks = Array.isArray(keys) ? keys : [keys];
+      const prior = ks.map((k) => recordByFileKey.get(k)).find(Boolean);
       if (prior) {
         mergedInFile++;
+        // Any key the prior didn't yet hold now points at it too.
+        for (const k of ks) if (!recordByFileKey.has(k)) recordByFileKey.set(k, prior);
         return prior;
       }
-      recordByFileKey.set(k, rec);
+      for (const k of ks) recordByFileKey.set(k, rec);
       return null;
     };
     try {
@@ -321,6 +335,7 @@ export async function importEntityCsv(
         const rec: CompanyRecord = {
           address,
           existingId,
+          rowNo,
           patch,
           fields: {
             name,
@@ -338,9 +353,9 @@ export async function importEntityCsv(
             leadAgentId: null,
           },
         };
-        // Key the file-level dedupe on whatever identified the record, so
+        // Key the file-level dedupe on everything that identifies the record, so
         // "ABC Ltd" with a CRN on one line and without on another still merge.
-        const prior = claim(companyFileKey(existingId, number, name), rec);
+        const prior = claim(companyFileKeys(existingId, number, name), rec);
         if (prior) mergePatch(prior.patch as CompanyImportPatch, patch);
         else companyRecords.push(rec);
       } else if (entity === "contacts") {
@@ -382,6 +397,7 @@ export async function importEntityCsv(
           companyName: get("company_name") || null,
           existingId,
           hadEmailMatch: existingId !== null,
+          rowNo,
           patch,
           fields: {
             firstName,
@@ -424,14 +440,17 @@ export async function importEntityCsv(
             `company_name "${companyName}" doesn't match any company — import Companies first`,
           );
         }
-        // Same rule the form enforces, so a spreadsheet can't create rows the
-        // UI would reject.
-        const invalid = requirementLinkError({ title, companyId, contactId });
-        if (invalid) throw new Error(invalid);
-
         const existingId = externalRef
           ? (requirementIdByRef.get(key(externalRef)) ?? null)
           : null;
+        // Same rule the form enforces, so a spreadsheet can't create rows the
+        // UI would reject. Only for NEW rows: an existing requirement already
+        // satisfies it, and an update is blank-preserving so can only add links
+        // — a ref-only "top up" row must not be refused for the cells it omits.
+        if (existingId === null) {
+          const invalid = requirementLinkError({ title, companyId, contactId });
+          if (invalid) throw new Error(invalid);
+        }
         const useClasses = parseUseClasses(get("use_classes"));
         const tenurePrefs = list(get("tenure_prefs")).filter((t) =>
           (Constants.public.Enums.tenure_type as readonly string[]).includes(t),
@@ -559,6 +578,7 @@ export async function importEntityCsv(
         const rec: ListingRecord = {
           externalRef,
           existingId,
+          rowNo,
           patch,
           fields: {
             title: get("title"),
@@ -663,14 +683,18 @@ export async function importEntityCsv(
     // Name fallback for rows with no email — now possible, because the match
     // key includes the company we just resolved. Also folds in-file name
     // duplicates together, which couldn't be done during the first pass.
+    // Rows WITH an email register their name too, so an email-less line for
+    // the same person at the same company further down merges into them
+    // rather than becoming a second record.
     const byNameThisFile = new Map<string, ContactRecord>();
     const keep: ContactRecord[] = [];
     for (const c of contactRecords) {
+      const k = contactNameKey(c.fields.firstName, c.fields.lastName, c.fields.companyId);
       if (c.hadEmailMatch || c.fields.email) {
+        if (!byNameThisFile.has(k)) byNameThisFile.set(k, c);
         keep.push(c);
         continue;
       }
-      const k = contactNameKey(c.fields.firstName, c.fields.lastName, c.fields.companyId);
       const priorInFile = byNameThisFile.get(k);
       if (priorInFile) {
         mergePatch(priorInFile.patch, c.patch);
@@ -718,7 +742,7 @@ export async function importEntityCsv(
   // throw that commits rows 1..N-1 and then 500s the whole action, isolate each
   // row: a failure is recorded and skipped, the rest still import. The result
   // message reports the skips (same pattern as the parse-time `errors`).
-  async function writeEach<T extends { existingId: string | null }>(
+  async function writeEach<T extends { existingId: string | null; rowNo: number }>(
     records: T[],
     insert: (rec: T) => Promise<unknown>,
     update: (rec: T, id: string) => Promise<unknown>,
@@ -733,7 +757,8 @@ export async function importEntityCsv(
           created++;
         }
       } catch (e) {
-        errors.push(e instanceof Error ? e.message : "row failed to import");
+        // Never the driver's own text: see writeErrorMessage.
+        errors.push(`Row ${rec.rowNo}: ${writeErrorMessage(e)}`);
       }
     }
   }

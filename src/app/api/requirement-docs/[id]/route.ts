@@ -7,6 +7,7 @@ import {
   authorizeRequirementDocument,
   verifyRequirementDocToken,
 } from "@/lib/requirement-docs";
+import { isUuid } from "@/lib/uuid";
 
 /**
  * GET /api/requirement-docs/[id]?exp=…&sig=…
@@ -30,7 +31,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params;
-  if (!id) return notFound();
+  // A non-uuid id would 500 at the Postgres cast; give it the same uniform 404.
+  if (!id || !isUuid(id)) return notFound();
 
   const { searchParams } = new URL(request.url);
   const expRaw = searchParams.get("exp");

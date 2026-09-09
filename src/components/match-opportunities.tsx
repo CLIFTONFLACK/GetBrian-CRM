@@ -39,6 +39,7 @@ export function MatchOpportunities({
   companies,
   contacts,
   companyTypes,
+  defaultContactIds,
 }: {
   opportunities: Opportunity[];
   requirementId: string;
@@ -48,6 +49,8 @@ export function MatchOpportunities({
   companies: EntityOption[];
   contacts: EntityOption[];
   companyTypes?: { slug: string; label: string }[];
+  /** Pre-ticked recipients — the requirement's contact / its company's primary. */
+  defaultContactIds?: string[];
 }) {
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const allRef = React.useRef<HTMLInputElement>(null);
@@ -112,7 +115,7 @@ export function MatchOpportunities({
           <p className="text-sm text-muted-foreground">
             Send{" "}
             <span className="font-medium text-foreground">{active.length}</span>{" "}
-            {active.length === 1 ? "opportunity" : "opportunities"} to one contact
+            {active.length === 1 ? "opportunity" : "opportunities"} to one or more contacts
           </p>
           <div className="flex items-center gap-2">
             <SendDealModal
@@ -125,6 +128,7 @@ export function MatchOpportunities({
               requirementTitle={requirementTitle}
               listings={selectedRows.map((o) => ({ id: o.id, title: o.title }))}
               previousSends={previousSends.length > 0 ? previousSends : undefined}
+              defaultContactIds={defaultContactIds}
               label={`Send ${active.length}`}
             />
             <Button
@@ -190,6 +194,7 @@ export function MatchOpportunities({
                     requirementTitle={requirementTitle}
                     listingTitle={o.title}
                     previousSends={o.previousSends}
+                    defaultContactIds={defaultContactIds}
                   />
                   <CreateDealButton requirementId={requirementId} listingId={o.id} />
                 </div>

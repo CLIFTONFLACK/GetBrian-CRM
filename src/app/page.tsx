@@ -441,7 +441,7 @@ export default function LandingPage() {
           <span>Built for leisure &amp; licensed-sector agents</span>
           {/* The "Built by GetBrian" endorsement badge, ported from ContentFlow's
               footer so the credit reads identically across the portfolio: compact
-              mark at 20px, pill keyline, "GetBrian" in Space Grotesk Semibold navy,
+              mark at 20px, pill keyline, "GetBrian" in Bricolage Grotesque Semibold navy,
               the whole thing going navy on hover. Deliberately quieter than the
               product lockup above it — it's a credit, not a second logo. */}
           <a

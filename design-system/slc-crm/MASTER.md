@@ -79,13 +79,13 @@ not ad-hoc classes, so colour↔meaning stays consistent.
 
 ## 3. Typography — see the brand book
 
-- **Headings:** **Space Grotesk** — `font-heading`, loaded in `src/app/layout.tsx`.
+- **Headings:** **Bricolage Grotesque** (matches getbrian.xyz) — `font-heading`, loaded in `src/app/layout.tsx`.
 - **UI / body:** **DM Sans** — `font-sans`.
 - **Numeric / tabular / references:** **Geist Mono** — `font-mono`. Money, sq ft / sq m,
   covers, rates, dates, IDs, postcodes. Use `font-variant-numeric: tabular-nums`.
 
 The brand book fixes the first two and is silent on mono, which is why mono stayed Geist.
-Note the wordmark itself is drawn artwork; setting "Brian" as live text in Space Grotesk
+Note the wordmark itself is drawn artwork; setting "Brian" as live text in Bricolage Grotesque
 Semibold (as `BrandLockup` does) is a deliberate near-match so the name stays selectable
 and indexable — for presentational uses take `brian-wordmark.svg` instead.
 

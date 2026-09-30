@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils";
  *     cut silts into mud below 40px, so anything smaller takes the compact cut,
  *     which is the same geometry with the traces thickened. Never reach for
  *     `brian-mark-solo.svg`: without its traces the B reads as a "3".
- *  2. The wordmark proper is drawn artwork. Setting it as live text in Space
- *     Grotesk Semibold, as here, is a deliberate near-match so the name stays
+ *  2. The wordmark proper is drawn artwork. Setting it as live text in Bricolage
+ *     Grotesque Semibold, as here, is a deliberate near-match so the name stays
  *     selectable and indexable. Anywhere the wordmark is presentational —
  *     decks, social, print, favicons — use `brian-wordmark.svg` instead.
  *  3. "Get" is navy and "Brian" is gold, matching the drawn wordmark. This is

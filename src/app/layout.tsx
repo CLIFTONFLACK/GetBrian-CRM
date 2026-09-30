@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans, Geist_Mono, Space_Grotesk } from "next/font/google";
+import { Bricolage_Grotesque, DM_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 /**
@@ -14,12 +14,13 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
 };
 
-/* Brand type, per the GetBrian field guide (v3): Space Grotesk sets headings,
-   DM Sans sets body copy. Mono is unspecified by the brand and stays Geist. */
-const headingFont = Space_Grotesk({
+/* Brand type, matching getbrian.xyz: Bricolage Grotesque sets headings (variable
+   font, so 600-800 resolve; opsz tightens it at display sizes), DM Sans sets body
+   copy. Mono is unspecified by the brand and stays Geist. */
+const headingFont = Bricolage_Grotesque({
   variable: "--font-heading",
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
+  axes: ["opsz"],
   display: "swap",
 });
 

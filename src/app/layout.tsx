@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, DM_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Analytics } from "./analytics";
 
 /**
  * `viewportFit: "cover"` is what makes `env(safe-area-inset-*)` resolve to a
@@ -71,7 +72,10 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-full bg-background text-foreground">{children}</body>
+      <body className="min-h-full bg-background text-foreground">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }

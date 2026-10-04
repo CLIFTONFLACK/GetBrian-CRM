@@ -86,14 +86,29 @@ export function Analytics() {
       };
     };
     const undo = [wrap("pushState"), wrap("replaceState")];
-    return () => undo.forEach((u) => u());
+    // Back/Forward change the address without pushState: set the flag in the capture phase,
+    // before any listener of the tag's own sees the event.
+    const onPop = () => {
+      w[disableFlag()] = readConsent() !== "granted" || isExcludedPath(window.location.pathname);
+    };
+    window.addEventListener("popstate", onPop, true);
+    return () => {
+      undo.forEach((u) => u());
+      window.removeEventListener("popstate", onPop, true);
+    };
   }, [hostname]);
 
   // Page views are sent by hand, for tracked paths only, so no address the app did not choose
   // to send can reach Google. The first page view of a visit is sent by the init script.
   useEffect(() => {
-    if (consent !== "granted" || !hostname || !isTrackedHost(hostname) || isExcludedPath(pathname)) return;
     const w = window as unknown as GaWindow;
+    // Away from a tracked page, or without consent, forget the last page sent: coming back to it
+    // later in the same visit is a new page view.
+    if (consent !== "granted" || isExcludedPath(pathname)) {
+      w.__gbLastPath = undefined;
+      return;
+    }
+    if (!hostname || !isTrackedHost(hostname)) return;
     if (typeof w.gtag !== "function" || w.__gbLastPath === pathname) return;
     w.__gbLastPath = pathname;
     w.gtag("event", "page_view", { page_location: cleanAddress(window.location.href), page_referrer: "" });

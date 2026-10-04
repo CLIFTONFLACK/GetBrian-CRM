@@ -12,7 +12,7 @@
  */
 export const GA_MEASUREMENT_ID = "G-DH8FGLMYQ0";
 /** Where the banner links for the fuller explanation, if the site has a privacy page. */
-export const PRIVACY_HREF: string | null = null;
+export const PRIVACY_HREF: string | null = "/cookies";
 export const CONSENT_KEY = "gb_consent";
 export const CONSENT_EVENT = "gb:consent-change";
 export const REOPEN_EVENT = "gb:cookie-settings";

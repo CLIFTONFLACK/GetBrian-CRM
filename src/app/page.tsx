@@ -446,6 +446,12 @@ export default function LandingPage() {
           >
             crm@getbrian.xyz
           </a>
+          <Link
+            href="/cookies"
+            className="cursor-pointer transition-colors duration-200 hover:text-brand-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy-bright focus-visible:ring-offset-2"
+          >
+            Cookies and analytics
+          </Link>
           <CookieSettingsButton />
           {/* The "Built by GetBrian" endorsement badge, ported from ContentFlow's
               footer so the credit reads identically across the portfolio: compact

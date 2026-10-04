@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import {
   GA_MEASUREMENT_ID,
   clearGaCookies,
@@ -82,7 +83,8 @@ test("the init script sets consent v2 signals before config and denies the ad si
   for (const sig of ["ad_storage", "ad_user_data", "ad_personalization"]) {
     assert.match(s, new RegExp(`${sig}:'denied'`));
   }
-  assert.ok(s.includes(`gtag('config','${GA_MEASUREMENT_ID}')`));
+  assert.ok(s.includes(`gtag('config','${GA_MEASUREMENT_ID}',{page_location:`));
+  assert.match(s, /allow_google_signals:false/);
   assert.equal(GA_MEASUREMENT_ID, "G-DH8FGLMYQ0");
   assert.ok(!s.includes("= true"), "must not leave the disable flag on");
 });
@@ -140,4 +142,42 @@ test("with storage blocked, a choice still holds for the page view and nothing i
     resetMemoryChoiceForTests();
     delete (globalThis as unknown as { window?: unknown }).window;
   }
+});
+
+function runInit(href: string, referrer: string) {
+  const ctx: Record<string, unknown> = {
+    location: { href, origin: new URL(href).origin },
+    document: { referrer },
+    URL,
+    Array,
+    Date,
+  };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(gaInitScript(), ctx);
+  const layer = (ctx.dataLayer as ArrayLike<unknown>[]).map((a) => Array.from(a));
+  return JSON.parse(JSON.stringify(layer.find((a) => a[0] === "config")));
+}
+
+test("the init script sends a clean address: no query (except utm_*), no fragment", () => {
+  const cfg = runInit("https://crm.getbrian.xyz/submit-requirement?token=SECRET&utm_source=mail#frag", "");
+  assert.equal(cfg[1], "G-DH8FGLMYQ0");
+  assert.equal(cfg[2].page_location, "https://crm.getbrian.xyz/submit-requirement?utm_source=mail");
+  assert.equal(cfg[2].allow_google_signals, false);
+  assert.equal(cfg[2].allow_ad_personalization_signals, false);
+});
+
+test("the init script blanks same-site referrers and trims external ones", () => {
+  const same = runInit("https://crm.getbrian.xyz/", "https://crm.getbrian.xyz/deals/12?x=1");
+  assert.equal(same[2].page_referrer, "");
+  const ext = runInit("https://crm.getbrian.xyz/", "https://news.example.org/story?token=abc#x");
+  assert.equal(ext[2].page_referrer, "https://news.example.org/story");
+  const none = runInit("https://crm.getbrian.xyz/", "");
+  assert.equal(none[2].page_referrer, "");
+});
+
+test("the cookie cleanup matches the real GA names only, not lookalikes", () => {
+  for (const n of ["_gatekeeper", "_gatx", "_gaps"]) assert.equal(isGaCookieName(n), false, n);
+  assert.equal(isGaCookieName("_gat"), true);
+  assert.equal(isGaCookieName("_gat_gtag_G_DH8FGLMYQ0"), true);
 });

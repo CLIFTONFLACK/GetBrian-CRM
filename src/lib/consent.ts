@@ -79,7 +79,7 @@ export function subscribeConsent(onChange: () => void): () => void {
 
 /** Names of the cookies gtag.js sets: _ga, _ga_<container>, _gid, _gat*. */
 export function isGaCookieName(name: string): boolean {
-  return name === "_ga" || name === "_gid" || name.startsWith("_ga_") || name.startsWith("_gat");
+  return name === "_ga" || name === "_gid" || name.startsWith("_ga_") || name === "_gat" || name.startsWith("_gat_");
 }
 
 /** Expire GA cookies on this host and its parent domain (where gtag.js writes them). */
@@ -100,6 +100,9 @@ export function clearGaCookies(doc: Document, hostname: string): void {
 /**
  * Inline snippet run once consent is granted. Consent Mode v2 signals are set before
  * `config`: analytics storage granted, the three advertising signals denied (no ads here).
+ * The address sent to Google loses its query string (except utm_*) and fragment, and the
+ * referrer is blanked for same-site referrers and loses its query otherwise, so identifiers
+ * and tokens in addresses never reach Google.
  */
 export function gaInitScript(id: string = GA_MEASUREMENT_ID): string {
   return [
@@ -109,6 +112,11 @@ export function gaInitScript(id: string = GA_MEASUREMENT_ID): string {
     `window['ga-disable-${id}'] = false;`,
     "gtag('consent','default',{analytics_storage:'granted',ad_storage:'denied',ad_user_data:'denied',ad_personalization:'denied'});",
     "gtag('js', new Date());",
-    `gtag('config','${id}');`,
+    "var u = new URL(location.href);",
+    "Array.from(u.searchParams.keys()).forEach(function(k){ if (!/^utm_/i.test(k)) u.searchParams.delete(k); });",
+    "u.hash = '';",
+    "var r = '';",
+    "try { var q = new URL(document.referrer); if (q.origin !== location.origin) r = q.origin + q.pathname; } catch (e) {}",
+    `gtag('config','${id}',{page_location:u.toString(),page_referrer:r,allow_google_signals:false,allow_ad_personalization_signals:false});`,
   ].join("\n");
 }

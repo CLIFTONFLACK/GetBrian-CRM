@@ -4,6 +4,7 @@ import { ArrowUpRight, Check, Handshake } from "lucide-react";
 import { BrandLockup } from "@/components/brand-lockup";
 import { cn } from "@/lib/utils";
 import { StickyCta } from "./sticky-cta";
+import { CookieSettingsButton } from "./analytics";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    GetBrian | CRM — the public marketing page.
@@ -445,6 +446,7 @@ export default function LandingPage() {
           >
             crm@getbrian.xyz
           </a>
+          <CookieSettingsButton />
           {/* The "Built by GetBrian" endorsement badge, ported from ContentFlow's
               footer so the credit reads identically across the portfolio: compact
               mark at 20px, pill keyline, "GetBrian" in Bricolage Grotesque Semibold navy,

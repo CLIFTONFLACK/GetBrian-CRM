@@ -162,7 +162,7 @@ export function Analytics() {
               <>
                 {" "}
                 <a href={PRIVACY_HREF} className="text-brand-ink underline underline-offset-2">
-                  Privacy policy
+                  Cookies and analytics
                 </a>
               </>
             )}

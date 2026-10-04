@@ -11,6 +11,8 @@
  * banner.
  */
 export const GA_MEASUREMENT_ID = "G-DH8FGLMYQ0";
+/** Where the banner links for the fuller explanation, if the site has a privacy page. */
+export const PRIVACY_HREF: string | null = null;
 export const CONSENT_KEY = "gb_consent";
 export const CONSENT_EVENT = "gb:consent-change";
 export const REOPEN_EVENT = "gb:cookie-settings";
@@ -77,32 +79,50 @@ export function subscribeConsent(onChange: () => void): () => void {
   };
 }
 
-/** Names of the cookies gtag.js sets: _ga, _ga_<container>, _gid, _gat*. */
+/** Names of the cookies gtag.js sets: _ga, _ga_<container>, _gid, _gat, _gat_*. */
 export function isGaCookieName(name: string): boolean {
   return name === "_ga" || name === "_gid" || name.startsWith("_ga_") || name === "_gat" || name.startsWith("_gat_");
 }
 
-/** Expire GA cookies on this host and its parent domain (where gtag.js writes them). */
+/**
+ * Expire GA cookies on this host only. The tag is configured with a host-only cookie_domain,
+ * so it never writes to the shared parent domain, and withdrawing here must not delete the
+ * cookies another getbrian.xyz site set for its own visitors.
+ */
 export function clearGaCookies(doc: Document, hostname: string): void {
-  const parts = hostname.split(".");
-  const domains = [hostname, ...(parts.length > 2 ? [parts.slice(-2).join(".")] : [])];
   for (const pair of doc.cookie.split(";")) {
     const name = pair.split("=")[0].trim();
     if (!isGaCookieName(name)) continue;
-    for (const domain of domains) {
-      doc.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=.${domain}`;
-      doc.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${domain}`;
-    }
+    doc.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=.${hostname}`;
+    doc.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=${hostname}`;
     doc.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
   }
+}
+
+/** The address Google is allowed to see: no query string except utm_*, no fragment. */
+export function cleanAddress(href: string): string {
+  const u = new URL(href);
+  for (const k of Array.from(u.searchParams.keys())) {
+    if (!/^utm_/i.test(k)) u.searchParams.delete(k);
+  }
+  u.hash = "";
+  return u.toString();
+}
+
+/** The flag Google documents as the off switch for a measurement ID. */
+export function disableFlag(id: string = GA_MEASUREMENT_ID): string {
+  return `ga-disable-${id}`;
 }
 
 /**
  * Inline snippet run once consent is granted. Consent Mode v2 signals are set before
  * `config`: analytics storage granted, the three advertising signals denied (no ads here).
- * The address sent to Google loses its query string (except utm_*) and fragment, and the
- * referrer is blanked for same-site referrers and loses its query otherwise, so identifiers
- * and tokens in addresses never reach Google.
+ *
+ * Page views are sent by hand (send_page_view:false), so a history change in the browser can
+ * never report an address the app did not choose to send: the first one is sent here, later
+ * ones by the component for tracked paths only. Addresses lose their query string (except
+ * utm_*) and fragment; the referrer is blank for same-site referrers and origin-only for
+ * others. Cookies are host-only.
  */
 export function gaInitScript(id: string = GA_MEASUREMENT_ID): string {
   return [
@@ -116,7 +136,9 @@ export function gaInitScript(id: string = GA_MEASUREMENT_ID): string {
     "Array.from(u.searchParams.keys()).forEach(function(k){ if (!/^utm_/i.test(k)) u.searchParams.delete(k); });",
     "u.hash = '';",
     "var r = '';",
-    "try { var q = new URL(document.referrer); if (q.origin !== location.origin) r = q.origin + q.pathname; } catch (e) {}",
-    `gtag('config','${id}',{page_location:u.toString(),page_referrer:r,allow_google_signals:false,allow_ad_personalization_signals:false});`,
+    "try { var q = new URL(document.referrer); if (q.origin !== location.origin) r = q.origin; } catch (e) {}",
+    `gtag('config','${id}',{send_page_view:false,cookie_domain:location.hostname,allow_google_signals:false,allow_ad_personalization_signals:false});`,
+    "gtag('event','page_view',{page_location:u.toString(),page_referrer:r});",
+    "window.__gbLastPath = location.pathname;",
   ].join("\n");
 }

@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import {
   GA_MEASUREMENT_ID,
+  cleanAddress,
   clearGaCookies,
+  disableFlag,
   gaInitScript,
   isExcludedPath,
   isGaCookieName,
@@ -83,7 +85,7 @@ test("the init script sets consent v2 signals before config and denies the ad si
   for (const sig of ["ad_storage", "ad_user_data", "ad_personalization"]) {
     assert.match(s, new RegExp(`${sig}:'denied'`));
   }
-  assert.ok(s.includes(`gtag('config','${GA_MEASUREMENT_ID}',{page_location:`));
+  assert.ok(s.includes(`gtag('config','${GA_MEASUREMENT_ID}',{send_page_view:false,`));
   assert.match(s, /allow_google_signals:false/);
   assert.equal(GA_MEASUREMENT_ID, "G-DH8FGLMYQ0");
   assert.ok(!s.includes("= true"), "must not leave the disable flag on");
@@ -112,7 +114,8 @@ test("clearGaCookies expires GA cookies and leaves the sign-in session and other
   const names = new Set(writes.map((w) => w.split("=")[0]));
   assert.deepEqual([...names].sort(), ["_ga", "_ga_DH8FGLMYQ0"]);
   assert.ok(writes.every((w) => w.includes("expires=Thu, 01 Jan 1970")));
-  assert.ok(writes.some((w) => w.includes("domain=.getbrian.xyz")), "parent domain covered");
+  assert.ok(writes.some((w) => w.includes("domain=.crm.getbrian.xyz")), "the host is covered");
+  assert.ok(writes.every((w) => !w.includes("domain=.getbrian.xyz") && !w.includes("domain=getbrian.xyz")), "sibling sites' cookies on the parent domain are left alone");
 });
 
 test("with storage blocked, a choice still holds for the page view and nothing is assumed before it", async () => {
@@ -146,7 +149,7 @@ test("with storage blocked, a choice still holds for the page view and nothing i
 
 function runInit(href: string, referrer: string) {
   const ctx: Record<string, unknown> = {
-    location: { href, origin: new URL(href).origin },
+    location: { href, origin: new URL(href).origin, hostname: new URL(href).hostname, pathname: new URL(href).pathname },
     document: { referrer },
     URL,
     Array,
@@ -156,24 +159,41 @@ function runInit(href: string, referrer: string) {
   vm.createContext(ctx);
   vm.runInContext(gaInitScript(), ctx);
   const layer = (ctx.dataLayer as ArrayLike<unknown>[]).map((a) => Array.from(a));
-  return JSON.parse(JSON.stringify(layer.find((a) => a[0] === "config")));
+  const out = JSON.parse(JSON.stringify(layer));
+  return {
+    config: out.find((a: unknown[]) => a[0] === "config"),
+    view: out.find((a: unknown[]) => a[0] === "event" && a[1] === "page_view"),
+    lastPath: ctx.__gbLastPath,
+  };
 }
 
-test("the init script sends a clean address: no query (except utm_*), no fragment", () => {
-  const cfg = runInit("https://crm.getbrian.xyz/submit-requirement?token=SECRET&utm_source=mail#frag", "");
-  assert.equal(cfg[1], "G-DH8FGLMYQ0");
-  assert.equal(cfg[2].page_location, "https://crm.getbrian.xyz/submit-requirement?utm_source=mail");
-  assert.equal(cfg[2].allow_google_signals, false);
-  assert.equal(cfg[2].allow_ad_personalization_signals, false);
+test("the init script sends one manual page view with a clean address: no query (except utm_*), no fragment", () => {
+  const r = runInit("https://crm.getbrian.xyz/submit-requirement?token=SECRET&utm_source=mail#frag", "");
+  assert.equal(r.config[1], "G-DH8FGLMYQ0");
+  assert.equal(r.config[2].send_page_view, false, "automatic page views are off, so history changes cannot leak addresses");
+  assert.equal(r.config[2].cookie_domain, "crm.getbrian.xyz", "cookies stay on this host");
+  assert.equal(r.config[2].allow_google_signals, false);
+  assert.equal(r.config[2].allow_ad_personalization_signals, false);
+  assert.equal(r.view[2].page_location, "https://crm.getbrian.xyz/submit-requirement?utm_source=mail");
+  assert.equal(r.lastPath, "/submit-requirement");
 });
 
-test("the init script blanks same-site referrers and trims external ones", () => {
+test("the init script blanks same-site referrers and reduces external ones to their origin", () => {
   const same = runInit("https://crm.getbrian.xyz/", "https://crm.getbrian.xyz/deals/12?x=1");
-  assert.equal(same[2].page_referrer, "");
-  const ext = runInit("https://crm.getbrian.xyz/", "https://news.example.org/story?token=abc#x");
-  assert.equal(ext[2].page_referrer, "https://news.example.org/story");
+  assert.equal(same.view[2].page_referrer, "");
+  const ext = runInit("https://crm.getbrian.xyz/", "https://news.example.org/story/private-id?token=abc#x");
+  assert.equal(ext.view[2].page_referrer, "https://news.example.org");
   const none = runInit("https://crm.getbrian.xyz/", "");
-  assert.equal(none[2].page_referrer, "");
+  assert.equal(none.view[2].page_referrer, "");
+});
+
+test("cleanAddress is what the component sends on later page views: same rules as the init script", () => {
+  assert.equal(
+    cleanAddress("https://crm.getbrian.xyz/submit-requirement?token=SECRET&utm_source=mail&UTM_Campaign=x#frag"),
+    "https://crm.getbrian.xyz/submit-requirement?utm_source=mail&UTM_Campaign=x",
+  );
+  assert.equal(cleanAddress("https://crm.getbrian.xyz/?a=1"), "https://crm.getbrian.xyz/");
+  assert.equal(disableFlag(), "ga-disable-G-DH8FGLMYQ0");
 });
 
 test("the cookie cleanup matches the real GA names only, not lookalikes", () => {

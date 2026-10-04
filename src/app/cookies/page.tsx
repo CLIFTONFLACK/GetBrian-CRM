@@ -88,9 +88,12 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
     heading: "Other data",
     body: (
       <p>
-        The public requirement form collects what you type into it (company name, your name, email, phone, the
-        property you are looking for, and any notes). It is stored in the CRM for the agency team to review, who are
-        notified by in-app notice and by email. Signing in to the CRM uses an email address and password, and sets a
+        The public requirement form is the CDG Leisure property requirement form. It collects what you type into it
+        (company name, your name, email, phone, the property you are looking for, and any notes) and stores it in the
+        CRM, where the CDG Leisure agent who owns the form reviews it. That agent and the GetBrian administrator who
+        runs this system are notified in the CRM and by email. To limit spam, the form also uses your IP address,
+        held temporarily by our rate-limiting service (Upstash) to count recent submissions: at most 3 in 10 minutes.
+        It is not stored with your requirement. Signing in to the CRM uses an email address and password, and sets a
         session cookie so you stay signed in. Contact us at{" "}
         <a href="mailto:crm@getbrian.xyz" className={LINK}>
           crm@getbrian.xyz

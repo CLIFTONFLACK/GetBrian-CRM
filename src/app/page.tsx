@@ -439,6 +439,12 @@ export default function LandingPage() {
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-4 px-6 py-8 text-sm text-brand-ink-subtle">
           <BrandLockup />
           <span>Built for leisure &amp; licensed-sector agents</span>
+          <a
+            href="mailto:crm@getbrian.xyz"
+            className="cursor-pointer transition-colors duration-200 hover:text-brand-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy-bright focus-visible:ring-offset-2"
+          >
+            crm@getbrian.xyz
+          </a>
           {/* The "Built by GetBrian" endorsement badge, ported from ContentFlow's
               footer so the credit reads identically across the portfolio: compact
               mark at 20px, pill keyline, "GetBrian" in Bricolage Grotesque Semibold navy,

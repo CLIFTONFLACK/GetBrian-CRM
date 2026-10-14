@@ -17,7 +17,7 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
     body: (
       <p>
         CRM by GetBrian is a GetBrian product (
-        <a href="https://getbrian.xyz" className={LINK}>
+        <a href="https://www.getbrian.xyz" className={LINK}>
           getbrian.xyz
         </a>
         ). Questions about this notice or your data:{" "}

@@ -186,7 +186,7 @@ export default function LandingPage() {
           </Link>
           <nav className="flex items-center gap-1 sm:gap-2">
             <a
-              href="https://getbrian.xyz"
+              href="https://www.getbrian.xyz"
               target="_blank"
               rel="noopener"
               className={cn(NAV_LINK, "hidden gap-1 sm:inline-flex")}
@@ -353,7 +353,7 @@ export default function LandingPage() {
                 </div>
                 <div className="lg:justify-self-end">
                   <a
-                    href="https://getbrian.xyz"
+                    href="https://www.getbrian.xyz"
                     target="_blank"
                     rel="noopener"
                     className={cn(CTA_QUIET, "w-full gap-2 sm:w-auto")}
@@ -396,9 +396,20 @@ export default function LandingPage() {
       <footer>
         <div className="border-b border-brand-rule bg-brand-panel">
           <div className="mx-auto w-full max-w-6xl px-6 py-10">
-            <p className="font-heading text-xs font-semibold uppercase tracking-[0.14em] text-brand-ink-subtle">
-              More from Brian
-            </p>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className="font-heading text-xs font-semibold uppercase tracking-[0.14em] text-brand-ink-subtle">
+                More from Brian
+              </p>
+              <a
+                href="https://www.getbrian.xyz"
+                target="_blank"
+                rel="noopener"
+                className="-my-2 inline-flex cursor-pointer items-center gap-1 py-2.5 text-xs font-medium text-brand-navy-bright hover:underline"
+              >
+                See the lot
+                <ArrowUpRight className="h-3 w-3" aria-hidden />
+              </a>
+            </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               {SIBLINGS.map((s) => (
                 <a
@@ -413,16 +424,10 @@ export default function LandingPage() {
                   )}
                 >
                   <span className="min-w-0">
-                    <span className="flex items-baseline font-heading text-sm font-semibold">
-                      <span className="text-brand-navy">Get</span>
-                      <span className="text-brand-gold">Brian</span>
-                      <span
-                        aria-hidden="true"
-                        className="mx-1.5 inline-block h-[0.85em] w-px self-center bg-brand-navy-bright"
-                      />
-                      <span className="truncate font-medium text-brand-ink-muted">
-                        {s.name}
-                      </span>
+                    {/* Plain names, as on every sibling site: a lockup per card
+                        repeated the masterbrand three times in one band. */}
+                    <span className="block truncate font-heading text-sm font-semibold text-brand-ink-muted">
+                      {s.name}
                     </span>
                     <span className="mt-0.5 block truncate text-xs text-brand-ink-subtle">
                       {s.tag}
@@ -459,7 +464,7 @@ export default function LandingPage() {
               the whole thing going navy on hover. Deliberately quieter than the
               product lockup above it — it's a credit, not a second logo. */}
           <a
-            href="https://getbrian.xyz"
+            href="https://www.getbrian.xyz"
             target="_blank"
             rel="noopener"
             className={cn(
@@ -481,6 +486,9 @@ export default function LandingPage() {
               <b className="font-heading font-semibold text-brand-navy">GetBrian</b>
             </span>
           </a>
+          <p className="w-full text-xs text-brand-ink-subtle">
+            &copy; {new Date().getFullYear()} Brian. All rights reserved.
+          </p>
         </div>
       </footer>
 

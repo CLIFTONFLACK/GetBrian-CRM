@@ -39,19 +39,37 @@ const monoFont = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://crm.getbrian.xyz"),
+  // Same grammar as every sibling: "<Product>, built by Brian — <tagline>",
+  // with inner pages as "<Page> · <Product>".
   title: {
-    default: "CRM by GetBrian — CRM — UK Leisure Property Agents",
-    template: "%s · CRM by GetBrian",
+    default: "CRM, built by Brian — for UK leisure property agents",
+    template: "%s · CRM",
   },
   description:
     "The CRM that speaks fluent licensed premises. Track operators, landlords and listings, and let MatchMaker score every requirement against every listing. Built by Brian.",
   openGraph: {
     type: "website",
     siteName: "CRM by GetBrian",
-    title: "CRM by GetBrian — CRM — UK Leisure Property Agents",
+    title: "CRM, built by Brian — for UK leisure property agents",
     description:
       "The CRM that speaks fluent licensed premises. MatchMaker scores every requirement against every listing, on the detail that actually decides a leisure deal.",
-    images: ["/brand/og-image.png"],
+    url: "https://crm.getbrian.xyz",
+    images: ["/og-image.png"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CRM, built by Brian — for UK leisure property agents",
+    images: ["/og-image.png"],
+  },
+  // The masterbrand icon set, same files and paths as www.getbrian.xyz.
+  // public/favicon.ico is served at /favicon.ico for the Vercel project tile.
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
   },
 };
 

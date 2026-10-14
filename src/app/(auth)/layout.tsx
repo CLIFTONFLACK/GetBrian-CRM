@@ -21,7 +21,7 @@ export default function AuthLayout({
       </Link>
       <div className="w-full max-w-sm">{children}</div>
       <a
-        href="https://getbrian.xyz"
+        href="https://www.getbrian.xyz"
         target="_blank"
         rel="noopener"
         className="inline-flex min-h-11 items-center px-3 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"

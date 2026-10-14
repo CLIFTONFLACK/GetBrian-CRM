@@ -26,7 +26,7 @@
   --brand-gold-light: #e0b84f;
   --brand-ink: #14172b; /* body text and rules */
   --brand-paper: #ffffff;
-  --brand-panel: #f2f3f6;
+  --brand-panel: #f3f4f6;
   --brand-rule: rgba(20, 23, 43, 0.1);
   --brand-rule-strong: rgba(20, 23, 43, 0.18);
   --brand-ink-muted: #454a64;
@@ -43,7 +43,7 @@
    gold surfaces in the app only as --warning, where "pay attention" is the
    whole point. */
 :root {
-  --radius: 0.5rem;
+  --radius: 0.625rem; /* 10px, the estate-wide radius */
 
   --background: #ffffff;
   --foreground: #14172b;
@@ -57,13 +57,13 @@
   --primary: #0a1d3b; /* Brian Navy — masterbrand */
   --primary-foreground: #ffffff;
 
-  --secondary: #f2f3f6;
+  --secondary: #f3f4f6;
   --secondary-foreground: #14172b;
 
-  --muted: #f2f3f6;
+  --muted: #f3f4f6;
   --muted-foreground: #454a64;
 
-  --accent: #f2f3f6; /* subtle hover surface (shadcn semantics) */
+  --accent: #f3f4f6; /* subtle hover surface (shadcn semantics) */
   --accent-foreground: #14172b;
 
   --destructive: #c2261c;

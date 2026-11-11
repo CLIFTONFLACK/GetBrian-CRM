@@ -48,7 +48,9 @@ function limiterFor(bucket: RateLimitBucket): Ratelimit {
   const cached = limiters.get(bucket);
   if (cached) return cached;
 
-  redis ??= new Redis({ url: KV_REST_API_URL, token: KV_REST_API_TOKEN });
+  // retry: false — the client's default backoff adds ~4 s per call during an
+  // outage. This check fails open anyway, so fail fast instead.
+  redis ??= new Redis({ url: KV_REST_API_URL, token: KV_REST_API_TOKEN, retry: false });
 
   const { requests, window } = LIMITS[bucket];
   const limiter = new Ratelimit({
@@ -57,6 +59,8 @@ function limiterFor(bucket: RateLimitBucket): Ratelimit {
     // Distinct key namespace per bucket, so `login` and `intake` never share
     // a counter for the same identifier even though both key off caller IP.
     prefix: `ratelimit:${bucket}`,
+    // Give up after 1.5 s (default 5 s) and let the request through.
+    timeout: 1500,
   });
   limiters.set(bucket, limiter);
   return limiter;
@@ -70,8 +74,10 @@ function limiterFor(bucket: RateLimitBucket): Ratelimit {
  * set), this always returns `{ success: true }` rather than throwing, mirroring
  * isDbConfigured-style graceful degradation elsewhere in this codebase. Rate
  * limiting is defense-in-depth, not something login/intake should hard-depend on.
+ * The same applies when Upstash is configured but the call throws (outage).
  */
 let warnedUnconfigured = false;
+let lastFailOpenLogAt = 0;
 
 export async function checkRateLimit(
   bucket: RateLimitBucket,
@@ -91,8 +97,29 @@ export async function checkRateLimit(
     return { success: true };
   }
 
-  const { success } = await limiterFor(bucket).limit(identifier);
-  return { success };
+  // Fail open on an Upstash outage too (DB deleted, DNS failure, timeout,
+  // 5xx). Rate limiting is defense-in-depth; if Redis is unreachable the
+  // throw would otherwise bubble out of the login / sign-up / intake server
+  // actions and block every attempt with "Something went wrong".
+  try {
+    const { success } = await limiterFor(bucket).limit(identifier);
+    return { success };
+  } catch (error) {
+    // Log the message only (not the raw error object, which carries a stack
+    // trace and the client IP), at most once a minute per process.
+    const now = Date.now();
+    if (now - lastFailOpenLogAt > 60_000) {
+      lastFailOpenLogAt = now;
+      const e = error as { name?: string; message?: string; cause?: { code?: string } };
+      console.error(
+        `[rate-limit] Redis call failed (bucket "${bucket}") — failing OPEN, request allowed. ` +
+          `${e?.name ?? "Error"}: ${e?.message ?? "unknown"}` +
+          (e?.cause?.code ? ` (${e.cause.code})` : "") +
+          ". If this is an auth error (401/403), check KV_REST_API_TOKEN.",
+      );
+    }
+    return { success: true };
+  }
 }
 
 /** Used when no forwarded-IP header is present (e.g. local dev). */

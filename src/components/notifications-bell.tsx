@@ -20,16 +20,17 @@ export type Note = {
   created_at: string;
 };
 
+const NOTIFICATION_POLL_MS = 30_000;
+
 /**
  * In-app notifications bell (#11). Initial notifications are fetched
  * server-side (in the app layout) and passed in; the bell re-reads on open and
  * marks them read in place via the server actions in lib/actions/messages.ts.
  *
- * No live subscription anymore — Supabase's realtime channel (postgres_changes
- * on INSERT) had no Neon/Auth.js equivalent shipped in this migration batch
- * (see db/migrations/0029_tasks.sql's header note: "the notifications bell
- * needs a different live-update mechanism going forward, out of scope here").
- * The bell now simply re-fetches whenever it's opened.
+ * No live subscription — Supabase's realtime channel (postgres_changes on
+ * INSERT) had no Neon/Auth.js equivalent (see db/migrations/0029_tasks.sql's
+ * header note). The bell re-fetches when it is opened, every 30 seconds while
+ * the tab is visible, and when the tab becomes visible again.
  */
 export function NotificationsBell({ initialNotes = [] }: { initialNotes?: Note[] }) {
   const [notes, setNotes] = React.useState<Note[]>(initialNotes);
@@ -39,6 +40,40 @@ export function NotificationsBell({ initialNotes = [] }: { initialNotes?: Note[]
     const rows = await listNotifications();
     setNotes(rows);
   }, []);
+
+  // Poll for new notifications while the tab is visible. A hidden tab stops
+  // polling and reads once when it becomes visible again.
+  React.useEffect(() => {
+    const refresh = () => {
+      load().catch(() => {
+        // Offline or signed out: keep the notes on screen, try again next tick.
+      });
+    };
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (timer == null) timer = setInterval(refresh, NOTIFICATION_POLL_MS);
+    };
+    const stop = () => {
+      if (timer != null) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        refresh();
+        start();
+      }
+    };
+    if (!document.hidden) start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [load]);
 
   const unread = notes.filter((n) => !n.read_at).length;
 

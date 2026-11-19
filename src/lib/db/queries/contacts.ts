@@ -58,6 +58,7 @@ export type ContactListRow = {
   role: string;
   email: string | null;
   phone: string | null;
+  mobile: string | null;
   company_id: string | null;
   date_updated: string;
 };
@@ -91,7 +92,8 @@ export async function searchContacts(
     select id, first_name, last_name, role from public.contacts
     where agency_id = ${agencyId}
       and (first_name ilike ${pattern} or last_name ilike ${pattern}
-           or email ilike ${pattern} or phone ilike ${pattern})
+           or email ilike ${pattern} or phone ilike ${pattern}
+           or mobile ilike ${pattern})
     limit ${limit}
   `) as { id: string; first_name: string; last_name: string | null; role: string }[];
 }
@@ -237,7 +239,7 @@ export async function getContactsByIds(
 ): Promise<ContactListRow[]> {
   if (ids.length === 0) return [];
   return (await sql`
-    select id, first_name, last_name, role, email, phone, company_id,
+    select id, first_name, last_name, role, email, phone, mobile, company_id,
            date_updated::text as date_updated
     from public.contacts
     where agency_id = ${agencyId} and id = ANY(${ids}::uuid[])
@@ -266,7 +268,9 @@ export type ContactWriteInput = {
   firstName: string;
   lastName: string | null;
   email: string | null;
+  /** Landline (contacts.phone). */
   phone: string | null;
+  mobile: string | null;
   role: string;
   companyId: string | null;
   county: string | null;
@@ -276,8 +280,7 @@ export type ContactWriteInput = {
   addressLine: string | null;
   city: string | null;
   postcode: string | null;
-  /** Optional: only the importer sets these (0044). */
-  mobile?: string | null;
+  /** Optional: only the importer sets this (0044). */
   marketingPropertyAlerts?: boolean | null;
 };
 
@@ -299,7 +302,7 @@ export async function createContact(
       ${input.notes}, ${input.leadAgentId}, ${input.marketingOptIn},
       ${input.addressLine}, ${input.city}, ${input.postcode}, ${input.county},
       ${geo.lat}, ${geo.lng},
-      ${input.mobile ?? null}, ${input.marketingPropertyAlerts ?? null}
+      ${input.mobile}, ${input.marketingPropertyAlerts ?? null}
     )
     returning id, first_name, last_name
   `;
@@ -318,13 +321,13 @@ export async function createContactReturningName(
     insert into public.contacts (
       agency_id, created_by, first_name, last_name, email, phone, role, company_id,
       notes, lead_agent_id, marketing_opt_in,
-      address_line, city, postcode, county, lat, lng
+      address_line, city, postcode, county, lat, lng, mobile
     ) values (
       ${agencyId}, ${createdBy}, ${input.firstName}, ${input.lastName}, ${input.email},
       ${input.phone}, ${input.role}, ${input.companyId},
       ${input.notes}, ${input.leadAgentId}, ${input.marketingOptIn},
       ${input.addressLine}, ${input.city}, ${input.postcode}, ${input.county},
-      ${geo.lat}, ${geo.lng}
+      ${geo.lat}, ${geo.lng}, ${input.mobile}
     )
     returning id, first_name, last_name
   `;
@@ -389,6 +392,7 @@ export async function updateContact(
           last_name = ${input.lastName},
           email = ${input.email},
           phone = ${input.phone},
+          mobile = ${input.mobile},
           role = ${input.role},
           company_id = ${input.companyId},
           is_primary = case when company_id is distinct from ${input.companyId} then false else is_primary end,
@@ -410,6 +414,7 @@ export async function updateContact(
           last_name = ${input.lastName},
           email = ${input.email},
           phone = ${input.phone},
+          mobile = ${input.mobile},
           role = ${input.role},
           company_id = ${input.companyId},
           is_primary = case when company_id is distinct from ${input.companyId} then false else is_primary end,

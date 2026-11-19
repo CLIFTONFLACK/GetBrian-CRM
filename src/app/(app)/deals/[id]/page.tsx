@@ -269,7 +269,8 @@ export default async function DealDetailPage({
                     <EmailLink email={listingContact.email} className="text-info hover:underline" />
                   </>
                 ) : null}
-                {listingContact.phone ? ` · ${listingContact.phone}` : ""}
+                {listingContact.mobile ? ` · Mobile ${listingContact.mobile}` : ""}
+                {listingContact.phone ? ` · Landline ${listingContact.phone}` : ""}
               </p>
             ) : null}
           </CardContent>

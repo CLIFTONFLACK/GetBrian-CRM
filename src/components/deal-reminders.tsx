@@ -13,7 +13,8 @@ import {
   deleteDealReminder,
   toggleDealReminder,
 } from "@/lib/actions/deal-reminders";
-import { pgTimestampToIso } from "@/lib/format-date";
+import { LocalDateTime } from "@/components/local-date-time";
+import { withIsoDueAt } from "@/lib/local-datetime";
 import type { FormState } from "@/lib/actions/types";
 import { cn } from "@/lib/utils";
 
@@ -45,9 +46,6 @@ export function DealReminders({
       router.refresh();
     }
   }, [state, router]);
-
-  const fmt = (s: string) =>
-    new Date(pgTimestampToIso(s)).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
 
   return (
     <div className="space-y-4">
@@ -99,7 +97,7 @@ export function DealReminders({
                         overdue ? "font-medium text-destructive" : "text-muted-foreground",
                       )}
                     >
-                      {fmt(r.due_at)}
+                      <LocalDateTime iso={r.due_at} />
                       {overdue ? " · overdue" : ""}
                     </p>
                   </div>
@@ -123,7 +121,10 @@ export function DealReminders({
         </ul>
       )}
 
-      <form ref={formRef} action={action} className="flex flex-wrap items-end gap-2">
+      <form
+        ref={formRef}
+        action={(fd) => action(withIsoDueAt(fd))}
+        className="flex flex-wrap items-end gap-2">
         <input type="hidden" name="deal_id" value={dealId} />
         <Input
           name="title"

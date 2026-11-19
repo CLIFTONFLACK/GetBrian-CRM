@@ -71,11 +71,20 @@ export function ContactFormFields({
         {companyPicker}
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-3">
         <Field label="Email" htmlFor={id("email")}>
           <Input id={id("email")} name="email" type="email" defaultValue={c?.email ?? ""} />
         </Field>
-        <Field label="Phone" htmlFor={id("phone")}>
+        <Field label="Mobile" htmlFor={id("mobile")}>
+          <Input
+            id={id("mobile")}
+            name="mobile"
+            type="tel"
+            autoComplete="tel"
+            defaultValue={c?.mobile ?? ""}
+          />
+        </Field>
+        <Field label="Landline" htmlFor={id("phone")}>
           <Input id={id("phone")} name="phone" type="tel" defaultValue={c?.phone ?? ""} />
         </Field>
       </div>

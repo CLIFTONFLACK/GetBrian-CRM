@@ -128,6 +128,7 @@ export async function countOverdueAssignedTasks(
  */
 export async function listDueTasks(
   limit = 100,
+  scope: { agencyId?: string; notBefore?: string } = {},
 ): Promise<
   {
     id: string;
@@ -141,10 +142,17 @@ export async function listDueTasks(
   }[]
 > {
   const nowIso = new Date().toISOString();
+  // Optional filters: one agency, and only tasks due at or after notBefore
+  // (the cron passes the agency's enabled_since). Null parameters skip a filter.
+  const agencyId = scope.agencyId ?? null;
+  const notBefore = scope.notBefore ?? null;
   return (await sql`
     select id, agency_id, title, due_at::text as due_at, assignee_id, created_by, entity_type, entity_id
     from public.tasks
     where status = 'open' and notified_at is null and due_at is not null and due_at <= ${nowIso}
+      and (${agencyId}::uuid is null or agency_id = ${agencyId}::uuid)
+      and (${notBefore}::timestamptz is null or due_at >= ${notBefore}::timestamptz)
+    order by due_at
     limit ${limit}
   `) as {
     id: string;

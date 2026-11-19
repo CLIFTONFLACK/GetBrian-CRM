@@ -12,7 +12,9 @@ const MATCH_COLUMNS = `
   min_sqft::float8 as min_sqft, max_sqft::float8 as max_sqft,
   min_covers, max_covers, use_classes::text[] as use_classes, tenure_prefs::text[] as tenure_prefs,
   max_rent::float8 as max_rent, max_premium::float8 as max_premium,
-  max_guide_price::float8 as max_guide_price
+  max_guide_price::float8 as max_guide_price,
+  location_anchor_text, location_anchor_lat, location_anchor_lng,
+  location_radius_miles::float8 as location_radius_miles, max_rent_psf::float8 as max_rent_psf
 `;
 
 export type EntityRequirements = {

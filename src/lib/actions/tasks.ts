@@ -34,8 +34,9 @@ export async function createTask(
   if (!title) return { error: "A task title is required." };
   const details = str(formData, "details") || null;
   const dueAtRaw = str(formData, "due_at");
-  // The form sends a wall-clock time with no zone. It means Europe/London time,
-  // which is also how the task is shown, so read it that way (the server is UTC).
+  // The form sends an absolute instant (ISO with Z), made in the browser from the
+  // viewer's own zone. A zone-less value (a direct post) is read as Europe/London
+  // time, because the server runs in UTC.
   const dueDate = dueAtRaw ? parseDueInput(dueAtRaw) : null;
   if (dueAtRaw && !dueDate) return { error: "That due date is not valid." };
   const dueAt = dueDate ? dueDate.toISOString() : null;
@@ -59,7 +60,9 @@ export async function createTask(
   if (assigneeId && assigneeId !== session.user.id) {
     await createNotifications(agencyId, [assigneeId], {
       title: `New task assigned: “${title}”`,
-      body: dueAt ? `Due ${new Date(dueAt).toLocaleString("en-GB")}` : details,
+      body: dueAt
+        ? `Due ${new Date(dueAt).toLocaleString("en-GB", { timeZone: "UTC" })} UTC`
+        : details,
       link: "/tasks",
     });
   }

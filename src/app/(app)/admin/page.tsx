@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 
 import { AdminPanel, type Member } from "@/components/admin-panel";
 import { DataImport } from "@/components/data-import";
+import { ReminderSettingsCard } from "@/components/admin/reminder-settings-card";
+import { TypeAllocationCard } from "@/components/admin/type-allocation-card";
+import { getReminderSettings } from "@/lib/db/queries/reminder-settings";
 import { MarketIntelAdmin, type IntelSourceStatus } from "@/components/market-intel-admin";
 import { getContactRoles } from "@/lib/contact-roles";
 import { getCompanyTypes } from "@/lib/company-types";
@@ -42,12 +45,13 @@ export default async function AdminPage() {
     );
   }
 
-  const [memberRows, settings, contactRoles, companyTypes, intelRows] = await Promise.all([
+  const [memberRows, settings, contactRoles, companyTypes, intelRows, reminderSettings] = await Promise.all([
     listAgencyMembersFull(agencyId),
     getAgencySettings(agencyId),
     getContactRoles(),
     getCompanyTypes(),
     listIntelSourceRows(agencyId),
+    getReminderSettings(agencyId),
   ]);
 
   const hasOpenRouterKey = Boolean(settings?.openrouter_api_key);
@@ -108,6 +112,17 @@ export default async function AdminPage() {
         contactRoles={contactRoles}
         companyTypes={companyTypes}
       />
+
+      <div className="mt-4">
+        <ReminderSettingsCard settings={reminderSettings} />
+      </div>
+
+      <div className="mt-4">
+        <TypeAllocationCard
+          companyTypes={companyTypes.map((t) => ({ slug: t.slug, label: t.label }))}
+          contactRoles={contactRoles.map((r) => ({ slug: r.slug, label: r.label }))}
+        />
+      </div>
 
       <div className="mt-4">
         <CollapsibleCard

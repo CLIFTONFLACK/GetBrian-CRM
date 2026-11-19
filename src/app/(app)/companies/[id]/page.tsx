@@ -101,6 +101,9 @@ export default async function CompanyDetailPage({
   ]);
 
   const nameOf = new Map(members.map((m) => [m.id, m.name]));
+  const leadAgentName = company.lead_agent_id
+    ? (nameOf.get(company.lead_agent_id) ?? "Unknown agent")
+    : null;
   const updated = formatDateUpdated(company.date_updated);
   const additionalAgents = agentRows.map((agentId) => ({
     id: agentId,
@@ -171,6 +174,7 @@ export default async function CompanyDetailPage({
                 .filter(Boolean)
                 .join(", ") || "—"}
             </Detail>
+            <Detail label="Lead agent">{leadAgentName ?? "—"}</Detail>
             <Detail label="Agents">
               {additionalAgents.length > 0 ? (
                 <span className="flex flex-wrap gap-1.5">

@@ -1563,6 +1563,12 @@ export type Database = {
           updated_at: string
           date_updated: string
           listing_rating: number | null
+          external_ref: string | null
+          location_anchor_text: string | null
+          location_anchor_lat: number | null
+          location_anchor_lng: number | null
+          location_radius_miles: number | null
+          max_rent_psf: number | null
           use_classes: Database["public"]["Enums"]["use_class"][]
         }
         Insert: {
@@ -1595,6 +1601,12 @@ export type Database = {
           updated_at?: string
           date_updated?: string
           listing_rating?: number | null
+          external_ref?: string | null
+          location_anchor_text?: string | null
+          location_anchor_lat?: number | null
+          location_anchor_lng?: number | null
+          location_radius_miles?: number | null
+          max_rent_psf?: number | null
           use_classes?: Database["public"]["Enums"]["use_class"][]
         }
         Update: {
@@ -1627,6 +1639,12 @@ export type Database = {
           updated_at?: string
           date_updated?: string
           listing_rating?: number | null
+          external_ref?: string | null
+          location_anchor_text?: string | null
+          location_anchor_lat?: number | null
+          location_anchor_lng?: number | null
+          location_radius_miles?: number | null
+          max_rent_psf?: number | null
           use_classes?: Database["public"]["Enums"]["use_class"][]
         }
         Relationships: [

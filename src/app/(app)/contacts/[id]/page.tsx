@@ -145,7 +145,8 @@ export default async function ContactDetailPage({
               "—"
             )}
           </Row>
-          <Row label="Phone">{contact.phone ?? "—"}</Row>
+          <Row label="Mobile">{contact.mobile ?? "—"}</Row>
+          <Row label="Landline">{contact.phone ?? "—"}</Row>
           <Row label="Address">{address || "—"}</Row>
           <Row label="Lead agent">{leadAgentName ?? "—"}</Row>
           <Row label="Agents">

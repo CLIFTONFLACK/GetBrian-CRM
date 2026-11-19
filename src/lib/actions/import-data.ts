@@ -38,16 +38,19 @@ import {
   collectListingIds,
   dryRunFollowUp,
   followUpSummary,
+  anchorKey,
   GEOCODE_CONCURRENCY,
   geocodeWindow,
+  inUkBox,
   shouldRescore,
+  MAX_ANCHOR_GEOCODES,
   MAX_GEOCODE_LISTINGS,
   MAX_RESCORE_LISTINGS,
   type FollowUpResult,
 } from "@/lib/import-followup";
 import { listCompanyTypes, listContactRoles } from "@/lib/db/queries/lookups";
 import { createRequirement, type RequirementWriteInput } from "@/lib/db/queries/requirements";
-import { deriveCounty } from "@/lib/locations";
+import { deriveCounty, districtCentroid, getCounty, getLondonArea, getTown } from "@/lib/locations";
 import {
   COUNTY_OPTIONS,
   DISTRICT_OPTIONS,
@@ -80,9 +83,12 @@ import {
   parseSourceDate,
   parseTenant,
   planAdoptions,
+  planCompanyPhones,
+  routeContactPhones,
   summariseReasons,
   unionTags,
 } from "@/lib/import-parse";
+import { inferCompanyType, inferContactRole } from "@/lib/type-inference";
 import { requirementLinkError } from "@/lib/requirement-rules";
 import { Constants } from "@/lib/database.types";
 import {
@@ -154,12 +160,44 @@ import type { FormState } from "@/lib/actions/types";
 const ENTITIES: ImportEntity[] = ["companies", "contacts", "requirements", "listings"];
 const LISTING_TYPES = ["cdg", "intel"];
 
+// Coordinates for "within N miles of X", from the offline gazetteer. Towns and
+// counties go in first and London areas last, so a name in both ("Kensington")
+// resolves to the London area, as the matcher's own lookups do.
+function catalogCoords(): Record<string, [number, number]> {
+  const out: Record<string, [number, number]> = {};
+  for (const name of TOWN_OPTIONS) {
+    const t = getTown(name);
+    if (t) out[name] = [t.lat, t.lng];
+  }
+  for (const name of COUNTY_OPTIONS) {
+    const c = getCounty(name);
+    if (c && c.lat !== null && c.lng !== null) out[name] = [c.lat, c.lng];
+  }
+  const codes = new Set<string>();
+  for (const [code] of DISTRICT_OPTIONS) {
+    codes.add(code);
+    // "W1" is not a district of its own but is a normal way to say one.
+    const prefix = /^[A-Z]{1,2}\d/.exec(code);
+    if (prefix) codes.add(prefix[0]);
+  }
+  for (const code of codes) {
+    const d = districtCentroid(code);
+    if (d) out[code] = [d.lat, d.lng];
+  }
+  for (const [name] of LONDON_AREA_OPTIONS) {
+    const a = getLondonArea(name);
+    if (a) out[name] = [a.lat, a.lng];
+  }
+  return out;
+}
+
 const LOCATION_CATALOG = buildLocationCatalog({
   neighbourhoods: LONDON_AREA_OPTIONS.map((a) => a[0]),
   towns: TOWN_OPTIONS,
   counties: COUNTY_OPTIONS,
   regions: REGION_OPTIONS,
   districts: DISTRICT_OPTIONS.map((d) => d[0]),
+  coords: catalogCoords(),
 });
 
 // Multi-value cells use ";" in our template and "," in every other system's
@@ -273,6 +311,11 @@ function syncRequirementFields(f: RequirementWriteInput, p: RequirementImportPat
   f.maxRent = p.maxRent ?? f.maxRent;
   f.maxPremium = p.maxPremium ?? f.maxPremium;
   f.maxGuidePrice = p.maxGuidePrice ?? f.maxGuidePrice;
+  f.locationAnchorText = p.locationAnchorText ?? f.locationAnchorText;
+  f.locationAnchorLat = p.locationAnchorLat ?? f.locationAnchorLat;
+  f.locationAnchorLng = p.locationAnchorLng ?? f.locationAnchorLng;
+  f.locationRadiusMiles = p.locationRadiusMiles ?? f.locationRadiusMiles;
+  f.maxRentPsf = p.maxRentPsf ?? f.maxRentPsf;
   f.notes = p.notes ?? f.notes;
 }
 
@@ -450,7 +493,26 @@ export async function importEntityCsv(
   const recordByFileKey = new Map<string, { patch: object }>();
   let mergedInFile = 0;
   // Requirement free-text outcomes, reported so nothing is silently dropped.
-  const stats = { rentKeptInNotes: 0, sizeKeptInNotes: 0, areaNotFullyPlaced: 0, noLink: 0 };
+  const stats = {
+    rentKeptInNotes: 0,
+    sizeKeptInNotes: 0,
+    areaNotFullyPlaced: 0,
+    noLink: 0,
+    // New: what the structured readers took instead of leaving in notes.
+    rentPerSqft: 0,
+    rentScaled: 0,
+    rentAssumedAnnual: 0,
+    anchorsOffline: 0,
+    // Contacts and companies: phone numbers moved or kept aside.
+    phoneToMobile: 0,
+    phoneToLandline: 0,
+    phoneSameClass: 0,
+    companyExtraNumbers: 0,
+    // Companies and contacts: type or role chosen from the name, e-mail or web
+    // address because the file gave none (new records only).
+    typesInferred: 0,
+    rolesInferred: 0,
+  };
 
   rows.slice(headerRow + 1).forEach((r, n) => {
     const rowNo = headerRow + n + 2;
@@ -462,6 +524,15 @@ export async function importEntityCsv(
         if (v) return v;
       }
       return "";
+    };
+    /** Every non-empty value of the columns feeding one field, in column order. */
+    const getAll = (name: string) => {
+      const found: string[] = [];
+      for (const i of columns.get(name) ?? []) {
+        const v = (r[i] ?? "").trim();
+        if (v) found.push(v);
+      }
+      return found;
     };
     /** Supplied-or-null, the shape every patch field takes. */
     const opt = (name: string) => get(name) || null;
@@ -550,11 +621,25 @@ export async function importEntityCsv(
         // A new company with no recognised type becomes Other; an existing one
         // keeps the type it has (a spreadsheet label must not overwrite a real
         // classification with "Other").
+        // Only a NEW company with no usable type is classified from its name and
+        // web address, and only when the rules are sure (src/lib/type-inference.ts).
+        // An existing company keeps its stored type: the admin "Auto-allocate
+        // types" preview handles those.
+        const inferredType =
+          parsedType.type === null && !existingId
+            ? inferCompanyType(
+                { name, website: opt("website"), email: null },
+                companyTypes.map((t) => t.slug),
+              )
+            : null;
+        if (inferredType) stats.typesInferred++;
         if (typeValues.length > 0 && parsedType.type === null) {
           warnings.push(
             existingId
               ? `Row ${rowNo}: company type "${typeCell}" matches no company type — kept the stored type`
-              : `Row ${rowNo}: company type "${typeCell}" matches no company type — set to Other`,
+              : inferredType
+                ? `Row ${rowNo}: company type "${typeCell}" matches no company type — set to ${inferredType.slug} (${inferredType.reason})`
+                : `Row ${rowNo}: company type "${typeCell}" matches no company type — set to Other`,
           );
         }
         // Recognised words become use-class slugs so they show in the picker;
@@ -565,14 +650,25 @@ export async function importEntityCsv(
           const { slugs, extra } = partitionSectorTags(raw);
           return [...new Set([...slugs, ...extra])];
         })();
+        // A company has one phone field, and "Phone Number" and "Mobile Number"
+        // both feed it. The first landline-class number (else the first) is the
+        // phone; every other number is kept in notes, never dropped.
+        const { phone: primary, extraLines } = planCompanyPhones(getAll("phone"));
+        if (extraLines.length > 0) {
+          stats.companyExtraNumbers++;
+          warnings.push(
+            `Row ${rowNo}: ${extraLines.length === 1 ? "a second phone number" : "more phone numbers"} kept in notes (a company has one phone field)`,
+          );
+        }
+        const companyNotes = mergeNotes(get("notes"), extraLines.join("\n")) || null;
         const dateUpdated = dateOf();
         const patch: CompanyImportPatch = {
           name,
-          type: parsedType.type ?? (typeCell && !existingId ? "other" : null),
+          type: parsedType.type ?? inferredType?.slug ?? (typeCell && !existingId ? "other" : null),
           sectorTags,
           website: opt("website"),
-          phone: opt("phone"),
-          notes: opt("notes"),
+          phone: primary,
+          notes: companyNotes,
           companyNumber: number || null,
           vatNumber: opt("vat_number"),
           addressLine: address.address_line,
@@ -590,10 +686,10 @@ export async function importEntityCsv(
           patch,
           fields: {
             name,
-            type: parsedType.type ?? "other",
+            type: parsedType.type ?? inferredType?.slug ?? "other",
             sectorTags: sectorTags ?? [],
             website: opt("website"),
-            phone: opt("phone"),
+            phone: primary,
             addressLine: address.address_line,
             city: address.city,
             postcode: address.postcode,
@@ -604,6 +700,7 @@ export async function importEntityCsv(
             leadAgentId: null,
           },
         };
+        rec.fields.notes = companyNotes;
         // Key the file-level dedupe on everything that identifies the record, so
         // "ABC Ltd" with a CRN on one line and without on another still merge.
         const prior = claim(companyFileKeys(existingId, number, name), rec);
@@ -635,9 +732,34 @@ export async function importEntityCsv(
             deriveCounty({ postcode: get("postcode"), city: get("city") }),
         };
         // Phone and mobile are separate fields. A mobile-only row leaves phone
-        // empty: copying one into the other would invent a landline.
-        const phone = opt("phone");
-        const mobile = opt("mobile");
+        // empty: copying one into the other would invent a landline. Exports put
+        // a mobile in "Phone Number" and the other way round, so each number is
+        // filed by what it is: mobile-class to mobile, landline-class to phone,
+        // anything else stays where it came from. If both cells land in the same
+        // field they are left as exported.
+        const routed = routeContactPhones(get("phone"), get("mobile"));
+        const { phone, mobile } = routed;
+        // A NEW contact with no usable role is classified from its e-mail domain
+        // when the rules are sure. The company is not known yet at this point, so
+        // only the domain words (solicitors, finance) can fire here.
+        const roleCell = get("role");
+        const fileRole = roleCell ? oneOf(roleCell, roleSlugs, "other") : null;
+        const inferredRole =
+          !existingId && (fileRole === null || fileRole === "other")
+            ? inferContactRole(
+                { email: storedEmail, companyType: null, companyName: get("company_name") || null },
+                roleSlugs,
+              )
+            : null;
+        if (inferredRole) stats.rolesInferred++;
+        if (routed.phoneToMobile) stats.phoneToMobile++;
+        if (routed.mobileToPhone) stats.phoneToLandline++;
+        if (routed.sameClass) {
+          stats.phoneSameClass++;
+          warnings.push(
+            `Row ${rowNo}: both phone cells hold a ${routed.sameClass} number: kept each in its own column as exported`,
+          );
+        }
         const optIn = boolOf("marketing_opt_in");
         const alerts = boolOf("marketing_property_alerts");
         const dateUpdated = dateOf();
@@ -675,7 +797,7 @@ export async function importEntityCsv(
             email: storedEmail,
             phone,
             mobile,
-            role: oneOf(get("role"), roleSlugs, "other"),
+            role: inferredRole?.slug ?? oneOf(get("role"), roleSlugs, "other"),
             companyId: null, // resolved after companies are created, below
             county: address.county,
             notes: opt("notes"),
@@ -799,10 +921,16 @@ export async function importEntityCsv(
         if (size.keepText) stats.sizeKeptInNotes++;
         if (rent.note) stats.rentKeptInNotes++;
         if (area.note) stats.areaNotFullyPlaced++;
+        if (rent.rentPsf !== null) stats.rentPerSqft++;
+        if (rent.outcome === "per_month" || rent.outcome === "per_week") stats.rentScaled++;
+        if (rent.outcome === "assumed_annual") stats.rentAssumedAnnual++;
+        const anchor = area.anchor;
+        if (anchor && anchor.lat !== null) stats.anchorsOffline++;
 
         const minSqft = num("min_sqft") ?? size.minSqft;
         const maxSqft = num("max_sqft") ?? size.maxSqft;
         const maxRent = num("max_rent") ?? rent.maxRent;
+        const maxRentPsf = rent.rentPsf;
         const notes = joinNoteLines(
           get("notes"),
           size.keepText && !sizeC.over ? `Size (as exported): ${sizeCell}` : null,
@@ -849,6 +977,11 @@ export async function importEntityCsv(
           maxRent,
           maxPremium,
           maxGuidePrice,
+          locationAnchorText: anchor?.text ?? null,
+          locationAnchorLat: anchor?.lat ?? null,
+          locationAnchorLng: anchor?.lng ?? null,
+          locationRadiusMiles: anchor?.miles ?? null,
+          maxRentPsf,
           notes,
           dateUpdated,
           externalRef: null,
@@ -884,6 +1017,11 @@ export async function importEntityCsv(
             maxGuidePrice,
             notes,
             leadAgentId: null,
+            locationAnchorText: anchor?.text ?? null,
+            locationAnchorLat: anchor?.lat ?? null,
+            locationAnchorLng: anchor?.lng ?? null,
+            locationRadiusMiles: anchor?.miles ?? null,
+            maxRentPsf,
           },
         };
         const prior = externalRef ? claim(`ref:${key(externalRef)}`, rec) : null;
@@ -1038,6 +1176,63 @@ export async function importEntityCsv(
         );
       }
     });
+  }
+
+  // Requirements: places named in "within N miles of X" that the gazetteer did
+  // not know get coordinates from the geocoder. One lookup per distinct place,
+  // at most MAX_ANCHOR_GEOCODES, five at a time, only while the shared clock
+  // has room (same windows as the listings follow-up). A hit outside the UK is
+  // refused. A place that is not resolved keeps its text and radius but no
+  // coordinates, and its text also goes to notes, so nothing is lost.
+  const anchorStats = { geocoded: 0, notFound: 0, notTried: 0 };
+  if (entity === "requirements") {
+    const pending = requirementRecords.filter(
+      (q) => q.patch.locationAnchorText && q.patch.locationAnchorLat === null,
+    );
+    const places = new Map<string, string>();
+    for (const q of pending) places.set(anchorKey(q.patch.locationAnchorText as string), q.patch.locationAnchorText as string);
+    const resolved = new Map<string, { lat: number; lng: number } | null>();
+    if (!dryRun && places.size > 0) {
+      const { take } = capList([...places], MAX_ANCHOR_GEOCODES);
+      const win = geocodeWindow(Date.now() - startedAt);
+      if (win.run && take.length > 0) {
+        const deadline = Date.now() + win.budgetMs;
+        try {
+          await pool(take, GEOCODE_CONCURRENCY, async ([k, text]) => {
+            if (Date.now() > deadline) return null;
+            let loc: Awaited<ReturnType<typeof geocodeAddress>> = null;
+            try {
+              loc = await geocodeAddress({ address_line: text });
+            } catch {
+              loc = null;
+            }
+            resolved.set(k, loc && inUkBox(loc.lat, loc.lng) ? loc : null);
+            return null;
+          });
+        } catch {
+          // best-effort only: unresolved places fall through to the notes line below
+        }
+      }
+    }
+    for (const q of pending) {
+      const text = q.patch.locationAnchorText as string;
+      const k = anchorKey(text);
+      const loc = resolved.get(k);
+      if (loc) {
+        q.patch.locationAnchorLat = loc.lat;
+        q.patch.locationAnchorLng = loc.lng;
+        q.fields.locationAnchorLat = loc.lat;
+        q.fields.locationAnchorLng = loc.lng;
+        anchorStats.geocoded++;
+        continue;
+      }
+      if (resolved.has(k)) anchorStats.notFound++;
+      else anchorStats.notTried++;
+      if (dryRun) continue;
+      const line = `Area (as exported): ${text}`;
+      q.patch.notes = joinNoteLines(q.patch.notes, line);
+      q.fields.notes = joinNoteLines(q.fields.notes, line);
+    }
   }
 
   // Contacts: resolve company_name → company_id, creating minimal companies
@@ -1434,8 +1629,35 @@ export async function importEntityCsv(
           stats.rentKeptInNotes ? `${stats.rentKeptInNotes} rent text kept in notes` : "",
           stats.sizeKeptInNotes ? `${stats.sizeKeptInNotes} size text kept in notes` : "",
           stats.areaNotFullyPlaced ? `${stats.areaNotFullyPlaced} area text not fully placed (kept in notes)` : "",
+          stats.rentPerSqft ? `${stats.rentPerSqft} rent read as per sq ft` : "",
+          stats.rentScaled ? `${stats.rentScaled} monthly or weekly rent converted to a yearly figure` : "",
+          stats.rentAssumedAnnual ? `${stats.rentAssumedAnnual} rent with no unit read as a yearly figure` : "",
+          stats.anchorsOffline ? `${stats.anchorsOffline} "within N miles" place found offline` : "",
+          anchorStats.geocoded ? `${anchorStats.geocoded} "within N miles" place geocoded` : "",
+          anchorStats.notFound
+            ? `${anchorStats.notFound} "within N miles" place not found (text and radius saved, no coordinates, text kept in notes)`
+            : "",
+          anchorStats.notTried
+            ? dryRun
+              ? `${anchorStats.notTried} "within N miles" place would be looked up by the geocoder`
+              : `${anchorStats.notTried} "within N miles" place not looked up (limit or time; text kept in notes)`
+            : "",
         ].filter(Boolean)
-      : [];
+      : entity === "contacts"
+        ? [
+            stats.phoneToMobile ? `${stats.phoneToMobile} mobile number moved from Phone to Mobile` : "",
+            stats.phoneToLandline ? `${stats.phoneToLandline} landline moved from Mobile to Phone` : "",
+            stats.phoneSameClass ? `${stats.phoneSameClass} row with two numbers of the same kind (kept as exported)` : "",
+            stats.rolesInferred ? `${stats.rolesInferred} new contact given a role from its e-mail domain` : "",
+          ].filter(Boolean)
+        : entity === "companies"
+          ? [
+              stats.companyExtraNumbers
+                ? `${stats.companyExtraNumbers} company with a second phone number kept in notes`
+                : "",
+              stats.typesInferred ? `${stats.typesInferred} new company given a type from its name or web address` : "",
+            ].filter(Boolean)
+          : [];
   const kept = freeText.length ? ` ${freeText.join("; ")}.` : "";
   const matching =
     entity === "requirements" && (adopted || ambiguousCopies)

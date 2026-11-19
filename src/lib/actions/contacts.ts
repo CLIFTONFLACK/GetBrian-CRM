@@ -43,6 +43,7 @@ function writeInput(fd: FormData, role: string): ContactWriteInput {
     lastName: nullable(fd, "last_name"),
     email: nullable(fd, "email"),
     phone: nullable(fd, "phone"),
+    mobile: nullable(fd, "mobile"),
     role,
     companyId: nullable(fd, "company_id"),
     addressLine: nullable(fd, "address_line"),

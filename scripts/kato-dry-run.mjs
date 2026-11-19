@@ -10,34 +10,26 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import * as XLSX from "xlsx";
 
 import { decodeCsvBytes, mapHeaders, parseCsv } from "../src/lib/csv.ts";
 import {
-  buildLocationCatalog,
+  classifyUkNumber,
   hasLetterOrDigit,
   legacyRowRef,
+  normName,
   parseArea,
   parseBool,
   parseRent,
   parseSize,
   parseSourceDate,
   parseTenant,
+  planCompanyPhones,
+  routeContactPhones,
 } from "../src/lib/import-parse.ts";
 import { workbookToRows } from "../src/lib/xlsx-rows.ts";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), "utf8"));
-const uk = readJson("src/lib/locations/data/uk-location-options.json");
-const london = readJson("src/lib/locations/data/london-area-options.json");
-const catalog = buildLocationCatalog({
-  neighbourhoods: london.areas.map((a) => a[0]),
-  towns: uk.towns,
-  counties: uk.counties,
-  regions: uk.regions,
-  districts: uk.districts.map((d) => d[0]),
-});
+import { catalog, tokenIsSafeToShow } from "./lib/kato-catalog.mjs";
 
 const bump = (m, k, by = 1) => m.set(k, (m.get(k) ?? 0) + by);
 const show = (title, m, limit = 50) => {
@@ -97,6 +89,14 @@ for (const file of process.argv.slice(2)) {
     }
     return "";
   };
+  const getAll = (r, name) => {
+    const found = [];
+    for (const i of header.columns.get(name) ?? []) {
+      const v = (r[i] ?? "").trim();
+      if (v) found.push(v);
+    }
+    return found;
+  };
   console.log(`\n== ${path.basename(file).replace(/\d{6,}/, "N")}  (${entity})`);
   console.log(`  rows read: ${data.length}   header row index: ${header.headerRow}`);
   console.log(`  columns placed: ${[...header.columns.keys()].join(", ")}`);
@@ -120,10 +120,25 @@ for (const file of process.argv.slice(2)) {
     }
     console.log(`  company type cells with more than one value: ${multi}`);
     show("company type values (top 20)", tokens, 20);
+    // A company has one phone field: how many rows carry a second number, and of what kind.
+    let withNumbers = 0, withSecond = 0, secondMobile = 0, secondOther = 0;
+    for (const r of data) {
+      const all = getAll(r, "phone");
+      if (all.length) withNumbers++;
+      const plan = planCompanyPhones(all);
+      if (plan.extraLines.length) withSecond++;
+      for (const line of plan.extraLines) {
+        if (line.startsWith("Mobile")) secondMobile++;
+        else secondOther++;
+      }
+    }
+    console.log(`  rows with a phone number: ${withNumbers}   rows with a second number (kept in notes): ${withSecond}   second numbers that are mobile: ${secondMobile}, other: ${secondOther}`);
   }
 
   if (entity === "contacts") {
     let noFirst = 0, withEmail = 0, mobileOnly = 0, both = 0, newsYes = 0, alertsYes = 0, boolBad = 0;
+    let toMobile = 0, toPhone = 0;
+    const phoneClasses = new Map(), mobileClasses = new Map(), sameClass = new Map();
     const emails = new Map();
     for (const r of data) {
       if (!get(r, "first_name")) noFirst++;
@@ -136,6 +151,12 @@ for (const file of process.argv.slice(2)) {
       const mobile = get(r, "mobile");
       if (mobile && !phone) mobileOnly++;
       if (mobile && phone) both++;
+      if (phone) bump(phoneClasses, classifyUkNumber(phone));
+      if (mobile) bump(mobileClasses, classifyUkNumber(mobile));
+      const routed = routeContactPhones(phone, mobile);
+      if (routed.phoneToMobile) toMobile++;
+      if (routed.mobileToPhone) toPhone++;
+      if (routed.sameClass) bump(sameClass, routed.sameClass);
       for (const [col, isNews] of [["marketing_opt_in", true], ["marketing_property_alerts", false]]) {
         const v = parseBool(get(r, col));
         if (v === true && isNews) newsYes++;
@@ -145,6 +166,10 @@ for (const file of process.argv.slice(2)) {
     }
     console.log(`  rows with no first name: ${noFirst}   with email: ${withEmail}   duplicate emails in file: ${[...emails.values()].filter((n) => n > 1).length}`);
     console.log(`  mobile only (phone stays empty): ${mobileOnly}   phone and mobile: ${both}`);
+    console.log(`  Phone column, by kind: ${[...phoneClasses].map(([k, v]) => `${k}=${v}`).join(", ") || "(none)"}`);
+    console.log(`  Mobile column, by kind: ${[...mobileClasses].map(([k, v]) => `${k}=${v}`).join(", ") || "(none)"}`);
+    console.log(`  would move Phone -> Mobile (mobile-class number in Phone): ${toMobile}   Mobile -> Phone (landline in Mobile): ${toPhone}`);
+    console.log(`  rows with two numbers of the same kind (kept as exported, warned): ${[...sameClass].map(([k, v]) => `${k}=${v}`).join(", ") || "none"}`);
     console.log(`  marketing latest news = yes: ${newsYes}   property alerts = yes: ${alertsYes}   unreadable yes/no: ${boolBad}`);
   }
 
@@ -152,6 +177,9 @@ for (const file of process.argv.slice(2)) {
     const sizeKinds = new Map(), sizeFail = new Map(), rentKinds = new Map();
     const placed = new Map(), unplaced = new Map(), tenantShapes = new Map();
     let sqm = 0, swapped = 0, noEmail = 0, areaNoteRows = 0, unplacedTokens = 0, partialTokens = 0, unknownNoEmail = 0;
+    let psfRents = 0, scaledRents = 0, assumedAnnual = 0, rentsToMaxRent = 0;
+    let anchorOffline = 0, anchorNeedGeo = 0;
+    const anchorPlaces = new Set();
     const refs = new Map();
     const identities = new Map();
     for (const r of data) {
@@ -160,8 +188,20 @@ for (const file of process.argv.slice(2)) {
       if (size.kind === "unparsed") bump(sizeFail, size.shape);
       if (size.swapped) swapped++;
       if (/sq\.?\s*m|sqm|m2/i.test(get(r, "size_text"))) sqm++;
-      bump(rentKinds, parseRent(get(r, "rent_text")).outcome);
+      const rent = parseRent(get(r, "rent_text"));
+      bump(rentKinds, rent.outcome);
+      if (rent.rentPsf !== null) psfRents++;
+      if (rent.outcome === "per_month" || rent.outcome === "per_week") scaledRents++;
+      if (rent.outcome === "assumed_annual") assumedAnnual++;
+      if (rent.maxRent !== null) rentsToMaxRent++;
       const area = parseArea(get(r, "area_text"), catalog);
+      if (area.anchor) {
+        if (area.anchor.lat !== null) anchorOffline++;
+        else {
+          anchorNeedGeo++;
+          anchorPlaces.add(normName(area.anchor.text));
+        }
+      }
       for (const [k, v] of Object.entries(area.placed)) if (v) bump(placed, k, v);
       for (const t of area.unplaced) {
         unplacedTokens++;
@@ -194,7 +234,21 @@ for (const file of process.argv.slice(2)) {
     console.log(`  rent outcomes: ${[...rentKinds].map(([k, v]) => `${k}=${v}`).join(", ")}`);
     console.log(`  area tokens placed, by kind: ${[...placed].map(([k, v]) => `${k}=${v}`).join(", ")}`);
     console.log(`  area tokens unplaced: ${unplacedTokens} (${unplaced.size} distinct)   placed in part (text also kept): ${partialTokens}   rows with area text in notes: ${areaNoteRows}`);
-    show("top unplaced area tokens", unplaced, 30);
+    console.log(`  rent: into max_rent (yearly): ${rentsToMaxRent}   per sq ft (into max_rent_psf): ${psfRents}   monthly or weekly converted: ${scaledRents}   no unit read as yearly: ${assumedAnnual}`);
+    console.log(`  "within N miles of X": found offline: ${anchorOffline}   need the geocoder: ${anchorNeedGeo} rows (${anchorPlaces.size} distinct places; importer cap is 60 per import)`);
+    // Names of people or companies must not reach the console: only tokens made of
+    // known place words and digits are shown, the rest are counted.
+    const shownTokens = new Map();
+    let hiddenTokens = 0, hiddenKinds = 0;
+    for (const [token, n] of unplaced) {
+      if (tokenIsSafeToShow(token)) shownTokens.set(token, n);
+      else {
+        hiddenTokens += n;
+        hiddenKinds++;
+      }
+    }
+    show("top unplaced area tokens (known words and digits only)", shownTokens, 40);
+    console.log(`    not shown (a capitalised word that is not a known place): ${hiddenTokens} tokens, ${hiddenKinds} distinct`);
     console.log(`  tenant shapes: ${[...tenantShapes].map(([k, v]) => `${k}=${v}`).join(", ")}`);
     const distinct = refs.size;
     console.log(`  distinct stable references: ${distinct}   duplicate rows collapsed: ${data.length - distinct}`);

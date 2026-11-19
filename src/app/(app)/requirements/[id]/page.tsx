@@ -51,6 +51,7 @@ import { RequirementDocuments } from "@/components/requirement-documents";
 import { signRequirementDocUrl } from "@/lib/requirement-docs";
 import { getExternalSendPairRows } from "@/lib/db/queries/deals";
 import { formatDateUpdated } from "@/lib/format-date";
+import { describeAnchor, formatRentPsf } from "@/lib/requirement-display";
 import { cn } from "@/lib/utils";
 
 function band(min: number | null, max: number | null, unit = "") {
@@ -194,6 +195,7 @@ export default async function RequirementDetailPage({
   }
 
   const dateUpdated = formatDateUpdated(r.date_updated);
+  const anchor = describeAnchor(r);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -291,6 +293,17 @@ export default async function RequirementDetailPage({
             <Row label="Districts">
               <ChipList items={r.target_postcode_districts} tone="sky" />
             </Row>
+            {anchor ? (
+              <Row label="Radius">
+                <span>{anchor.text}</span>
+                {anchor.located ? null : (
+                  <span className="mt-1 block text-xs text-amber-600 dark:text-amber-400">
+                    Place not found: no coordinates saved, so this is not used for matching. Edit the
+                    requirement and save to look it up again.
+                  </span>
+                )}
+              </Row>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -318,6 +331,12 @@ export default async function RequirementDetailPage({
             <Row label="Max rent">
               <span className="font-mono tabular-nums">{money(r.max_rent)}</span>
               {r.max_rent != null ? (
+                <span className="text-muted-foreground"> pa</span>
+              ) : null}
+            </Row>
+            <Row label="Max rent / sq ft">
+              <span className="font-mono tabular-nums">{formatRentPsf(r.max_rent_psf)}</span>
+              {r.max_rent_psf != null ? (
                 <span className="text-muted-foreground"> pa</span>
               ) : null}
             </Row>

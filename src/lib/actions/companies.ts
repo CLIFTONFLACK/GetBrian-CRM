@@ -38,12 +38,13 @@ const sectorTags = (fd: FormData) => {
 // Company types are now editable data, so any custom slug is allowed.
 const asType = (v: string): string => v.trim() || "other";
 
-/** Additional agents (de-duped). Companies have no lead agent. */
+/** Lead agent + additional agents (de-duped, lead excluded from extras). */
 const agents = (fd: FormData) => {
+  const lead = nullable(fd, "lead_agent_id");
   const extra = Array.from(
     new Set(fd.getAll("additional_agents").map((v) => String(v)).filter(Boolean)),
-  );
-  return { extra };
+  ).filter((id) => id !== lead);
+  return { lead, extra };
 };
 
 function addressFromForm(formData: FormData) {
@@ -61,6 +62,7 @@ function addressFromForm(formData: FormData) {
 }
 
 function writeInput(formData: FormData): CompanyWriteInput {
+  const { lead } = agents(formData);
   const address = addressFromForm(formData);
   return {
     name: str(formData, "name"),
@@ -71,6 +73,7 @@ function writeInput(formData: FormData): CompanyWriteInput {
     notes: nullable(formData, "notes"),
     companyNumber: nullable(formData, "company_number"),
     vatNumber: nullable(formData, "vat_number"),
+    leadAgentId: lead,
     addressLine: address.address_line,
     city: address.city,
     postcode: address.postcode,

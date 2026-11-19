@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/select";
 import { createTask } from "@/lib/actions/tasks";
 import type { FormState } from "@/lib/actions/types";
 import type { AgentOption } from "@/lib/db/queries/agencies";
+import { withIsoDueAt } from "@/lib/local-datetime";
 
 /**
  * Compact "Add task" form for the To-do tab. Posts the same createTask action
@@ -38,7 +39,11 @@ export function EntityTaskForm({
   }, [state]);
 
   return (
-    <form ref={formRef} action={formAction} className="space-y-3 rounded-md border bg-muted/30 p-3">
+    <form
+      ref={formRef}
+      action={(fd) => formAction(withIsoDueAt(fd))}
+      className="space-y-3 rounded-md border bg-muted/30 p-3"
+    >
       <input type="hidden" name="entity_type" value={entityType} />
       <input type="hidden" name="entity_id" value={entityId} />
       <div className="space-y-1">

@@ -26,6 +26,7 @@ import {
   listRequirementDocuments,
 } from "@/lib/db/queries/requirements";
 import { formatDateUpdated } from "@/lib/format-date";
+import { describeAnchor, formatRentPsf } from "@/lib/requirement-display";
 import {
   openRecordHref,
   type RecordRef,
@@ -120,6 +121,7 @@ async function OverviewTab({
   const leadAgent = r.lead_agent_id ? (nameOf.get(r.lead_agent_id) ?? "Unknown agent") : null;
   const agents = agentIds.map((id) => ({ id, name: nameOf.get(id) ?? "Unknown agent" }));
   const updated = formatDateUpdated(r.date_updated);
+  const anchor = describeAnchor(r);
 
   return (
     <>
@@ -141,6 +143,16 @@ async function OverviewTab({
         <Field label="Districts">
           <ChipList items={r.target_postcode_districts} tone="sky" />
         </Field>
+        {anchor ? (
+          <Field label="Radius">
+            {anchor.text}
+            {anchor.located ? null : (
+              <span className="block text-xs text-amber-600 dark:text-amber-400">
+                Place not found: not used for matching.
+              </span>
+            )}
+          </Field>
+        ) : null}
       </PanelSection>
       <PanelSection title="Property" className="border-t">
         <Field label="Use class">
@@ -156,6 +168,10 @@ async function OverviewTab({
         <Field label="Max rent">
           <span className="font-mono tabular-nums">{money(r.max_rent)}</span>
           {r.max_rent != null ? <span className="text-muted-foreground"> pa</span> : null}
+        </Field>
+        <Field label="Max rent / sq ft">
+          <span className="font-mono tabular-nums">{formatRentPsf(r.max_rent_psf)}</span>
+          {r.max_rent_psf != null ? <span className="text-muted-foreground"> pa</span> : null}
         </Field>
         <Field label="Max premium">
           <span className="font-mono tabular-nums">{money(r.max_premium)}</span>

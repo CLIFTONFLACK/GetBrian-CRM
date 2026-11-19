@@ -30,6 +30,26 @@ export const GEOCODE_SKIP_AFTER_MS = 70_000;
 export const GEOCODE_TOTAL_CAP_MS = 85_000;
 export const RESCORE_SKIP_AFTER_MS = 90_000;
 export const UPSERT_CHUNK = 2_000;
+// Requirements import: places named in "within N miles of X" that the offline
+// gazetteer does not know. One geocode per distinct place, at most this many
+// per import, five at a time, inside the same clock as the listings follow-up.
+export const MAX_ANCHOR_GEOCODES = 60;
+
+/** The United Kingdom's bounding box. A geocoder hit outside it is a wrong place. */
+export function inUkBox(lat: number, lng: number): boolean {
+  return (
+    Number.isFinite(lat) && Number.isFinite(lng) && lat >= 49.8 && lat <= 60.9 && lng >= -8.7 && lng <= 1.8
+  );
+}
+
+/** Key that makes "Berwick Street" and "berwick  street" one geocode. */
+export function anchorKey(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[\u2018\u2019'`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 /** Whether to geocode now, and for how long (ms), given the time already used. */
 export function geocodeWindow(elapsedMs: number): { run: boolean; budgetMs: number } {

@@ -52,6 +52,13 @@ export type Requirement = {
   target_postcode_districts: string[];
   target_neighbourhoods: string[];
   target_london_zones: string[];
+  /** "Within N miles of X" (0046). lat and lng are null when X was not found. */
+  location_anchor_text: string | null;
+  location_anchor_lat: number | null;
+  location_anchor_lng: number | null;
+  location_radius_miles: number | null;
+  /** Most the client pays per sq ft per year (0046). Not the same as max_rent. */
+  max_rent_psf: number | null;
 };
 
 // use_classes/tenure_prefs are arrays of a custom Postgres enum (use_class[]/
@@ -70,7 +77,9 @@ const FULL_COLUMNS = `
   created_at::text as created_at, updated_at::text as updated_at,
   date_updated::text as date_updated, listing_rating,
   property_types, max_guide_price::float8 as max_guide_price, fit_out_prefs, lead_agent_id,
-  target_counties, target_postcode_districts, target_neighbourhoods, target_london_zones
+  target_counties, target_postcode_districts, target_neighbourhoods, target_london_zones,
+  location_anchor_text, location_anchor_lat, location_anchor_lng,
+  location_radius_miles::float8 as location_radius_miles, max_rent_psf::float8 as max_rent_psf
 `;
 
 export async function getRequirementById(agencyId: string, id: string): Promise<Requirement | null> {
@@ -104,12 +113,16 @@ export type RequirementFacetRow = {
   created_at: string;
   use_classes: UseClass[];
   listing_rating: number | null;
+  /** The brief is "within N miles of X" (0046): lets the list count and show it. */
+  location_anchor_text: string | null;
+  location_radius_miles: number | null;
 };
 
 const FACET_COLUMNS = `
   id, status, target_towns, target_regions, target_counties, target_postcode_districts,
   target_neighbourhoods, target_london_zones, created_at::text as created_at,
-  use_classes::text[] as use_classes, listing_rating
+  use_classes::text[] as use_classes, listing_rating,
+  location_anchor_text, location_radius_miles::float8 as location_radius_miles
 `;
 
 /** Whitelist of columns listRequirementFacetRows may ORDER BY — the value
@@ -234,6 +247,9 @@ export async function listPriorityRequirements(
            r.use_classes::text[] as use_classes, r.tenure_prefs::text[] as tenure_prefs,
            r.max_rent::float8 as max_rent, r.max_premium::float8 as max_premium,
            r.max_guide_price::float8 as max_guide_price,
+           r.location_anchor_text, r.location_anchor_lat, r.location_anchor_lng,
+           r.location_radius_miles::float8 as location_radius_miles,
+           r.max_rent_psf::float8 as max_rent_psf,
            r.status, r.listing_rating, r.date_updated::text as date_updated,
            c.name as company_name,
            ct.id as contact_id, ct.first_name as contact_first_name,
@@ -358,6 +374,13 @@ export type MatchRequirement = {
   max_rent: number | null;
   max_premium: number | null;
   max_guide_price: number | null;
+  /** "Within N miles of X" (0046). Scored only when lat, lng and radius are all set. */
+  location_anchor_text: string | null;
+  location_anchor_lat: number | null;
+  location_anchor_lng: number | null;
+  location_radius_miles: number | null;
+  /** Most the client pays per sq ft per year (0046). */
+  max_rent_psf: number | null;
 };
 
 // min_sqft/max_sqft/max_rent/max_premium/max_guide_price are numeric columns.
@@ -373,7 +396,9 @@ const MATCH_COLUMNS = `
   min_sqft::float8 as min_sqft, max_sqft::float8 as max_sqft,
   min_covers, max_covers, use_classes::text[] as use_classes, tenure_prefs::text[] as tenure_prefs,
   max_rent::float8 as max_rent, max_premium::float8 as max_premium,
-  max_guide_price::float8 as max_guide_price
+  max_guide_price::float8 as max_guide_price,
+  location_anchor_text, location_anchor_lat, location_anchor_lng,
+  location_radius_miles::float8 as location_radius_miles, max_rent_psf::float8 as max_rent_psf
 `;
 
 /** Every active requirement in the agency, for scoring against live stock. */
@@ -423,6 +448,13 @@ export type RequirementWriteInput = {
   maxGuidePrice: number | null;
   notes: string | null;
   leadAgentId: string | null;
+  /** The place a radius is measured from; null clears the anchor. */
+  locationAnchorText: string | null;
+  /** Both set or both null (check constraint in 0046). */
+  locationAnchorLat: number | null;
+  locationAnchorLng: number | null;
+  locationRadiusMiles: number | null;
+  maxRentPsf: number | null;
 };
 
 export async function createRequirement(
@@ -442,13 +474,17 @@ export async function createRequirement(
       target_towns, target_regions, target_counties, target_postcode_districts,
       target_neighbourhoods, target_london_zones, use_classes, tenure_prefs,
       min_sqft, max_sqft, min_covers, max_covers, max_rent, max_premium,
-      max_guide_price, notes, lead_agent_id, external_ref
+      max_guide_price, notes, lead_agent_id, external_ref,
+      location_anchor_text, location_anchor_lat, location_anchor_lng,
+      location_radius_miles, max_rent_psf
     ) values (
       ${agencyId}, ${createdBy}, ${input.title}, ${input.companyId}, ${input.contactId}, ${input.status},
       ${input.targetTowns}, ${input.targetRegions}, ${input.targetCounties}, ${input.targetPostcodeDistricts},
       ${input.targetNeighbourhoods}, ${input.targetLondonZones}, ${input.useClasses}::public.use_class[], ${input.tenurePrefs}::public.tenure_type[],
       ${input.minSqft}, ${input.maxSqft}, ${input.minCovers}, ${input.maxCovers}, ${input.maxRent}, ${input.maxPremium},
-      ${input.maxGuidePrice}, ${input.notes}, ${input.leadAgentId}, ${externalRef}
+      ${input.maxGuidePrice}, ${input.notes}, ${input.leadAgentId}, ${externalRef},
+      ${input.locationAnchorText}, ${input.locationAnchorLat}, ${input.locationAnchorLng},
+      ${input.locationRadiusMiles}, ${input.maxRentPsf}
     )
     returning id
   `;
@@ -461,14 +497,31 @@ export async function createRequirement(
 export async function getRequirementForUpdate(
   agencyId: string,
   id: string,
-): Promise<{ lead_agent_id: string | null; updated_at: string } | null> {
+): Promise<{
+  lead_agent_id: string | null;
+  updated_at: string;
+  location_anchor_text: string | null;
+  location_anchor_lat: number | null;
+  location_anchor_lng: number | null;
+} | null> {
   const rows = await sql`
-    select lead_agent_id, updated_at::text as updated_at
+    select lead_agent_id, updated_at::text as updated_at,
+           location_anchor_text, location_anchor_lat, location_anchor_lng
     from public.requirements
     where id = ${id} and agency_id = ${agencyId}
     limit 1
   `;
-  return (rows[0] as { lead_agent_id: string | null; updated_at: string } | undefined) ?? null;
+  return (
+    (rows[0] as
+      | {
+          lead_agent_id: string | null;
+          updated_at: string;
+          location_anchor_text: string | null;
+          location_anchor_lat: number | null;
+          location_anchor_lng: number | null;
+        }
+      | undefined) ?? null
+  );
 }
 
 /** Guarded by agencyId + optimistic concurrency — see companies.ts's
@@ -502,7 +555,12 @@ export async function updateRequirement(
       max_premium = ${input.maxPremium},
       max_guide_price = ${input.maxGuidePrice},
       notes = ${input.notes},
-      lead_agent_id = ${input.leadAgentId}
+      lead_agent_id = ${input.leadAgentId},
+      location_anchor_text = ${input.locationAnchorText},
+      location_anchor_lat = ${input.locationAnchorLat},
+      location_anchor_lng = ${input.locationAnchorLng},
+      location_radius_miles = ${input.locationRadiusMiles},
+      max_rent_psf = ${input.maxRentPsf}
     where id = ${id} and agency_id = ${agencyId} and updated_at = ${expectedUpdatedAt}
     returning id
   `;

@@ -404,6 +404,9 @@ const ENTITY_ALIASES: Record<ImportEntity, Record<string, string>> = {
     position: "role",
     marketinglatestnews: "marketing_opt_in",
     marketingpropertyalerts: "marketing_property_alerts",
+    // A bare "Mobile" is the mobile column for contacts (COMMON_ALIASES sends it
+    // to "phone", which is right for companies: they have no mobile field).
+    mobile: "mobile",
     mobilenumber: "mobile",
     mobilephone: "mobile",
     cell: "mobile",
@@ -511,9 +514,12 @@ export type HeaderMap = {
  * distinct template columns each resolves and take the best; a data row scores
  * 0, and ties go to the earliest row.
  *
- * Several source columns may feed one field — "Phone Number" and "Mobile
- * Number" both map to `phone` — so each column keeps a list of indices and the
- * importer reads the first non-empty one.
+ * Several source columns may feed one field, so each canonical column keeps a
+ * list of indices and the importer reads the first non-empty one. Companies have
+ * one phone field, so "Phone Number" and "Mobile Number" both map to `phone`
+ * there (the importer keeps the second number in notes). Contacts have both
+ * fields: "Phone Number" maps to `phone`, and "Mobile", "Mobile Number" and
+ * "Mobile Phone" map to `mobile`.
  */
 export function mapHeaders(entity: ImportEntity, rows: string[][]): HeaderMap {
   const limit = Math.min(rows.length, 5);

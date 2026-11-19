@@ -1,5 +1,6 @@
 import { sql } from "@/lib/db/client";
 import { escapeLike } from "@/lib/search";
+import { touchDateUpdated } from "@/lib/db/queries/date-updated";
 
 // DAO for public.companies (+ its company_agents join table). Every function
 // takes the caller's agencyId as a mandatory first parameter and filters on
@@ -20,6 +21,8 @@ export type Company = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /** Last touch by edit or child write (0044). Not the optimistic-lock token. */
+  date_updated: string;
   lead_agent_id: string | null;
   address_line: string | null;
   city: string | null;
@@ -44,6 +47,8 @@ export type CompanyFacetRow = {
   county: string | null;
   lat: number | null;
   lng: number | null;
+  /** Only selected when the list is sorted by Date Updated. */
+  date_updated?: string;
 };
 
 /** Row shape for the paginated table's detail pass. */
@@ -53,6 +58,7 @@ export type CompanyListRow = {
   type: string;
   sector_tags: string[];
   website: string | null;
+  date_updated: string;
 };
 
 export async function getCompanyById(agencyId: string, id: string): Promise<Company | null> {
@@ -65,6 +71,7 @@ export async function getCompanyById(agencyId: string, id: string): Promise<Comp
     select
       id, agency_id, name, type, sector_tags, website, phone, notes, created_by,
       created_at::text as created_at, updated_at::text as updated_at,
+      date_updated::text as date_updated,
       lead_agent_id, address_line, city, postcode, lat, lng,
       company_number, vat_number, county
     from public.companies
@@ -125,12 +132,31 @@ export async function listCompanyOptions(
  */
 export async function listCompanyFacetRows(
   agencyId: string,
-  opts: { q?: string; column: "name" | "type"; ascending: boolean },
+  opts: { q?: string; column: "name" | "type" | "date_updated"; ascending: boolean },
 ): Promise<CompanyFacetRow[]> {
   // `sql` (client.ts) executes as soon as it's tagged — there's no fragment
   // composition, so each sort combination is written out as a complete,
   // standalone query rather than assembled from a shared partial string.
   const pattern = opts.q ? `%${escapeLike(opts.q)}%` : null;
+  if (opts.column === "date_updated") {
+    return (opts.ascending
+      ? await sql`
+          select id, name, type, sector_tags, address_line, city, postcode, county, lat, lng,
+                 date_updated::text as date_updated
+          from public.companies
+          where agency_id = ${agencyId}
+            and (${pattern}::text is null or name ilike ${pattern})
+          order by date_updated asc, name asc, id
+        `
+      : await sql`
+          select id, name, type, sector_tags, address_line, city, postcode, county, lat, lng,
+                 date_updated::text as date_updated
+          from public.companies
+          where agency_id = ${agencyId}
+            and (${pattern}::text is null or name ilike ${pattern})
+          order by date_updated desc, name asc, id
+        `) as CompanyFacetRow[];
+  }
   if (opts.column === "type") {
     return (opts.ascending
       ? await sql`
@@ -138,14 +164,14 @@ export async function listCompanyFacetRows(
           from public.companies
           where agency_id = ${agencyId}
             and (${pattern}::text is null or name ilike ${pattern})
-          order by type asc, name asc
+          order by type asc, name asc, id
         `
       : await sql`
           select id, name, type, sector_tags, address_line, city, postcode, county, lat, lng
           from public.companies
           where agency_id = ${agencyId}
             and (${pattern}::text is null or name ilike ${pattern})
-          order by type desc, name asc
+          order by type desc, name asc, id
         `) as CompanyFacetRow[];
   }
   return (opts.ascending
@@ -154,14 +180,14 @@ export async function listCompanyFacetRows(
         from public.companies
         where agency_id = ${agencyId}
           and (${pattern}::text is null or name ilike ${pattern})
-        order by name asc
+        order by name asc, id
       `
     : await sql`
         select id, name, type, sector_tags, address_line, city, postcode, county, lat, lng
         from public.companies
         where agency_id = ${agencyId}
           and (${pattern}::text is null or name ilike ${pattern})
-        order by name desc
+        order by name desc, id
       `) as CompanyFacetRow[];
 }
 
@@ -173,7 +199,7 @@ export async function getCompaniesByIds(
 ): Promise<CompanyListRow[]> {
   if (ids.length === 0) return [];
   return (await sql`
-    select id, name, type, sector_tags, website
+    select id, name, type, sector_tags, website, date_updated::text as date_updated
     from public.companies
     where agency_id = ${agencyId} and id = ANY(${ids}::uuid[])
   `) as CompanyListRow[];
@@ -202,7 +228,9 @@ export type CompanyWriteInput = {
   notes: string | null;
   companyNumber: string | null;
   vatNumber: string | null;
-  leadAgentId: string | null;
+  /** Used by create only (importer passes null). Update never writes lead_agent_id:
+   *  companies have no lead agent in the UI, and stored values are preserved. */
+  leadAgentId?: string | null;
   addressLine: string | null;
   city: string | null;
   postcode: string | null;
@@ -223,7 +251,7 @@ export async function createCompany(
     ) values (
       ${agencyId}, ${createdBy}, ${input.name}, ${input.type}, ${input.sectorTags},
       ${input.website}, ${input.phone}, ${input.notes},
-      ${input.companyNumber}, ${input.vatNumber}, ${input.leadAgentId},
+      ${input.companyNumber}, ${input.vatNumber}, ${input.leadAgentId ?? null},
       ${input.addressLine}, ${input.city}, ${input.postcode}, ${input.county},
       ${geo.lat}, ${geo.lng}
     )
@@ -292,7 +320,6 @@ export async function updateCompany(
           notes = ${input.notes},
           company_number = ${input.companyNumber},
           vat_number = ${input.vatNumber},
-          lead_agent_id = ${input.leadAgentId},
           address_line = ${input.addressLine},
           city = ${input.city},
           postcode = ${input.postcode},
@@ -312,7 +339,6 @@ export async function updateCompany(
           notes = ${input.notes},
           company_number = ${input.companyNumber},
           vat_number = ${input.vatNumber},
-          lead_agent_id = ${input.leadAgentId},
           address_line = ${input.addressLine},
           city = ${input.city},
           postcode = ${input.postcode},
@@ -351,4 +377,5 @@ export async function syncCompanyAgents(
       select ${agencyId}, ${companyId}, u from unnest(${userIds}::uuid[]) as u
     `,
   ]);
+  await touchDateUpdated("company", companyId, agencyId);
 }

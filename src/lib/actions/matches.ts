@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidatePanelHosts } from "@/lib/revalidate-panels";
 
 import { isListingMatchable } from "@/lib/badges";
 import { DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
@@ -24,6 +25,7 @@ import {
   upsertMatchScores,
 } from "@/lib/db/queries/matches";
 import { createNotificationRows } from "@/lib/db/queries/messages";
+import { chunk, UPSERT_CHUNK } from "@/lib/import-followup";
 import type { Database, Json } from "@/lib/database.types";
 
 type MatchStatus = Database["public"]["Enums"]["match_status"];
@@ -58,7 +60,14 @@ async function persistPairs(
   requirements: (ScopedRequirement & Parameters<typeof scoreMatch>[0])[],
   listings: (ScopedListing & Parameters<typeof scoreMatch>[1])[],
   scope: { listingIds: string[] } | { requirementIds: string[] },
-): Promise<{ requirement: ScopedRequirement; listing: ScopedListing; score: number }[]> {
+): Promise<{
+  /** Pairs saved that did not exist before (the ones worth alerting on). */
+  fresh: { requirement: ScopedRequirement; listing: ScopedListing; score: number }[];
+  /** Pairs written. */
+  saved: number;
+  /** False when a write failed (what was saved before it is still reported). */
+  ok: boolean;
+}> {
   const scored: {
     requirement: ScopedRequirement;
     listing: ScopedListing;
@@ -79,29 +88,41 @@ async function persistPairs(
       });
     }
   }
-  if (scored.length === 0) return [];
+  if (scored.length === 0) return { fresh: [], saved: 0, ok: true };
 
   // Which pairs already exist? Read on the narrower axis of the refresh.
   const known = await getExistingMatchPairs(agencyId, scope);
 
-  try {
-    await upsertMatchScores(
-      agencyId,
-      scored.map((s) => ({
-        listingId: s.listing.id,
-        requirementId: s.requirement.id,
-        score: s.score,
-        reasons: s.reasons,
-      })),
-    );
-  } catch (err) {
-    console.error("matches: upsert failed:", (err as Error).message);
-    return [];
+  // One statement per UPSERT_CHUNK pairs, in order. A small batch (a form save,
+  // a resync) is one chunk, exactly as before. A failed chunk stops the run.
+  const savedPairs: typeof scored = [];
+  let ok = true;
+  for (const part of chunk(scored, UPSERT_CHUNK)) {
+    try {
+      await upsertMatchScores(
+        agencyId,
+        part.map((s) => ({
+          listingId: s.listing.id,
+          requirementId: s.requirement.id,
+          score: s.score,
+          reasons: s.reasons,
+        })),
+      );
+      savedPairs.push(...part);
+    } catch (err) {
+      console.error("matches: upsert failed:", (err as Error).message);
+      ok = false;
+      break;
+    }
   }
 
-  return scored
-    .filter((s) => !known.has(`${s.requirement.id}:${s.listing.id}`))
-    .map(({ requirement, listing, score }) => ({ requirement, listing, score }));
+  return {
+    fresh: savedPairs
+      .filter((s) => !known.has(`${s.requirement.id}:${s.listing.id}`))
+      .map(({ requirement, listing, score }) => ({ requirement, listing, score })),
+    saved: savedPairs.length,
+    ok,
+  };
 }
 
 /**
@@ -193,13 +214,22 @@ async function session(): Promise<{ userId: string; agencyId: string } | null> {
  * match. Best-effort: never throws, so it can't fail the write that triggered
  * it. Call it AFTER the listing row is committed.
  */
-export async function refreshMatchesForListings(listingIds: string[]): Promise<void> {
+export type RefreshResult = {
+  /** Live (let/sold/withdrawn excluded) listings scored. */
+  matchable: number;
+  /** Matches written. */
+  pairsSaved: number;
+  /** False when matches could not be saved or the refresh failed. */
+  ok: boolean;
+};
+
+export async function refreshMatchesForListings(listingIds: string[]): Promise<RefreshResult> {
   const ids = [...new Set(listingIds.filter(Boolean))];
-  if (ids.length === 0) return;
+  if (ids.length === 0) return { matchable: 0, pairsSaved: 0, ok: true };
 
   try {
     const ctx = await session();
-    if (!ctx) return;
+    if (!ctx) return { matchable: 0, pairsSaved: 0, ok: false };
 
     const [listingRows, requirementRows] = await Promise.all([
       getDisposalsForMatchingByIds(ctx.agencyId, ids),
@@ -209,15 +239,22 @@ export async function refreshMatchesForListings(listingIds: string[]): Promise<v
     // Let/sold/withdrawn stock is never pitched, so it is never persisted.
     const listings: MatchDisposal[] = listingRows.filter((l) => isListingMatchable(l.status));
     const requirements: MatchRequirement[] = requirementRows;
-    if (listings.length === 0 || requirements.length === 0) return;
+    if (listings.length === 0 || requirements.length === 0) {
+      return { matchable: listings.length, pairsSaved: 0, ok: true };
+    }
 
-    const fresh = await persistPairs(ctx.agencyId, requirements, listings, {
+    const { fresh, saved, ok } = await persistPairs(ctx.agencyId, requirements, listings, {
       listingIds: listings.map((l) => l.id),
     });
     await notifyNewSuggestions(ctx.agencyId, ctx.userId, fresh);
-    if (fresh.length > 0) revalidatePath("/matches");
+    if (fresh.length > 0) {
+      revalidatePath("/matches");
+      revalidatePanelHosts();
+    }
+    return { matchable: listings.length, pairsSaved: saved, ok };
   } catch (err) {
     console.error("refreshMatchesForListings failed:", (err as Error).message);
+    return { matchable: 0, pairsSaved: 0, ok: false };
   }
 }
 
@@ -246,11 +283,14 @@ export async function refreshMatchesForRequirement(
     const listings = listingRows.filter((l) => isListingMatchable(l.status));
     if (listings.length === 0) return;
 
-    const fresh = await persistPairs(ctx.agencyId, [requirement], listings, {
+    const { fresh } = await persistPairs(ctx.agencyId, [requirement], listings, {
       requirementIds: [requirementId],
     });
     await notifyNewSuggestions(ctx.agencyId, ctx.userId, fresh);
-    if (fresh.length > 0) revalidatePath("/matches");
+    if (fresh.length > 0) {
+      revalidatePath("/matches");
+      revalidatePanelHosts();
+    }
   } catch (err) {
     console.error("refreshMatchesForRequirement failed:", (err as Error).message);
   }
@@ -292,5 +332,7 @@ export async function setMatchStatus(formData: FormData): Promise<void> {
 
   revalidatePath("/matches");
   revalidatePath(`/requirements/${requirementId}`);
+  // The records panel shows matches on any page that can host it.
+  revalidatePanelHosts();
   revalidatePath(`/listings/${listingId}`);
 }

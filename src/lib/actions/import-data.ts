@@ -9,10 +9,15 @@ import { createDisposal, type DisposalWriteInput } from "@/lib/db/queries/dispos
 import {
   listCompanyNameMap,
   listCompanyNumberMap,
+  listContactDateMap,
+  listContactConsent,
   listContactEmailMap,
   listContactNameMap,
   listDisposalRefMap,
+  listFollowUpRows,
+  listRequirementIdentities,
   listRequirementRefMap,
+  setImportedDateUpdated,
   updateCompanyFromImport,
   updateContactFromImport,
   updateDisposalFromImport,
@@ -20,11 +25,36 @@ import {
   type CompanyImportPatch,
   type ContactImportPatch,
   type DisposalImportPatch,
+  type ImportUpdateResult,
   type RequirementImportPatch,
 } from "@/lib/db/queries/import";
+import { refreshMatchesForListings } from "@/lib/actions/matches";
+import { isListingMatchable } from "@/lib/badges";
+import { isValidContactEmail } from "@/lib/contact-links";
+import { updateDisposalCoords } from "@/lib/db/queries/intel";
+import { pool } from "@/lib/intel/sources";
+import {
+  capList,
+  collectListingIds,
+  dryRunFollowUp,
+  followUpSummary,
+  GEOCODE_CONCURRENCY,
+  geocodeWindow,
+  shouldRescore,
+  MAX_GEOCODE_LISTINGS,
+  MAX_RESCORE_LISTINGS,
+  type FollowUpResult,
+} from "@/lib/import-followup";
 import { listCompanyTypes, listContactRoles } from "@/lib/db/queries/lookups";
 import { createRequirement, type RequirementWriteInput } from "@/lib/db/queries/requirements";
 import { deriveCounty } from "@/lib/locations";
+import {
+  COUNTY_OPTIONS,
+  DISTRICT_OPTIONS,
+  LONDON_AREA_OPTIONS,
+  REGION_OPTIONS,
+  TOWN_OPTIONS,
+} from "@/lib/locations/options";
 import { addressQuery, geocodeAddress } from "@/lib/maps/geocode";
 import {
   companyFileKeys,
@@ -33,11 +63,34 @@ import {
   mergePatch,
   normaliseKey as key,
 } from "@/lib/import-matching";
+import {
+  buildLocationCatalog,
+  capCell,
+  hasLetterOrDigit,
+  isMoreThanADayAhead,
+  joinNoteLines,
+  MAX_CELL_CHARS,
+  legacyRowRef,
+  mergeNotes,
+  parseArea,
+  parseBool,
+  parseCompanyType,
+  parseRent,
+  parseSize,
+  parseSourceDate,
+  parseTenant,
+  planAdoptions,
+  summariseReasons,
+  unionTags,
+} from "@/lib/import-parse";
 import { requirementLinkError } from "@/lib/requirement-rules";
 import { Constants } from "@/lib/database.types";
 import {
   IMPORT_TEMPLATES,
+  importFileKind,
   mapHeaders,
+  MAX_IMPORT_BYTES,
+  MAX_IMPORT_ROWS,
   parseCsv,
   REQUIRED_COLUMNS,
   splitList,
@@ -67,7 +120,17 @@ import type { FormState } from "@/lib/actions/types";
 //
 //   company      company_number when supplied, else name (case-insensitive)
 //   contact      email when supplied, else first+last name within the same company
-//   requirement  external_ref  (opt-in: blank means "always insert")
+//   requirement  external_ref. A file with no external_ref column gets a stable
+//                one derived from six fixed cells of the row (legacyRowRef).
+//                THE LIMIT: with no ID column in the source file there is no
+//                true identity. An exact re-upload updates the same rows. A row
+//                that CHANGED in the source has a different reference, so it is
+//                matched to the stored requirement by title and contact (or
+//                company) when exactly one stored requirement and exactly one
+//                file row share them (it is "adopted" and takes the new
+//                reference); otherwise it is added as a new requirement and
+//                counted as a possible changed copy, because guessing would
+//                overwrite the wrong record.
 //   listing      external_ref  (stored as disposals.source_ref, source='import')
 //
 // The same keys de-duplicate WITHIN one file: a second row for a key already
@@ -77,7 +140,11 @@ import type { FormState } from "@/lib/actions/types";
 //
 // Updates are blank-preserving — see the note in src/lib/db/queries/import.ts.
 // A cell the file leaves empty keeps whatever the record already holds, so a
-// partial upload tops records up instead of wiping them.
+// partial upload tops records up instead of wiping them. Notes never
+// overwrite: incoming notes are appended (mergeNotes).
+//
+// Dry run: the same parsing, matching and validation with zero writes. The
+// "Check file" button sends dryRun=1 and gets the same summary back.
 //
 // Caveat worth knowing: the lookup maps are read once, before any write. Within
 // a single import that is exact; against a *concurrent* import (or someone
@@ -87,6 +154,14 @@ import type { FormState } from "@/lib/actions/types";
 const ENTITIES: ImportEntity[] = ["companies", "contacts", "requirements", "listings"];
 const LISTING_TYPES = ["cdg", "intel"];
 
+const LOCATION_CATALOG = buildLocationCatalog({
+  neighbourhoods: LONDON_AREA_OPTIONS.map((a) => a[0]),
+  towns: TOWN_OPTIONS,
+  counties: COUNTY_OPTIONS,
+  regions: REGION_OPTIONS,
+  districts: DISTRICT_OPTIONS.map((d) => d[0]),
+});
+
 // Multi-value cells use ";" in our template and "," in every other system's
 // export — splitList handles both. See csv.ts for why it isn't just a split.
 const list = splitList;
@@ -94,7 +169,6 @@ const numOrNull = (v: string) => {
   const n = Number(v.replace(/[, ]/g, ""));
   return v.trim() && Number.isFinite(n) ? n : null;
 };
-const boolOf = (v: string) => /^(true|yes|y|1)$/i.test(v.trim());
 const oneOf = (v: string, allowed: readonly string[], fb: string) =>
   allowed.includes(v) ? v : fb;
 // Loose format check — good enough to catch obvious CSV garbage (missing "@",
@@ -126,21 +200,133 @@ function writeErrorMessage(e: unknown): string {
   }
 }
 
+/** Fold a later row's patch into an earlier one for the same record: supplied
+ *  values win (later row first), notes are combined rather than replaced, tags
+ *  are unioned, and of two source dates the newer one stands. */
+function foldPatch<T extends { notes: string | null; dateUpdated: string | null }>(
+  into: T,
+  from: T,
+): void {
+  const notesBefore = into.notes;
+  const dateBefore = into.dateUpdated;
+  const tagsBefore = (into as { sectorTags?: string[] | null }).sectorTags;
+  mergePatch(into, from);
+  if (notesBefore && from.notes) into.notes = mergeNotes(notesBefore, from.notes);
+  if (dateBefore && from.dateUpdated && dateBefore > from.dateUpdated) into.dateUpdated = dateBefore;
+  const tagsFrom = (from as { sectorTags?: string[] | null }).sectorTags;
+  if (tagsBefore && tagsFrom) {
+    (into as { sectorTags?: string[] | null }).sectorTags = unionTags(tagsBefore, tagsFrom);
+  }
+}
+
+// A NEW record is inserted from `fields`, not from the patch, so after rows are
+// folded together the fields must take the folded values too — otherwise a
+// repeated row's notes, mobile or alerts would be silently dropped.
+function syncCompanyFields(f: CompanyWriteInput, p: CompanyImportPatch): void {
+  f.name = p.name ?? f.name;
+  f.type = p.type ?? f.type;
+  f.sectorTags = p.sectorTags ?? f.sectorTags;
+  f.website = p.website ?? f.website;
+  f.phone = p.phone ?? f.phone;
+  f.notes = p.notes ?? f.notes;
+  f.companyNumber = p.companyNumber ?? f.companyNumber;
+  f.vatNumber = p.vatNumber ?? f.vatNumber;
+  f.addressLine = p.addressLine ?? f.addressLine;
+  f.city = p.city ?? f.city;
+  f.postcode = p.postcode ?? f.postcode;
+  f.county = p.county ?? f.county;
+}
+
+function syncContactFields(f: ContactWriteInput, p: ContactImportPatch): void {
+  f.firstName = p.firstName ?? f.firstName;
+  f.lastName = p.lastName ?? f.lastName;
+  f.email = p.email ?? f.email;
+  f.phone = p.phone ?? f.phone;
+  f.mobile = p.mobile ?? f.mobile;
+  f.role = p.role ?? f.role;
+  f.notes = p.notes ?? f.notes;
+  f.marketingOptIn = p.marketingOptIn === true ? true : f.marketingOptIn;
+  f.marketingPropertyAlerts = p.marketingPropertyAlerts === true ? true : f.marketingPropertyAlerts;
+  f.addressLine = p.addressLine ?? f.addressLine;
+  f.city = p.city ?? f.city;
+  f.postcode = p.postcode ?? f.postcode;
+  f.county = p.county ?? f.county;
+}
+
+function syncRequirementFields(f: RequirementWriteInput, p: RequirementImportPatch): void {
+  f.title = p.title ?? f.title;
+  f.companyId = p.companyId ?? f.companyId;
+  f.contactId = p.contactId ?? f.contactId;
+  f.status = (p.status ?? f.status) as RequirementWriteInput["status"];
+  f.targetTowns = p.targetTowns ?? f.targetTowns;
+  f.targetRegions = p.targetRegions ?? f.targetRegions;
+  f.targetCounties = p.targetCounties ?? f.targetCounties;
+  f.targetPostcodeDistricts = p.targetPostcodeDistricts ?? f.targetPostcodeDistricts;
+  f.targetNeighbourhoods = p.targetNeighbourhoods ?? f.targetNeighbourhoods;
+  f.targetLondonZones = p.targetLondonZones ?? f.targetLondonZones;
+  f.useClasses = (p.useClasses ?? f.useClasses) as RequirementWriteInput["useClasses"];
+  f.tenurePrefs = (p.tenurePrefs ?? f.tenurePrefs) as RequirementWriteInput["tenurePrefs"];
+  f.minSqft = p.minSqft ?? f.minSqft;
+  f.maxSqft = p.maxSqft ?? f.maxSqft;
+  f.minCovers = p.minCovers ?? f.minCovers;
+  f.maxCovers = p.maxCovers ?? f.maxCovers;
+  f.maxRent = p.maxRent ?? f.maxRent;
+  f.maxPremium = p.maxPremium ?? f.maxPremium;
+  f.maxGuidePrice = p.maxGuidePrice ?? f.maxGuidePrice;
+  f.notes = p.notes ?? f.notes;
+}
+
+// Same as the three above, for listings: a new listing is inserted from `fields`.
+function syncListingFields(f: DisposalWriteInput, p: DisposalImportPatch): void {
+  f.title = p.title ?? f.title;
+  f.contactId = p.contactId ?? f.contactId;
+  f.listingType = p.listingType ?? f.listingType;
+  f.status = p.status ?? f.status;
+  f.disposalType = p.disposalType ?? f.disposalType;
+  f.addressLine = p.addressLine ?? f.addressLine;
+  f.area = p.area ?? f.area;
+  f.city = p.city ?? f.city;
+  f.county = p.county ?? f.county;
+  f.postcode = p.postcode ?? f.postcode;
+  f.propertyType = p.propertyType ?? f.propertyType;
+  f.useClass = p.useClass ?? f.useClass;
+  f.sizeSqft = p.sizeSqft ?? f.sizeSqft;
+  f.coversInternal = p.coversInternal ?? f.coversInternal;
+  f.rentPa = p.rentPa ?? f.rentPa;
+  f.premium = p.premium ?? f.premium;
+  f.guidePrice = p.guidePrice ?? f.guidePrice;
+  f.description = p.description ?? f.description;
+}
+
 /** Bulk-import CSV rows into companies / contacts / requirements / listings
  *  (#8). Admin only: a whole-book write (and a way to overwrite existing
- *  records by matching key) is the same class of power as the admin panel. */
+ *  records by matching key) is the same class of power as the admin panel.
+ *  With dryRun=1 in the form data nothing is written. */
 export async function importEntityCsv(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  // One clock for the whole action: the follow-up steps below decide what to
+  // run from how much of the 120 s the row writes have used.
+  const startedAt = Date.now();
   const caller = await requireAgencyAdmin();
   if ("error" in caller) return { error: caller.error };
   const { userId, agencyId } = caller;
 
   const entity = String(formData.get("entity") ?? "") as ImportEntity;
   const csv = String(formData.get("csv") ?? "");
+  const fileName = String(formData.get("fileName") ?? "");
+  const dryRun = String(formData.get("dryRun") ?? "") === "1";
   if (!ENTITIES.includes(entity)) return { error: "Unknown import type." };
+  if (fileName && !importFileKind(fileName)) {
+    return { error: "Upload a .csv, .xlsx or .xls file." };
+  }
   if (!csv.trim()) return { error: "Upload a CSV file first." };
+  if (new TextEncoder().encode(csv).length > MAX_IMPORT_BYTES) {
+    return {
+      error: `This file is too large (limit ${Math.round(MAX_IMPORT_BYTES / 1_000_000)} MB of text). Split it into smaller files.`,
+    };
+  }
 
   const rows = parseCsv(csv);
   // Headers are matched loosely (case, spaces vs underscores, common synonyms)
@@ -150,6 +336,11 @@ export async function importEntityCsv(
   const { columns, headerRow } = header;
   if (rows.length <= headerRow + 1) {
     return { error: "Need a header row plus at least one data row." };
+  }
+  if (rows.length - headerRow - 1 > MAX_IMPORT_ROWS) {
+    return {
+      error: `This file has ${rows.length - headerRow - 1} data rows; the limit is ${MAX_IMPORT_ROWS}. Nothing was read. Split it into smaller files.`,
+    };
   }
   // A column the file simply doesn't have is a fault of the file, not of every
   // row in it: say so once, naming the column, instead of reporting N identical
@@ -178,10 +369,10 @@ export async function importEntityCsv(
   }
 
   // Contact roles + company types are editable data now — validate imported
-  // values against the live slug lists (fallbacks "other") rather than a fixed enum.
+  // values against the live lists (fallbacks "other") rather than a fixed enum.
   // Both are system-wide lookups (not agency-scoped — see lookups.ts).
   const roleSlugs = (await listContactRoles()).map((r) => r.slug);
-  const typeSlugs = (await listCompanyTypes()).map((t) => t.slug);
+  const companyTypes = await listCompanyTypes();
 
   // Listings must reference an existing contact; requirements may reference a
   // contact, a company, or both. Rows naming a contact we can't find are
@@ -200,8 +391,12 @@ export async function importEntityCsv(
     entity === "companies" ? await listCompanyNumberMap(agencyId) : new Map<string, string>();
   const contactIdByName =
     entity === "contacts" ? await listContactNameMap(agencyId) : new Map<string, string>();
+  const contactDates =
+    entity === "requirements" ? await listContactDateMap(agencyId) : new Map<string, string>();
   const requirementIdByRef =
     entity === "requirements" ? await listRequirementRefMap(agencyId) : new Map<string, string>();
+  const requirementIdentities =
+    entity === "requirements" ? await listRequirementIdentities(agencyId) : [];
   const disposalIdByRef =
     entity === "listings" ? await listDisposalRefMap(agencyId) : new Map<string, string>();
 
@@ -228,6 +423,10 @@ export async function importEntityCsv(
     externalRef: string | null;
     existingId: string | null;
     companyName: string | null;
+    /** The linked contact's date_updated, used for a NEW row with no date of its own. */
+    fallbackDate: string | null;
+    /** True when the reference came from legacyRowRef (the file had no ID column). */
+    refIsDerived: boolean;
     rowNo: number;
   };
   type ListingRecord = {
@@ -250,11 +449,13 @@ export async function importEntityCsv(
   // the same file merges into it instead of creating a second copy.
   const recordByFileKey = new Map<string, { patch: object }>();
   let mergedInFile = 0;
+  // Requirement free-text outcomes, reported so nothing is silently dropped.
+  const stats = { rentKeptInNotes: 0, sizeKeptInNotes: 0, areaNotFullyPlaced: 0, noLink: 0 };
 
   rows.slice(headerRow + 1).forEach((r, n) => {
     const rowNo = headerRow + n + 2;
-    // Several source columns can feed one field ("Phone Number" and "Mobile
-    // Number" both map to phone): take the first that actually has a value.
+    // Several source columns can feed one field: take the first that actually
+    // has a value.
     const get = (name: string) => {
       for (const i of columns.get(name) ?? []) {
         const v = (r[i] ?? "").trim();
@@ -264,14 +465,41 @@ export async function importEntityCsv(
     };
     /** Supplied-or-null, the shape every patch field takes. */
     const opt = (name: string) => get(name) || null;
-    // A non-empty cell that isn't a number ("Up to £120,000", "175 sq m") is
-    // reported rather than quietly stored as null.
+    // A non-empty cell that isn't a number ("175 sq m") is reported rather than
+    // quietly stored as null. Currency text ("£120,000") is NOT a number here:
+    // numOrNull strips commas and spaces only.
     const num = (name: string) => {
       const raw = get(name);
       const value = numOrNull(raw);
       if (raw && value === null)
         warnings.push(`Row ${rowNo}: ignored ${name} "${raw}" — not a number`);
       return value;
+    };
+    /** The row's Date Updated as an ISO instant, or null (with a warning). */
+    const dateOf = (): string | null => {
+      const full = get("date_updated");
+      // A hostile cell is never echoed whole into a message.
+      const raw = full.length > 40 ? `${full.slice(0, 40)}...` : full;
+      const parsed = parseSourceDate(full);
+      if (parsed.kind === "invalid") {
+        warnings.push(`Row ${rowNo}: ignored date_updated "${raw}" — not a recognised date`);
+        return null;
+      }
+      if (parsed.kind === "ok" && isMoreThanADayAhead(parsed.iso, Date.now())) {
+        warnings.push(`Row ${rowNo}: ignored date_updated "${raw}" — it is in the future`);
+        return null;
+      }
+      return parsed.kind === "ok" ? parsed.iso : null;
+    };
+    /** Yes/No cell: true, false or null (blank or unreadable, the latter warned). */
+    const boolOf = (name: string): boolean | null => {
+      const raw = get(name);
+      const v = parseBool(raw);
+      if (v === "invalid") {
+        warnings.push(`Row ${rowNo}: ignored ${name} "${raw}" — not Yes/No`);
+        return null;
+      }
+      return v;
     };
     /**
      * Claim one or more keys for this file. Returns the earlier record when any
@@ -296,6 +524,11 @@ export async function importEntityCsv(
       if (entity === "companies") {
         const name = get("name");
         if (!name) throw new Error("name is required");
+        // "-", "." and "…" rows are placeholders in other systems' exports.
+        if (!hasLetterOrDigit(name)) {
+          warnings.push(`Row ${rowNo}: skipped — name "${name}" has no letters or digits`);
+          return;
+        }
         const number = get("company_number");
         // company_number is the strong key: a company can be renamed and still
         // be the same company. Name is the fallback.
@@ -308,17 +541,34 @@ export async function importEntityCsv(
             get("county") ||
             deriveCounty({ postcode: get("postcode"), city: get("city") }),
         };
+        // "Applicant, Investor (Institutional)": every value is matched against
+        // the company types by slug or label. The first match is the type; the
+        // rest are kept as free tags rather than lost.
+        const typeCell = get("type");
+        const typeValues = typeCell ? list(typeCell) : [];
+        const parsedType = parseCompanyType(typeValues, companyTypes);
+        // A new company with no recognised type becomes Other; an existing one
+        // keeps the type it has (a spreadsheet label must not overwrite a real
+        // classification with "Other").
+        if (typeValues.length > 0 && parsedType.type === null) {
+          warnings.push(
+            existingId
+              ? `Row ${rowNo}: company type "${typeCell}" matches no company type — kept the stored type`
+              : `Row ${rowNo}: company type "${typeCell}" matches no company type — set to Other`,
+          );
+        }
         // Recognised words become use-class slugs so they show in the picker;
         // anything else ("brewery") is kept verbatim as a free tag.
         const sectorTags = (() => {
-          const raw = list(get("sector_tags"));
+          const raw = [...list(get("sector_tags")), ...parsedType.extraTags];
           if (raw.length === 0) return null;
           const { slugs, extra } = partitionSectorTags(raw);
           return [...new Set([...slugs, ...extra])];
         })();
+        const dateUpdated = dateOf();
         const patch: CompanyImportPatch = {
           name,
-          type: get("type") ? oneOf(get("type"), typeSlugs, "other") : null,
+          type: parsedType.type ?? (typeCell && !existingId ? "other" : null),
           sectorTags,
           website: opt("website"),
           phone: opt("phone"),
@@ -331,6 +581,7 @@ export async function importEntityCsv(
           county: address.county,
           lat: null,
           lng: null,
+          dateUpdated,
         };
         const rec: CompanyRecord = {
           address,
@@ -339,7 +590,7 @@ export async function importEntityCsv(
           patch,
           fields: {
             name,
-            type: oneOf(get("type"), typeSlugs, "other"),
+            type: parsedType.type ?? "other",
             sectorTags: sectorTags ?? [],
             website: opt("website"),
             phone: opt("phone"),
@@ -356,8 +607,11 @@ export async function importEntityCsv(
         // Key the file-level dedupe on everything that identifies the record, so
         // "ABC Ltd" with a CRN on one line and without on another still merge.
         const prior = claim(companyFileKeys(existingId, number, name), rec);
-        if (prior) mergePatch(prior.patch as CompanyImportPatch, patch);
-        else companyRecords.push(rec);
+        if (prior) {
+          foldPatch(prior.patch as CompanyImportPatch, patch);
+          const earlier = prior as unknown as CompanyRecord;
+          syncCompanyFields(earlier.fields, earlier.patch);
+        } else companyRecords.push(rec);
       } else if (entity === "contacts") {
         const firstName = get("first_name");
         if (!firstName) throw new Error("first_name is required");
@@ -366,6 +620,12 @@ export async function importEntityCsv(
           warnings.push(`Row ${rowNo}: ignored email "${get("email")}" — not a valid address`);
         }
         const existingId = (email ? contactByEmail.get(key(email)) : undefined) ?? null;
+        // Matching uses the address as written; STORING needs a plain address
+        // the CRM can safely put in a link. Anything else is imported without one.
+        const storedEmail = email && isValidContactEmail(email) ? email : null;
+        if (email && !storedEmail) {
+          warnings.push(`Row ${rowNo}: email not stored: not a plain address`);
+        }
         const address: ParsedAddress = {
           address_line: get("address_line") || null,
           city: get("city") || null,
@@ -374,23 +634,33 @@ export async function importEntityCsv(
             get("county") ||
             deriveCounty({ postcode: get("postcode"), city: get("city") }),
         };
+        // Phone and mobile are separate fields. A mobile-only row leaves phone
+        // empty: copying one into the other would invent a landline.
+        const phone = opt("phone");
+        const mobile = opt("mobile");
+        const optIn = boolOf("marketing_opt_in");
+        const alerts = boolOf("marketing_property_alerts");
+        const dateUpdated = dateOf();
         const patch: ContactImportPatch = {
           firstName,
           lastName: opt("last_name"),
-          email,
-          phone: opt("phone"),
+          email: storedEmail,
+          phone,
+          mobile,
           role: get("role") ? oneOf(get("role"), roleSlugs, "other") : null,
           companyId: null, // resolved after companies are created, below
           notes: opt("notes"),
-          // Only ever true or "leave alone": a blank cell must never silently
-          // opt someone out of marketing they previously agreed to.
-          marketingOptIn: boolOf(get("marketing_opt_in")) || null,
+          // Only ever true or "leave alone": a blank or "No" cell must never
+          // silently opt someone out of marketing they previously agreed to.
+          marketingOptIn: optIn === true ? true : null,
+          marketingPropertyAlerts: alerts === true ? true : null,
           addressLine: address.address_line,
           city: address.city,
           postcode: address.postcode,
           county: address.county,
           lat: null,
           lng: null,
+          dateUpdated,
         };
         const rec: ContactRecord = {
           address,
@@ -402,14 +672,16 @@ export async function importEntityCsv(
           fields: {
             firstName,
             lastName: opt("last_name"),
-            email,
-            phone: opt("phone"),
+            email: storedEmail,
+            phone,
+            mobile,
             role: oneOf(get("role"), roleSlugs, "other"),
             companyId: null, // resolved after companies are created, below
             county: address.county,
             notes: opt("notes"),
             leadAgentId: null,
-            marketingOptIn: boolOf(get("marketing_opt_in")),
+            marketingOptIn: optIn === true,
+            marketingPropertyAlerts: alerts,
             addressLine: address.address_line,
             city: address.city,
             postcode: address.postcode,
@@ -419,27 +691,61 @@ export async function importEntityCsv(
         // needs the company, which isn't resolved until below. Name-keyed
         // in-file duplicates are folded in during that later pass.
         const prior = email ? claim(`email:${key(email)}`, rec) : null;
-        if (prior) mergePatch(prior.patch as ContactImportPatch, patch);
-        else contactRecords.push(rec);
+        if (prior) {
+          foldPatch(prior.patch as ContactImportPatch, patch);
+          const earlier = prior as unknown as ContactRecord;
+          syncContactFields(earlier.fields, earlier.patch);
+          earlier.companyName = earlier.companyName ?? rec.companyName;
+        } else contactRecords.push(rec);
       } else if (entity === "requirements") {
         const title = get("title");
-        const externalRef = get("external_ref") || null;
         const contactEmail = get("contact_email");
-        const companyName = get("company_name") || null;
-        if (contactEmail && !resolveContact(contactEmail)) {
-          throw new Error(
-            `contact_email "${contactEmail}" doesn't match any contact — import Contacts first`,
-          );
-        }
+        // "Company name (Mr First Last)": with no company_name column, the part
+        // before the bracket is the company to look for. It only LINKS — a
+        // requirement import never creates companies.
+        const tenant = parseTenant(title);
+        const explicitCompany = get("company_name") || null;
+        const companyName =
+          explicitCompany ?? (columns.has("company_name") ? null : tenant.companyName);
         const contactId = resolveContact(contactEmail) ?? null;
         const companyId = companyName
           ? (companyIdByName.get(key(companyName)) ?? null)
           : null;
-        if (companyName && !companyId) {
+        if (explicitCompany && !companyId) {
           throw new Error(
-            `company_name "${companyName}" doesn't match any company — import Companies first`,
+            `company_name "${explicitCompany}" doesn't match any company — import Companies first`,
           );
         }
+        if (contactEmail && !contactId) {
+          // An address we hold no contact for still tells us who the tenant is,
+          // when their company is known: keep the requirement, say what happened.
+          if (companyId) {
+            warnings.push(
+              `Row ${rowNo}: contact_email "${contactEmail}" matches no contact — linked to the company only`,
+            );
+          } else {
+            throw new Error(
+              `contact_email "${contactEmail}" doesn't match any contact — import Contacts first`,
+            );
+          }
+        }
+        // A file with no reference column gets one from six fixed cells of the
+        // row (legacyRowRef), so a second upload of the same export updates
+        // these rows. See the note on identity at the top of this file.
+        const refCell = get("external_ref");
+        const refIsDerived = !refCell && !columns.has("external_ref");
+        const externalRef =
+          refCell ||
+          (refIsDerived
+            ? legacyRowRef({
+                title: get("title"),
+                size: get("size_text"),
+                propertyType: get("use_classes"),
+                rent: get("rent_text"),
+                area: get("area_text"),
+                email: get("contact_email"),
+              })
+            : null);
         const existingId = externalRef
           ? (requirementIdByRef.get(key(externalRef)) ?? null)
           : null;
@@ -448,6 +754,14 @@ export async function importEntityCsv(
         // satisfies it, and an update is blank-preserving so can only add links
         // — a ref-only "top up" row must not be refused for the cells it omits.
         if (existingId === null) {
+          if (title && !contactId && !companyId) {
+            stats.noLink++;
+            throw new Error(
+              tenant.shape === "unknown" && !contactEmail
+                ? 'tenant is "Unknown" and there is no contact email'
+                : "no contact email and no matching company",
+            );
+          }
           const invalid = requirementLinkError({ title, companyId, contactId });
           if (invalid) throw new Error(invalid);
         }
@@ -459,73 +773,125 @@ export async function importEntityCsv(
           const v = list(get(name));
           return v.length > 0 ? v : null;
         };
+
+        // Size, rent and area arrive as the other system's free text. What
+        // parses becomes a column; what does not stays in notes. Explicit
+        // numeric / target_* columns win over the parsed text.
+        // A cell over the cap is not parsed at all: its first part goes to
+        // notes and the row is warned about (see MAX_CELL_CHARS).
+        const sizeC = capCell(get("size_text"));
+        const rentC = capCell(get("rent_text"));
+        const areaC = capCell(get("area_text"));
+        const overNotes: string[] = [];
+        for (const [label, c] of [["Size", sizeC], ["Rent", rentC], ["Area", areaC]] as const) {
+          if (!c.over) continue;
+          warnings.push(`Row ${rowNo}: ${label.toLowerCase()} text is over ${MAX_CELL_CHARS} characters — not read, the first ${MAX_CELL_CHARS} kept in notes`);
+          overNotes.push(`${label} (as exported): ${c.text}`);
+        }
+        const sizeCell = sizeC.text;
+        const size = parseSize(sizeC.over ? "" : sizeCell);
+        if (size.kind === "unparsed")
+          warnings.push(`Row ${rowNo}: size "${sizeCell}" not recognised — kept in notes`);
+        else if (size.swapped)
+          warnings.push(`Row ${rowNo}: size "${sizeCell}" was written high to low — read as low to high`);
+        const rent = parseRent(rentC.over ? "" : rentC.text);
+        const area = parseArea(areaC.over ? "" : areaC.text, LOCATION_CATALOG);
+        if (size.keepText) stats.sizeKeptInNotes++;
+        if (rent.note) stats.rentKeptInNotes++;
+        if (area.note) stats.areaNotFullyPlaced++;
+
+        const minSqft = num("min_sqft") ?? size.minSqft;
+        const maxSqft = num("max_sqft") ?? size.maxSqft;
+        const maxRent = num("max_rent") ?? rent.maxRent;
+        const notes = joinNoteLines(
+          get("notes"),
+          size.keepText && !sizeC.over ? `Size (as exported): ${sizeCell}` : null,
+          rent.note,
+          area.note,
+          ...overNotes,
+        );
+        const orParsed = (name: string, parsed: string[]) =>
+          arr(name) ?? (parsed.length > 0 ? parsed : null);
+        const targetZones = orParsed("target_london_zones", area.zones);
+        const targetNeighbourhoods = orParsed("target_neighbourhoods", area.neighbourhoods);
+        const targetTowns = orParsed("target_towns", area.towns);
+        const targetCounties = orParsed("target_counties", area.counties);
+        const targetRegions = orParsed("target_regions", area.regions);
+        const targetDistricts =
+          arr("target_postcode_districts")?.map((s) => s.toUpperCase()) ??
+          (area.districts.length > 0 ? area.districts : null);
+        const status = get("status")
+          ? oneOf(get("status"), Constants.public.Enums.requirement_status, "active")
+          : null;
+        const minCovers = num("min_covers");
+        const maxCovers = num("max_covers");
+        const maxPremium = num("max_premium");
+        const maxGuidePrice = num("max_guide_price");
+        const dateUpdated = dateOf();
+
         const patch: RequirementImportPatch = {
           title,
           companyId,
           contactId,
-          status: get("status")
-            ? oneOf(get("status"), Constants.public.Enums.requirement_status, "active")
-            : null,
-          targetTowns: arr("target_towns"),
-          targetRegions: arr("target_regions"),
-          targetCounties: arr("target_counties"),
-          targetPostcodeDistricts:
-            arr("target_postcode_districts")?.map((s) => s.toUpperCase()) ?? null,
-          targetNeighbourhoods: arr("target_neighbourhoods"),
-          targetLondonZones: arr("target_london_zones"),
+          status,
+          targetTowns,
+          targetRegions,
+          targetCounties,
+          targetPostcodeDistricts: targetDistricts,
+          targetNeighbourhoods,
+          targetLondonZones: targetZones,
           useClasses: useClasses.length > 0 ? useClasses : null,
           tenurePrefs: tenurePrefs.length > 0 ? tenurePrefs : null,
-          minSqft: num("min_sqft"),
-          maxSqft: num("max_sqft"),
-          minCovers: num("min_covers"),
-          maxCovers: num("max_covers"),
-          maxRent: num("max_rent"),
-          maxPremium: num("max_premium"),
-          maxGuidePrice: num("max_guide_price"),
-          notes: opt("notes"),
+          minSqft,
+          maxSqft,
+          minCovers,
+          maxCovers,
+          maxRent,
+          maxPremium,
+          maxGuidePrice,
+          notes,
+          dateUpdated,
+          externalRef: null,
         };
         const rec: RequirementRecord = {
           externalRef,
+          refIsDerived,
           existingId,
           companyName,
+          fallbackDate: contactId ? (contactDates.get(contactId) ?? null) : null,
           rowNo,
           patch,
           fields: {
             title,
             companyId,
             contactId,
-            status: oneOf(
-              get("status"),
-              Constants.public.Enums.requirement_status,
-              "active",
-            ) as RequirementWriteInput["status"],
-            targetTowns: list(get("target_towns")),
-            targetRegions: list(get("target_regions")),
-            targetCounties: list(get("target_counties")),
-            targetPostcodeDistricts: list(get("target_postcode_districts")).map((s) =>
-              s.toUpperCase(),
-            ),
-            targetNeighbourhoods: list(get("target_neighbourhoods")),
-            targetLondonZones: list(get("target_london_zones")),
+            status: (status ?? "active") as RequirementWriteInput["status"],
+            targetTowns: targetTowns ?? [],
+            targetRegions: targetRegions ?? [],
+            targetCounties: targetCounties ?? [],
+            targetPostcodeDistricts: targetDistricts ?? [],
+            targetNeighbourhoods: targetNeighbourhoods ?? [],
+            targetLondonZones: targetZones ?? [],
             // Cells carry ordinary words ("Bar;Nightclub"), not slugs.
             useClasses: useClasses as RequirementWriteInput["useClasses"],
             tenurePrefs: tenurePrefs as RequirementWriteInput["tenurePrefs"],
-            minSqft: num("min_sqft"),
-            maxSqft: num("max_sqft"),
-            minCovers: num("min_covers"),
-            maxCovers: num("max_covers"),
-            maxRent: num("max_rent"),
-            maxPremium: num("max_premium"),
-            maxGuidePrice: num("max_guide_price"),
-            notes: opt("notes"),
+            minSqft,
+            maxSqft,
+            minCovers,
+            maxCovers,
+            maxRent,
+            maxPremium,
+            maxGuidePrice,
+            notes,
             leadAgentId: null,
           },
         };
-        // Without an external_ref there is nothing to identify the row by, so
-        // every such row is a new requirement — that is the documented opt-in.
         const prior = externalRef ? claim(`ref:${key(externalRef)}`, rec) : null;
-        if (prior) mergePatch(prior.patch as RequirementImportPatch, patch);
-        else requirementRecords.push(rec);
+        if (prior) {
+          foldPatch(prior.patch as RequirementImportPatch, patch);
+          const earlier = prior as unknown as RequirementRecord;
+          syncRequirementFields(earlier.fields, earlier.patch);
+        } else requirementRecords.push(rec);
       } else {
         if (!get("title")) throw new Error("title is required");
         const contactId = resolveContact(get("contact_email"));
@@ -629,16 +995,54 @@ export async function importEntityCsv(
           },
         };
         const prior = externalRef ? claim(`ref:${key(externalRef)}`, rec) : null;
-        if (prior) mergePatch(prior.patch as DisposalImportPatch, patch);
-        else listingRecords.push(rec);
+        if (prior) {
+          mergePatch(prior.patch as DisposalImportPatch, patch);
+          const earlier = prior as unknown as ListingRecord;
+          syncListingFields(earlier.fields, earlier.patch);
+        } else listingRecords.push(rec);
       }
     } catch (e) {
       errors.push(`Row ${rowNo}: ${(e as Error).message}`);
     }
   });
 
+  // Requirements from a file with no ID column: a row whose derived reference
+  // matched nothing may be a stored requirement that was imported before
+  // references existed, or one edited in the source system. Adopt it when the
+  // match is unambiguous on both sides; otherwise add it and count it.
+  let adopted = 0;
+  let ambiguousCopies = 0;
+  if (entity === "requirements" && requirementRecords.length > 0) {
+    const candidates = requirementRecords.filter((q) => q.refIsDerived);
+    const plan = planAdoptions(
+      requirementIdentities,
+      requirementRecords.map((q) => ({
+        title: q.patch.title ?? "",
+        contactId: q.patch.contactId,
+        companyId: q.patch.companyId,
+        // Rows that are not derived-ref rows never adopt, and never block.
+        existingId: q.refIsDerived ? q.existingId : (q.existingId ?? "n/a"),
+      })),
+    );
+    requirementRecords.forEach((q, i) => {
+      if (!candidates.includes(q)) return;
+      const target = plan.adopt.get(i);
+      if (target) {
+        q.existingId = target;
+        q.patch.externalRef = q.externalRef;
+        adopted++;
+      } else if (plan.ambiguous.has(i)) {
+        ambiguousCopies++;
+        warnings.push(
+          `Row ${q.rowNo}: possible changed copy of an existing requirement — added as new`,
+        );
+      }
+    });
+  }
+
   // Contacts: resolve company_name → company_id, creating minimal companies
   // (case-insensitively de-duped) for names not already in the agency.
+  let companiesToCreate = 0;
   if (entity === "contacts" && contactRecords.length) {
     const newNames = new Map<string, string>();
     for (const c of contactRecords) {
@@ -646,8 +1050,14 @@ export async function importEntityCsv(
       if (!nm) continue;
       if (!companyIdByName.has(key(nm)) && !newNames.has(key(nm))) newNames.set(key(nm), nm);
     }
+    companiesToCreate = newNames.size;
     if (newNames.size > 0) {
       for (const name of newNames.values()) {
+        if (dryRun) {
+          // A stand-in id keeps the name-key logic below honest; nothing is written.
+          companyIdByName.set(key(name), `dry-run:${key(name)}`);
+          continue;
+        }
         const created = await createCompany(
           agencyId,
           userId,
@@ -670,7 +1080,7 @@ export async function importEntityCsv(
         );
         companyIdByName.set(key(name), created.id);
       }
-      revalidatePath("/companies");
+      if (!dryRun) revalidatePath("/companies");
     }
     for (const c of contactRecords) {
       const companyId = c.companyName
@@ -697,7 +1107,8 @@ export async function importEntityCsv(
       }
       const priorInFile = byNameThisFile.get(k);
       if (priorInFile) {
-        mergePatch(priorInFile.patch, c.patch);
+        foldPatch(priorInFile.patch, c.patch);
+        syncContactFields(priorInFile.fields, priorInFile.patch);
         mergedInFile++;
         continue;
       }
@@ -712,11 +1123,13 @@ export async function importEntityCsv(
   // Best-effort geocoding of imported companies/contacts that carry an address
   // (≤5 concurrent lookups; failures are ignored — rows still import, they just
   // won't appear on maps until edited). Runs BEFORE the write since the create*
-  // DAOs take lat/lng as part of the write, not a follow-up update.
+  // DAOs take lat/lng as part of the write, not a follow-up update. A dry run
+  // makes no lookups.
   async function geocodeAll<T extends { address: ParsedAddress }>(
     records: T[],
   ): Promise<Map<T, { lat: number | null; lng: number | null }>> {
     const geos = new Map<T, { lat: number | null; lng: number | null }>();
+    if (dryRun) return geos;
     const targets = records.filter((r) => addressQuery(r.address));
     let next = 0;
     const worker = async () => {
@@ -736,6 +1149,24 @@ export async function importEntityCsv(
 
   let created = 0;
   let updated = 0;
+  // Contacts whose stored marketing choice is No while the file says Yes: the
+  // import never turns a recorded No into a Yes.
+  let consentKept = 0;
+  const listingCreatedIds: string[] = [];
+  const listingUpdatedIds: string[] = [];
+  /** Apply a new row's source date; a failure here must not fail the saved row. */
+  async function pinDate(
+    rowNo: number,
+    table: "companies" | "contacts" | "requirements",
+    id: string,
+    iso: string | null,
+  ): Promise<void> {
+    try {
+      await setImportedDateUpdated(table, id, agencyId, iso);
+    } catch {
+      warnings.push(`Row ${rowNo}: saved, source date not applied`);
+    }
+  }
   // The neon HTTP driver's sql.transaction() only batches a static array of
   // queries — it can't wrap these multi-step create* calls in one atomic unit
   // without switching to a pooled connection. So instead of risking a mid-loop
@@ -745,13 +1176,22 @@ export async function importEntityCsv(
   async function writeEach<T extends { existingId: string | null; rowNo: number }>(
     records: T[],
     insert: (rec: T) => Promise<unknown>,
-    update: (rec: T, id: string) => Promise<unknown>,
+    update: (rec: T, id: string) => Promise<ImportUpdateResult | void>,
   ): Promise<void> {
     for (const rec of records) {
+      if (dryRun) {
+        if (rec.existingId) updated++;
+        else created++;
+        continue;
+      }
       try {
         if (rec.existingId) {
-          await update(rec, rec.existingId);
+          const result = await update(rec, rec.existingId);
           updated++;
+          if (result?.notesConflict) {
+            warnings.push(`Row ${rec.rowNo}: notes changed while importing — saved the row without the new notes`);
+          }
+          if (result?.consentBlocked) consentKept++;
         } else {
           await insert(rec);
           created++;
@@ -763,12 +1203,35 @@ export async function importEntityCsv(
     }
   }
 
+  // A dry run writes nothing, so the update never reads the stored flags: count
+  // the Yes-in-file / No-in-CRM contacts here, from a read-only lookup.
+  if (dryRun && entity === "contacts") {
+    const stored = await listContactConsent(agencyId);
+    for (const rec of contactRecords) {
+      const c = rec.existingId ? stored.get(rec.existingId) : undefined;
+      if (
+        c &&
+        ((rec.patch.marketingOptIn === true && c.optIn === false) ||
+          (rec.patch.marketingPropertyAlerts === true && c.alerts === false))
+      ) {
+        consentKept++;
+      }
+    }
+  }
+
   if (entity === "companies") {
     const geos = await geocodeAll(companyRecords);
     await writeEach(
       companyRecords,
-      (rec) =>
-        createCompany(agencyId, userId, rec.fields, geos.get(rec) ?? { lat: null, lng: null }),
+      async (rec) => {
+        const made = await createCompany(
+          agencyId,
+          userId,
+          rec.fields,
+          geos.get(rec) ?? { lat: null, lng: null },
+        );
+        await pinDate(rec.rowNo, "companies", made.id, rec.patch.dateUpdated);
+      },
       (rec, id) => {
         const geo = geos.get(rec);
         return updateCompanyFromImport(agencyId, id, {
@@ -782,8 +1245,15 @@ export async function importEntityCsv(
     const geos = await geocodeAll(contactRecords);
     await writeEach(
       contactRecords,
-      (rec) =>
-        createContact(agencyId, userId, rec.fields, geos.get(rec) ?? { lat: null, lng: null }),
+      async (rec) => {
+        const made = await createContact(
+          agencyId,
+          userId,
+          rec.fields,
+          geos.get(rec) ?? { lat: null, lng: null },
+        );
+        await pinDate(rec.rowNo, "contacts", made.id, rec.patch.dateUpdated);
+      },
       (rec, id) => {
         const geo = geos.get(rec);
         return updateContactFromImport(agencyId, id, {
@@ -796,30 +1266,154 @@ export async function importEntityCsv(
   } else if (entity === "requirements") {
     await writeEach(
       requirementRecords,
-      (rec) => createRequirement(agencyId, userId, rec.fields, rec.externalRef),
+      async (rec) => {
+        const made = await createRequirement(agencyId, userId, rec.fields, rec.externalRef);
+        // The file's date, else the linked contact's, else the default (now).
+        await pinDate(
+          rec.rowNo,
+          "requirements",
+          made.id,
+          rec.patch.dateUpdated ?? rec.fallbackDate,
+        );
+      },
       (rec, id) => updateRequirementFromImport(agencyId, id, rec.patch),
     );
   } else {
     await writeEach(
       listingRecords,
-      (rec) =>
-        createDisposal(
+      async (rec) => {
+        const made = await createDisposal(
           agencyId,
           userId,
           rec.fields,
           { lat: null, lng: null },
           "import",
           rec.externalRef,
-        ),
-      (rec, id) => updateDisposalFromImport(agencyId, id, rec.patch),
+        );
+        listingCreatedIds.push(made.id);
+      },
+      async (rec, id) => {
+        await updateDisposalFromImport(agencyId, id, rec.patch);
+        listingUpdatedIds.push(id);
+      },
     );
   }
 
-  const path = `/${entity}`;
-  revalidatePath(path);
+  // Listings only: give what the import wrote coordinates and match scores, as
+  // the listing form and the intel resync do. Every listing_type is included.
+  // Best-effort and bounded: see src/lib/import-followup.ts for the numbers.
+  let followUp = "";
+  if (entity === "listings") {
+    if (dryRun) {
+      const stored = await listFollowUpRows(
+        agencyId,
+        listingRecords.flatMap((r) => (r.existingId ? [r.existingId] : [])),
+      );
+      const storedById = new Map(stored.map((r) => [r.id, r]));
+      let live = 0;
+      let needCoords = 0;
+      for (const r of listingRecords) {
+        const old = r.existingId ? storedById.get(r.existingId) : undefined;
+        const status = r.fields.status ?? old?.status ?? null;
+        if (!isListingMatchable(status)) continue;
+        live++;
+        const lacksCoords = old ? !old.hasCoords : true;
+        if (lacksCoords && addressQuery(old && !r.fields.addressLine ? old : r.fields)) needCoords++;
+      }
+      followUp = dryRunFollowUp(live, needCoords);
+    } else {
+      const ids = collectListingIds(listingCreatedIds, listingUpdatedIds);
+      const result: FollowUpResult = {
+        scored: 0,
+        pairsSaved: 0,
+        scoringOk: true,
+        notScored: 0,
+        rescoreRemainder: 0,
+        rescoreSkipped: false,
+        geocoded: 0,
+        geocodeRemainder: 0,
+        geocodeNoMatch: 0,
+        geocodeSaveFailed: 0,
+        failures: [],
+      };
+      if (ids.length > 0) {
+        let live: string[] = [];
+        let needCoords: { id: string; address_line: string | null; city: string | null; postcode: string | null }[] = [];
+        try {
+          const rows = await listFollowUpRows(agencyId, ids);
+          const liveRows = rows.filter((r) => isListingMatchable(r.status));
+          result.notScored = rows.length - liveRows.length;
+          live = liveRows.map((r) => r.id);
+          needCoords = liveRows.filter((r) => !r.hasCoords && addressQuery(r));
+        } catch {
+          result.failures.push("the listings could not be read back for coordinates and scoring");
+        }
 
+        // Coordinates first (live listings only; let, sold and withdrawn stock
+        // neither uses the cap nor is geocoded), inside the one shared clock.
+        const win = geocodeWindow(Date.now() - startedAt);
+        const { take, remainder } = capList(needCoords, MAX_GEOCODE_LISTINGS);
+        result.geocodeRemainder = remainder;
+        if (!win.run) {
+          result.geocodeRemainder += take.length;
+        } else if (take.length > 0) {
+          const deadline = Date.now() + win.budgetMs;
+          try {
+            await pool(take, GEOCODE_CONCURRENCY, async (row) => {
+              if (Date.now() > deadline) {
+                result.geocodeRemainder++;
+                return null;
+              }
+              let loc: Awaited<ReturnType<typeof geocodeAddress>> = null;
+              try {
+                loc = await geocodeAddress(row);
+              } catch {
+                loc = null;
+              }
+              if (!loc) {
+                result.geocodeNoMatch++;
+                return null;
+              }
+              try {
+                if (await updateDisposalCoords(agencyId, row.id, loc.lat, loc.lng)) result.geocoded++;
+                else result.geocodeSaveFailed++;
+              } catch {
+                result.geocodeSaveFailed++;
+              }
+              return null;
+            });
+          } catch {
+            result.failures.push("coordinates could not be looked up");
+          }
+        }
+
+        // Then scoring: one call for the whole batch, so the helper sends at
+        // most one bell notification per agent for hundreds of listings.
+        if (live.length > 0) {
+          if (!shouldRescore(Date.now() - startedAt)) {
+            result.rescoreSkipped = true;
+            result.rescoreRemainder = live.length;
+          } else {
+            const { take: batch, remainder: left } = capList(live, MAX_RESCORE_LISTINGS);
+            result.rescoreRemainder = left;
+            const refreshed = await refreshMatchesForListings(batch);
+            result.scored = refreshed.matchable;
+            result.pairsSaved = refreshed.pairsSaved;
+            result.scoringOk = refreshed.ok;
+          }
+        }
+        revalidatePath("/matches");
+      }
+      followUp = followUpSummary(result);
+    }
+  }
+
+  if (!dryRun) revalidatePath(`/${entity}`);
+
+  // Skips and ignored values are grouped by reason, with counts, so 161
+  // identical reasons read as one line; the first few row numbers follow.
   const skipped = errors.length
-    ? ` Skipped ${errors.length}: ${errors.slice(0, 3).join("; ")}${errors.length > 3 ? "…" : ""}`
+    ? ` Skipped ${errors.length}: ${summariseReasons(errors)}.`
     : "";
   // Columns the file carried that we had no home for. Silently dropping these
   // is how a companies file imported 25 names and threw away every address.
@@ -829,24 +1423,45 @@ export async function importEntityCsv(
       }: ${header.unrecognised.join(", ")}.`
     : "";
   const notes = warnings.length
-    ? ` ${warnings.length} value${warnings.length > 1 ? "s" : ""} ignored: ${warnings
-        .slice(0, 3)
-        .join("; ")}${warnings.length > 3 ? "…" : ""}`
+    ? ` ${warnings.length} warning${warnings.length > 1 ? "s" : ""}: ${summariseReasons(warnings)}.`
     : "";
   const merged = mergedInFile
     ? ` Merged ${mergedInFile} repeated row${mergedInFile > 1 ? "s" : ""} within the file.`
     : "";
+  const freeText =
+    entity === "requirements"
+      ? [
+          stats.rentKeptInNotes ? `${stats.rentKeptInNotes} rent text kept in notes` : "",
+          stats.sizeKeptInNotes ? `${stats.sizeKeptInNotes} size text kept in notes` : "",
+          stats.areaNotFullyPlaced ? `${stats.areaNotFullyPlaced} area text not fully placed (kept in notes)` : "",
+        ].filter(Boolean)
+      : [];
+  const kept = freeText.length ? ` ${freeText.join("; ")}.` : "";
+  const matching =
+    entity === "requirements" && (adopted || ambiguousCopies)
+      ? ` ${dryRun ? "Would match" : "Matched"} ${adopted} changed row${adopted === 1 ? "" : "s"} to existing requirements by tenant and contact (adopted); ${ambiguousCopies} possible changed cop${ambiguousCopies === 1 ? "y" : "ies"} of existing requirements added as new.`
+      : "";
+  const consent = consentKept
+    ? ` ${consentKept} existing contact${consentKept > 1 ? "s are" : " is"} marked Yes in the file but No in the CRM. The import does not change marketing consent for an existing contact. Change it on the contact record if the consent is valid.`
+    : "";
+  const companiesNote =
+    dryRun && companiesToCreate
+      ? ` Would also add ${companiesToCreate} compan${companiesToCreate > 1 ? "ies" : "y"} named only by contacts.`
+      : "";
+  const prefix = dryRun ? "Check only, nothing saved. " : "";
   if (!created && !updated && errors.length)
-    return { error: `Nothing imported.${skipped}${ignored}${notes}${merged}` };
+    return {
+      error: `${prefix}Nothing ${dryRun ? "would be " : ""}imported.${skipped}${ignored}${notes}${merged}${kept}${matching}${consent}${followUp}`,
+    };
   // "Added N, updated M" rather than one total: on a re-upload the difference
   // between the two is the whole point of the run.
   const summary = [
-    created ? `Added ${created}` : "",
-    updated ? `updated ${updated}` : "",
+    created ? `${dryRun ? "Would add" : "Added"} ${created}` : "",
+    updated ? `${dryRun ? "would update" : "updated"} ${updated}` : "",
   ]
     .filter(Boolean)
     .join(", ");
   return {
-    message: `${summary || "No changes"} ${entity}.${skipped}${ignored}${notes}${merged}`,
+    message: `${prefix}${summary || "No changes"} ${entity}.${companiesNote}${skipped}${ignored}${notes}${merged}${kept}${matching}${consent}${followUp}`,
   };
 }

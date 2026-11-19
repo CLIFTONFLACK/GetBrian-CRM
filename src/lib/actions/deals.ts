@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidatePanelHosts } from "@/lib/revalidate-panels";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
@@ -287,6 +288,7 @@ export async function updateDealStage(formData: FormData): Promise<void> {
 
   revalidatePath("/deals");
   revalidatePath(`/deals/${id}`);
+  revalidatePanelHosts();
   if (stage === "completed" || before.stage === "completed") {
     revalidatePath("/requirements");
   }
@@ -313,6 +315,7 @@ export async function updateDealTitle(
 
   revalidatePath("/deals");
   revalidatePath(`/deals/${id}`);
+  revalidatePanelHosts();
   return { message: "Saved." };
 }
 
@@ -372,6 +375,7 @@ export async function updateDeal(
 
   revalidatePath("/deals");
   revalidatePath(`/deals/${id}`);
+  revalidatePanelHosts();
   if (stage === "completed" || before.stage === "completed") {
     revalidatePath("/requirements");
   }

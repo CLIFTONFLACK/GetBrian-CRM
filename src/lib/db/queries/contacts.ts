@@ -1,5 +1,6 @@
 import { sql } from "@/lib/db/client";
 import { escapeLike, ilikeTerm } from "@/lib/search";
+import { touchDateUpdated } from "@/lib/db/queries/date-updated";
 
 // DAO for public.contacts (+ its contact_agents join table). Every function
 // takes the caller's agencyId as a mandatory first parameter and filters on
@@ -18,6 +19,10 @@ export type Contact = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /** Last touch by edit or child write (0044). Not the optimistic-lock token. */
+  date_updated: string;
+  mobile: string | null;
+  marketing_property_alerts: boolean | null;
   lead_agent_id: string | null;
   marketing_opt_in: boolean;
   is_primary: boolean;
@@ -54,6 +59,7 @@ export type ContactListRow = {
   email: string | null;
   phone: string | null;
   company_id: string | null;
+  date_updated: string;
 };
 
 /** id + display name only, sorted by first name — feeds the "Add contact"
@@ -146,6 +152,7 @@ export async function getContactById(agencyId: string, id: string): Promise<Cont
     select
       id, agency_id, company_id, first_name, last_name, email, phone, role, notes,
       created_by, created_at::text as created_at, updated_at::text as updated_at,
+      date_updated::text as date_updated, mobile, marketing_property_alerts,
       lead_agent_id, marketing_opt_in, is_primary, address_line, city, postcode, lat, lng, county
     from public.contacts
     where id = ${id} and agency_id = ${agencyId}
@@ -161,10 +168,29 @@ export async function getContactById(agencyId: string, id: string): Promise<Cont
  */
 export async function listContactFacetRows(
   agencyId: string,
-  opts: { q?: string; column: "first_name" | "role"; ascending: boolean },
+  opts: { q?: string; column: "first_name" | "role" | "date_updated"; ascending: boolean },
 ): Promise<ContactFacetRow[]> {
   const term = opts.q ? ilikeTerm(opts.q) : "";
   const pattern = term ? `%${term}%` : null;
+  if (opts.column === "date_updated") {
+    return (opts.ascending
+      ? await sql`
+          select id, first_name, last_name, role, address_line, city, postcode, county, lat, lng, company_id
+          from public.contacts
+          where agency_id = ${agencyId}
+            and (${pattern}::text is null
+                 or first_name ilike ${pattern} or last_name ilike ${pattern} or email ilike ${pattern})
+          order by date_updated asc, first_name asc, id
+        `
+      : await sql`
+          select id, first_name, last_name, role, address_line, city, postcode, county, lat, lng, company_id
+          from public.contacts
+          where agency_id = ${agencyId}
+            and (${pattern}::text is null
+                 or first_name ilike ${pattern} or last_name ilike ${pattern} or email ilike ${pattern})
+          order by date_updated desc, first_name asc, id
+        `) as ContactFacetRow[];
+  }
   if (opts.column === "role") {
     return (opts.ascending
       ? await sql`
@@ -173,7 +199,7 @@ export async function listContactFacetRows(
           where agency_id = ${agencyId}
             and (${pattern}::text is null
                  or first_name ilike ${pattern} or last_name ilike ${pattern} or email ilike ${pattern})
-          order by role asc, first_name asc
+          order by role asc, first_name asc, id
         `
       : await sql`
           select id, first_name, last_name, role, address_line, city, postcode, county, lat, lng, company_id
@@ -181,7 +207,7 @@ export async function listContactFacetRows(
           where agency_id = ${agencyId}
             and (${pattern}::text is null
                  or first_name ilike ${pattern} or last_name ilike ${pattern} or email ilike ${pattern})
-          order by role desc, first_name asc
+          order by role desc, first_name asc, id
         `) as ContactFacetRow[];
   }
   return (opts.ascending
@@ -191,7 +217,7 @@ export async function listContactFacetRows(
         where agency_id = ${agencyId}
           and (${pattern}::text is null
                or first_name ilike ${pattern} or last_name ilike ${pattern} or email ilike ${pattern})
-        order by first_name asc
+        order by first_name asc, id
       `
     : await sql`
         select id, first_name, last_name, role, address_line, city, postcode, county, lat, lng, company_id
@@ -199,7 +225,7 @@ export async function listContactFacetRows(
         where agency_id = ${agencyId}
           and (${pattern}::text is null
                or first_name ilike ${pattern} or last_name ilike ${pattern} or email ilike ${pattern})
-        order by first_name desc
+        order by first_name desc, id
       `) as ContactFacetRow[];
 }
 
@@ -211,7 +237,8 @@ export async function getContactsByIds(
 ): Promise<ContactListRow[]> {
   if (ids.length === 0) return [];
   return (await sql`
-    select id, first_name, last_name, role, email, phone, company_id
+    select id, first_name, last_name, role, email, phone, company_id,
+           date_updated::text as date_updated
     from public.contacts
     where agency_id = ${agencyId} and id = ANY(${ids}::uuid[])
   `) as ContactListRow[];
@@ -249,6 +276,9 @@ export type ContactWriteInput = {
   addressLine: string | null;
   city: string | null;
   postcode: string | null;
+  /** Optional: only the importer sets these (0044). */
+  mobile?: string | null;
+  marketingPropertyAlerts?: boolean | null;
 };
 
 export async function createContact(
@@ -261,13 +291,15 @@ export async function createContact(
     insert into public.contacts (
       agency_id, created_by, first_name, last_name, email, phone, role, company_id,
       notes, lead_agent_id, marketing_opt_in,
-      address_line, city, postcode, county, lat, lng
+      address_line, city, postcode, county, lat, lng,
+      mobile, marketing_property_alerts
     ) values (
       ${agencyId}, ${createdBy}, ${input.firstName}, ${input.lastName}, ${input.email},
       ${input.phone}, ${input.role}, ${input.companyId},
       ${input.notes}, ${input.leadAgentId}, ${input.marketingOptIn},
       ${input.addressLine}, ${input.city}, ${input.postcode}, ${input.county},
-      ${geo.lat}, ${geo.lng}
+      ${geo.lat}, ${geo.lng},
+      ${input.mobile ?? null}, ${input.marketingPropertyAlerts ?? null}
     )
     returning id, first_name, last_name
   `;
@@ -305,6 +337,7 @@ export async function getContactForUpdate(
   agencyId: string,
   id: string,
 ): Promise<{
+  email: string | null;
   address_line: string | null;
   city: string | null;
   postcode: string | null;
@@ -316,13 +349,14 @@ export async function getContactForUpdate(
   // cast matters (a lossy Date round trip would spuriously reject saves that
   // never actually conflicted).
   const rows = await sql`
-    select address_line, city, postcode, lat, lng, updated_at::text as updated_at
+    select email, address_line, city, postcode, lat, lng, updated_at::text as updated_at
     from public.contacts
     where id = ${id} and agency_id = ${agencyId}
     limit 1
   `;
   return (
     (rows[0] as {
+      email: string | null;
       address_line: string | null;
       city: string | null;
       postcode: string | null;
@@ -413,6 +447,10 @@ export async function linkContactToCompany(
     where id = ${contactId} and agency_id = ${agencyId}
     returning id
   `;
+  if (rows.length > 0) {
+    await touchDateUpdated("company", companyId, agencyId);
+    await touchDateUpdated("contact", contactId, agencyId);
+  }
   return rows.length > 0;
 }
 
@@ -439,6 +477,8 @@ export async function setContactPrimary(
       update public.contacts set is_primary = false
       where id = ${contactId} and agency_id = ${agencyId}
     `;
+    await touchDateUpdated("contact", contactId, agencyId);
+    if (companyId) await touchDateUpdated("company", companyId, agencyId);
     return;
   }
   await sql.transaction((tx) => [
@@ -452,6 +492,8 @@ export async function setContactPrimary(
       where id = ${contactId} and agency_id = ${agencyId} and company_id = ${companyId}
     `,
   ]);
+  await touchDateUpdated("contact", contactId, agencyId);
+  await touchDateUpdated("company", companyId, agencyId);
 }
 
 /** The company's primary contact, or null when none has been nominated. */
@@ -514,4 +556,5 @@ export async function syncContactAgents(
       select ${agencyId}, ${contactId}, u from unnest(${userIds}::uuid[]) as u
     `,
   ]);
+  await touchDateUpdated("contact", contactId, agencyId);
 }

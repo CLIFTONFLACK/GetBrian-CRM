@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidatePanelHosts } from "@/lib/revalidate-panels";
 
 import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
@@ -62,6 +63,9 @@ export async function logActivity(
 
   if (entityType && entityId && PATH[entityType]) {
     revalidatePath(`/${PATH[entityType]}/${entityId}`);
+    // The records panel shows this timeline on whichever page it is open on (a
+    // company can open from the contacts list), so refresh every host page.
+    revalidatePanelHosts();
   }
   revalidatePath("/dashboard");
   return { message: "Activity logged." };

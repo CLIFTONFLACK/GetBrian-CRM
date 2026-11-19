@@ -1,5 +1,6 @@
 import { sql } from "@/lib/db/client";
 import type { Database } from "@/lib/database.types";
+import { touchDateUpdated } from "@/lib/db/queries/date-updated";
 
 // DAO for public.activities — the polymorphic timeline (entity_type/entity_id)
 // attached to companies, contacts, listings, requirements and deals. Every
@@ -78,5 +79,8 @@ export async function createActivity(
         )
         returning id
       `;
+  // A logged activity counts as work on the record (company/contact/
+  // requirement only; other entity types are ignored). Best effort.
+  await touchDateUpdated(input.entityType, input.entityId, agencyId);
   return rows[0] as { id: string };
 }

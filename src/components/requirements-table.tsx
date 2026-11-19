@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-
+import { RecordLink, RowLink } from "@/components/record-panel/row-link";
 import { SendDealModal } from "@/components/send-deal-modal";
 import { SortHeader } from "@/components/sort-header";
+import { StarRating } from "@/components/star-rating";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,16 +16,24 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { requirementStatusBadge } from "@/lib/badges";
+import { formatDateUpdated } from "@/lib/format-date";
 import type { EntityOption } from "@/components/creatable-select";
 import type { AgentOption } from "@/lib/db/queries/agencies";
 
 export type RequirementRow = {
   id: string;
+  /** Current page plus `?record=requirement:<id>`, built on the server. */
+  openHref: string;
+  /** This row's requirement is the one open in the panel. */
+  active?: boolean;
   title: string;
   status: string;
   operatorName: string | null;
   towns: string;
   maxRent: number | null;
+  dateUpdated: string;
+  /** 1 to 5, or null when not rated. */
+  listingRating: number | null;
   /** Pre-ticked recipient(s) when this row is sent — its contact, else its
    *  company's primary contact. Resolved server-side. */
   defaultContactIds?: string[];
@@ -136,15 +144,29 @@ export function RequirementsTable({
               params={params}
               className="hidden md:table-cell"
             />
+            <SortHeader
+              column="listing_rating"
+              label="Rating"
+              firstDir="desc"
+              params={params}
+              className="hidden md:table-cell"
+            />
             <SortHeader column="status" label="Status" params={params} />
+            <SortHeader
+              column="date_updated"
+              label="Date updated"
+              params={params}
+              className="hidden md:table-cell"
+            />
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((r) => {
             const s = requirementStatusBadge(r.status);
+            const updated = formatDateUpdated(r.dateUpdated);
             return (
-              <TableRow key={r.id}>
-                <TableCell>
+              <RowLink key={r.id} href={r.openHref} active={r.active}>
+                <TableCell data-no-row-click>
                   <input
                     type="checkbox"
                     aria-label={`Select ${r.title}`}
@@ -154,12 +176,9 @@ export function RequirementsTable({
                   />
                 </TableCell>
                 <TableCell>
-                  <Link
-                    href={`/requirements/${r.id}`}
-                    className="font-medium text-foreground hover:text-info hover:underline"
-                  >
+                  <RecordLink href={`/requirements/${r.id}`} openHref={r.openHref}>
                     {r.title}
-                  </Link>
+                  </RecordLink>
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground md:table-cell">
                   {r.operatorName ?? "—"}
@@ -170,10 +189,16 @@ export function RequirementsTable({
                 <TableCell className="hidden font-mono tabular-nums text-muted-foreground md:table-cell">
                   {r.maxRent != null ? `£${r.maxRent.toLocaleString("en-GB")}` : "—"}
                 </TableCell>
+                <TableCell className="hidden md:table-cell">
+                  <StarRating value={r.listingRating} readOnly compact />
+                </TableCell>
                 <TableCell>
                   <Badge tone={s.tone}>{s.label}</Badge>
                 </TableCell>
-              </TableRow>
+                <TableCell className="hidden text-muted-foreground md:table-cell">
+                  <span title={updated.title}>{updated.text}</span>
+                </TableCell>
+              </RowLink>
             );
           })}
         </TableBody>

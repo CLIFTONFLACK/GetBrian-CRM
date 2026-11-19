@@ -6,28 +6,29 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { NewTaskForm } from "./new-task-form";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { RecordPanelHost } from "@/components/record-panel/record-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { deleteTask, toggleTaskStatus } from "@/lib/actions/tasks";
 import { auth } from "@/lib/auth";
 import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
 import { listMyTasks } from "@/lib/db/queries/tasks";
+import { openRecordHref, RECORD_TYPES, type RecordType } from "@/lib/record-ref";
+import { formatLondonDateTime } from "@/lib/format-date";
 import { isPast } from "@/lib/time";
+import { isUuid } from "@/lib/uuid";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Tasks" };
 
-const fmt = (iso: string) =>
-  new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+const fmt = formatLondonDateTime;
 
-/** Where a task's optional entity link points, per entity_type. */
-const ENTITY_PATHS: Record<string, string> = {
-  deal: "/deals",
-  listing: "/listings",
-  requirement: "/requirements",
-  company: "/companies",
-  contact: "/contacts",
-};
+/** The record panel a task opens, or null when the task has no (known) record. */
+function taskRecordHref(t: { entity_type: string | null; entity_id: string | null }) {
+  if (!t.entity_type || !t.entity_id || !isUuid(t.entity_id)) return null;
+  if (!(RECORD_TYPES as readonly string[]).includes(t.entity_type)) return null;
+  return openRecordHref({}, { type: t.entity_type as RecordType, id: t.entity_id.toLowerCase() });
+}
 
 type TaskRow = {
   id: string;
@@ -55,10 +56,7 @@ function TaskList({
       {tasks.map((t) => {
         const done = t.status === "done";
         const overdue = !done && t.due_at != null && isPast(t.due_at);
-        const entityPath =
-          t.entity_type && t.entity_id && ENTITY_PATHS[t.entity_type]
-            ? `${ENTITY_PATHS[t.entity_type]}/${t.entity_id}`
-            : null;
+        const recordHref = taskRecordHref(t);
         return (
           <li
             key={t.id}
@@ -119,9 +117,11 @@ function TaskList({
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
-              {entityPath ? (
+              {recordHref ? (
                 <Link
-                  href={entityPath}
+                  href={recordHref}
+                  scroll={false}
+                  prefetch={false}
                   className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
                 >
                   Open
@@ -147,7 +147,12 @@ function TaskList({
   );
 }
 
-export default async function TasksPage() {
+export default async function TasksPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ record?: string; tab?: string; flex?: string }>;
+}) {
+  const { record: recordParam, tab: tabParam, flex: flexParam } = await searchParams;
   const session = await auth();
   const me = session?.user?.id ?? "";
 
@@ -217,6 +222,13 @@ export default async function TasksPage() {
           </CardContent>
         </Card>
       </div>
+
+      <RecordPanelHost
+        recordParam={recordParam}
+        tabParam={tabParam}
+        flexParam={flexParam}
+        base={{}}
+      />
     </div>
   );
 }

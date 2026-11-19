@@ -11,6 +11,8 @@ import { FilterBar, FilterSelect } from "@/components/filter-bar";
 import { FilterTiles } from "@/components/filter-tiles";
 import { Heatmap } from "@/components/heatmap";
 import { PageHeader } from "@/components/page-header";
+import { RecordPanelHost } from "@/components/record-panel/record-panel";
+import { RecordLink, RowLink } from "@/components/record-panel/row-link";
 import { Pagination, resolvePage } from "@/components/pagination";
 import { SortHeader } from "@/components/sort-header";
 import { ViewOnMapButton } from "@/components/view-on-map-button";
@@ -30,8 +32,9 @@ import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId } from "@/lib/db/queries/agencies";
 import { getCompaniesByIds, listCompanyFacetRows } from "@/lib/db/queries/companies";
-import { deriveCounty, HOME_COUNTIES } from "@/lib/locations";
+import { formatDateUpdated } from "@/lib/format-date";
 import { getCompanyTypes, typeLabel } from "@/lib/company-types";
+import { openRecordHref, parseRecordRef } from "@/lib/record-ref";
 import { filterHref, resolveSort } from "@/lib/sort";
 import { cn } from "@/lib/utils";
 
@@ -50,13 +53,24 @@ export default async function CompaniesPage({
     dir?: string;
     type?: string;
     tag?: string;
-    town?: string;
-    county?: string;
     page?: string;
+    record?: string;
+    tab?: string;
+    flex?: string;
   }>;
 }) {
   if (!isDbConfigured) redirect("/login");
-  const { q, sort, dir, type, tag, town, county, page: pageParam } = await searchParams;
+  const {
+    q,
+    sort,
+    dir,
+    type,
+    tag,
+    page: pageParam,
+    record: recordParam,
+    tab: tabParam,
+    flex: flexParam,
+  } = await searchParams;
 
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -66,47 +80,32 @@ export default async function CompaniesPage({
   const { column, ascending } = resolveSort(
     sort,
     dir,
-    { name: "name", type: "type" },
+    { name: "name", type: "type", date_updated: "date_updated" },
     { column: "name", ascending: true },
   );
 
   // Aggregate pass: only the columns the tiles, heatmap, facet dropdowns and
   // map layer need (plus the id, which the paginated row fetch keys off).
   // Ordered here so the page slice below is taken from the fully sorted set.
-  const facetRows = await listCompanyFacetRows(agencyId, { q, column: column as "name" | "type", ascending });
+  const rows = await listCompanyFacetRows(agencyId, {
+    q,
+    column: column as "name" | "type" | "date_updated",
+    ascending,
+  });
   const companyTypes = await getCompanyTypes();
   // `rows` is the heatmap base (q filtered). The tag/type facets that the
   // heatmap controls are applied to the table in memory so the grid keeps the
   // full distribution.
-  const rows = facetRows.map((c) => ({
-    ...c,
-    county: c.county ?? deriveCounty({ postcode: c.postcode, city: c.city }),
-  }));
-  const matchesCounty = (rowCounty: string | null) =>
-    !county ||
-    (county === "Home Counties"
-      ? rowCounty != null && HOME_COUNTIES.includes(rowCounty)
-      : (rowCounty ?? "—") === county);
   const listRows = rows.filter(
-    (c) =>
-      (!type || c.type === type) &&
-      (!tag || c.sector_tags.includes(tag)) &&
-      (!town || (c.city ?? "—") === town) &&
-      matchesCounty(c.county),
+    (c) => (!type || c.type === type) && (!tag || c.sector_tags.includes(tag)),
   );
 
-  const params = { q, sort, dir, type, tag, town, county };
-
-  const townOptions = [...new Set(rows.map((c) => c.city).filter(Boolean))]
-    .sort()
-    .map((v) => ({ value: v as string, label: v as string }));
-  const countyValues = [...new Set(rows.map((c) => c.county).filter(Boolean))].sort();
-  const countyOptions = [
-    ...(countyValues.some((c) => HOME_COUNTIES.includes(c as string))
-      ? [{ value: "Home Counties", label: "Home Counties" }]
-      : []),
-    ...countyValues.map((v) => ({ value: v as string, label: v as string })),
-  ];
+  // `params` feeds every sort, filter and page link, so those links drop
+  // `record` and `tab`: changing the list closes the panel. `panelBase` adds the
+  // page number, so opening a row leaves the list on the same page.
+  const params = { q, sort, dir, type, tag };
+  const panelBase = { ...params, page: pageParam };
+  const openRef = parseRecordRef(recordParam);
 
   // Stats bar: counts per company type (whole q-filtered set), click to facet.
   // Types are editable data, so derive tiles from the live list (admin-chosen labels).
@@ -191,7 +190,7 @@ export default async function CompaniesPage({
         dir={dir}
         placeholder="Search companies…"
         basePath="/companies"
-        hasActiveFilters={Boolean(type || tag || town || county)}
+        hasActiveFilters={Boolean(type || tag)}
       >
         <FilterSelect
           name="type"
@@ -199,8 +198,6 @@ export default async function CompaniesPage({
           value={type}
           options={companyTypes.map((t) => ({ value: t.slug, label: t.label }))}
         />
-        <FilterSelect name="town" label="Town" value={town} options={townOptions} />
-        <FilterSelect name="county" label="County" value={county} options={countyOptions} />
       </FilterBar>
 
       {rows.length > 0 ? (
@@ -281,6 +278,12 @@ export default async function CompaniesPage({
               <SortHeader column="type" label="Type" params={params} />
               <TableHead className="hidden md:table-cell">Sectors</TableHead>
               <TableHead className="hidden md:table-cell">Website</TableHead>
+              <SortHeader
+                column="date_updated"
+                label="Date updated"
+                params={params}
+                className="hidden md:table-cell"
+              />
               <TableHead className="w-24 text-right">
                 <span className="sr-only">Map</span>
               </TableHead>
@@ -290,15 +293,18 @@ export default async function CompaniesPage({
             {pageRows.map((c) => {
               const t = companyTypeBadge(c.type, typeLabel(companyTypes, c.type));
               const point = companyPoints.get(c.id);
+              const updated = formatDateUpdated(c.date_updated);
+              const openHref = openRecordHref(panelBase, { type: "company", id: c.id });
               return (
-                <TableRow key={c.id}>
+                <RowLink
+                  key={c.id}
+                  href={openHref}
+                  active={openRef?.type === "company" && openRef.id === c.id}
+                >
                   <TableCell>
-                    <Link
-                      href={`/companies/${c.id}`}
-                      className="font-medium text-foreground hover:text-info hover:underline"
-                    >
+                    <RecordLink href={`/companies/${c.id}`} openHref={openHref}>
                       {c.name}
-                    </Link>
+                    </RecordLink>
                   </TableCell>
                   <TableCell>
                     <Badge tone={t.tone}>{t.label}</Badge>
@@ -309,10 +315,13 @@ export default async function CompaniesPage({
                   <TableCell className="hidden text-muted-foreground md:table-cell">
                     {c.website ?? "—"}
                   </TableCell>
+                  <TableCell className="hidden text-muted-foreground md:table-cell">
+                    <span title={updated.title}>{updated.text}</span>
+                  </TableCell>
                   <TableCell className="text-right">
                     {point ? <ViewOnMapButton point={point} /> : null}
                   </TableCell>
-                </TableRow>
+                </RowLink>
               );
             })}
           </TableBody>
@@ -325,6 +334,13 @@ export default async function CompaniesPage({
         total={total}
         noun="companies"
         unfilteredTotal={rows.length}
+      />
+
+      <RecordPanelHost
+        recordParam={recordParam}
+        tabParam={tabParam}
+        flexParam={flexParam}
+        base={panelBase}
       />
     </div>
   );

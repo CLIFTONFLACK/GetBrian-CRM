@@ -1,6 +1,8 @@
 import * as React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { httpUrl } from "@/lib/contact-links";
+import { EmailLink } from "@/components/email-link";
 import { notFound, redirect } from "next/navigation";
 import { ExternalLink, FileDown, Pencil } from "lucide-react";
 
@@ -12,6 +14,7 @@ import {
   companyTypeBadge,
   contactRoleBadge,
   dealStageBadge,
+  isListingMatchable,
   listingTypeBadge,
   matchScoreBadge,
 } from "@/lib/badges";
@@ -142,7 +145,9 @@ export default async function ListingDetailPage({
     getCompanyTypes(),
   ]);
 
-  const matches = reqs
+  // A let, sold or withdrawn listing is not live supply: show no opportunities.
+  const matchable = isListingMatchable(d.status);
+  const matches = (matchable ? reqs : [])
     .map((rq) => ({ rq, ...scoreMatch(rq, d, { locationFlex }) }))
     .filter((m) => m.score > 0)
     // As on the requirement page: the top 10 cut makes tie order load-bearing.
@@ -201,9 +206,9 @@ export default async function ListingDetailPage({
             <FileDown />
             Download PDF
           </a>
-          {d.source_url ? (
+          {httpUrl(d.source_url) ? (
             <a
-              href={d.source_url}
+              href={httpUrl(d.source_url) as string}
               target="_blank"
               rel="noopener noreferrer"
               className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
@@ -369,7 +374,11 @@ export default async function ListingDetailPage({
           </form>
         </CardHeader>
         <CardContent>
-          {matches.length === 0 ? (
+          {!matchable ? (
+            <p className="text-sm text-muted-foreground">
+              This listing is let / sold / withdrawn, so it is not matched.
+            </p>
+          ) : matches.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No operator requirements match this listing yet.
             </p>
@@ -486,12 +495,7 @@ export default async function ListingDetailPage({
                 </p>
                 {linkedContact.email ? (
                   <p>
-                    <a
-                      href={`mailto:${linkedContact.email}`}
-                      className="text-info hover:underline"
-                    >
-                      {linkedContact.email}
-                    </a>
+                    <EmailLink email={linkedContact.email} className="text-info hover:underline" />
                   </p>
                 ) : null}
                 {linkedContact.phone ? (
@@ -524,22 +528,17 @@ export default async function ListingDetailPage({
                 </p>
                 {leadAgent.email ? (
                   <p>
-                    <a
-                      href={`mailto:${leadAgent.email}`}
-                      className="text-info hover:underline"
-                    >
-                      {leadAgent.email}
-                    </a>
+                    <EmailLink email={leadAgent.email} className="text-info hover:underline" />
                   </p>
                 ) : null}
                 {leadAgent.phone ? (
                   <p className="text-muted-foreground">{leadAgent.phone}</p>
                 ) : null}
-                {leadAgent.linkedin_url || leadAgent.x_url ? (
+                {httpUrl(leadAgent.linkedin_url) || httpUrl(leadAgent.x_url) ? (
                   <p className="flex gap-3 pt-1">
-                    {leadAgent.linkedin_url ? (
+                    {httpUrl(leadAgent.linkedin_url) ? (
                       <a
-                        href={leadAgent.linkedin_url}
+                        href={httpUrl(leadAgent.linkedin_url) as string}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-info hover:underline"
@@ -547,9 +546,9 @@ export default async function ListingDetailPage({
                         LinkedIn
                       </a>
                     ) : null}
-                    {leadAgent.x_url ? (
+                    {httpUrl(leadAgent.x_url) ? (
                       <a
-                        href={leadAgent.x_url}
+                        href={httpUrl(leadAgent.x_url) as string}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-info hover:underline"
@@ -588,12 +587,7 @@ export default async function ListingDetailPage({
             {d.agent_name ? <p className="font-medium">{d.agent_name}</p> : null}
             {d.agent_email ? (
               <p>
-                <a
-                  href={`mailto:${d.agent_email}`}
-                  className="text-info hover:underline"
-                >
-                  {d.agent_email}
-                </a>
+                <EmailLink email={d.agent_email} className="text-info hover:underline" />
               </p>
             ) : null}
             {d.agent_phone ? (

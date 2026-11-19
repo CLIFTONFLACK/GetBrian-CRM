@@ -2,6 +2,7 @@
 
 import { del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
+import { revalidatePanelHosts } from "@/lib/revalidate-panels";
 
 import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
@@ -72,6 +73,7 @@ export async function addDisposalImage(
   ]);
 
   revalidatePath(`/listings/${disposalId}`);
+  revalidatePanelHosts();
   return { message: "Image added." };
 }
 
@@ -103,4 +105,5 @@ export async function deleteDisposalImage(formData: FormData): Promise<void> {
   }
 
   revalidatePath(`/listings/${disposalId}`);
+  revalidatePanelHosts();
 }

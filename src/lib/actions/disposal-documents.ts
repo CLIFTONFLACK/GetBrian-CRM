@@ -2,6 +2,7 @@
 
 import { del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
+import { revalidatePanelHosts } from "@/lib/revalidate-panels";
 
 import { auth } from "@/lib/auth";
 import { isOurBlobUrl } from "@/lib/blob-url";
@@ -68,6 +69,7 @@ export async function addDisposalDocument(
   });
 
   revalidatePath(`/listings/${disposalId}`);
+  revalidatePanelHosts();
   return { message: "Document added." };
 }
 
@@ -90,5 +92,8 @@ export async function deleteDisposalDocument(formData: FormData): Promise<void> 
       // Best-effort: the metadata row is already gone either way.
     });
   }
-  if (disposalId) revalidatePath(`/listings/${disposalId}`);
+  if (disposalId) {
+    revalidatePath(`/listings/${disposalId}`);
+    revalidatePanelHosts();
+  }
 }

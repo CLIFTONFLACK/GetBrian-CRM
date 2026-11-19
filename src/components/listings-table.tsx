@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Pencil } from "lucide-react";
 
 import { ListingStatusSelect } from "@/components/listing-status-select";
+import { RecordLink, RowLink } from "@/components/record-panel/row-link";
 import { SortHeader } from "@/components/sort-header";
 import { ViewOnMapButton } from "@/components/view-on-map-button";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { listingTypeBadge } from "@/lib/badges";
+import { openRecordHref } from "@/lib/record-ref";
 import {
   bulkAssignDisposalLead,
   bulkUpdateDisposalStatus,
@@ -54,10 +56,16 @@ const fmtMoney = (v: number | null) =>
 export function ListingsTable({
   rows,
   params,
+  panelBase,
+  openListingId,
   agents,
 }: {
   rows: ListingTableRow[];
   params: Record<string, string | undefined>;
+  /** `params` plus the page number: opening a row keeps the list on its page. */
+  panelBase: Record<string, string | undefined>;
+  /** The listing open in the records panel, if any. */
+  openListingId?: string | null;
   agents: AgentOption[];
 }) {
   const router = useRouter();
@@ -218,9 +226,10 @@ export function ListingsTable({
         <TableBody>
           {rows.map((d) => {
             const t = listingTypeBadge(d.listing_type);
+            const openHref = openRecordHref(panelBase, { type: "listing", id: d.id });
             return (
-              <TableRow key={d.id}>
-                <TableCell>
+              <RowLink key={d.id} href={openHref} active={openListingId === d.id}>
+                <TableCell data-no-row-click>
                   <input
                     type="checkbox"
                     aria-label={`Select ${d.title ?? "listing"}`}
@@ -231,12 +240,9 @@ export function ListingsTable({
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <Link
-                      href={`/listings/${d.id}`}
-                      className="font-medium text-foreground hover:text-info hover:underline"
-                    >
+                    <RecordLink href={`/listings/${d.id}`} openHref={openHref}>
                       {d.title ?? "Untitled listing"}
-                    </Link>
+                    </RecordLink>
                     <Badge tone={t.tone}>{t.label}</Badge>
                   </div>
                 </TableCell>
@@ -280,7 +286,7 @@ export function ListingsTable({
                     <Pencil className="h-4 w-4" />
                   </Link>
                 </TableCell>
-              </TableRow>
+              </RowLink>
             );
           })}
         </TableBody>

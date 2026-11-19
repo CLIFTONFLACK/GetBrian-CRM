@@ -4,6 +4,14 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { currentAgencyId } from "@/lib/db/queries/agencies";
 import { getDisposalById } from "@/lib/db/queries/disposals";
+import { entityExistsInAgency } from "@/lib/db/queries/entity-exists";
+import {
+  ENTITY_DOC_CONTENT_TYPES,
+  ENTITY_DOC_MAX_BYTES,
+  isEntityDocType,
+  isValidEntityDocPath,
+  type EntityDocType,
+} from "@/lib/entity-docs";
 import { requirementBelongsToAgency } from "@/lib/db/queries/requirements";
 import { isUuid } from "@/lib/uuid";
 
@@ -32,12 +40,16 @@ import { isUuid } from "@/lib/uuid";
  *     agency's listing folder.
  *   - "requirement-doc": the landlord pack and friends, same check against the
  *     requirement instead of the disposal (requirement-documents.ts).
+ *   - "entity-doc": a company or contact document. The record must exist in the
+ *     caller's agency, and the pathname must be exactly the record's own upload
+ *     path (src/lib/entity-docs.ts), not merely start with a prefix.
  */
 type UploadContext =
   | { kind: "avatar" }
   | { kind: "disposal-image"; disposalId: string }
   | { kind: "disposal-doc"; disposalId: string }
-  | { kind: "requirement-doc"; requirementId: string };
+  | { kind: "requirement-doc"; requirementId: string }
+  | { kind: "entity-doc"; entityType: EntityDocType; entityId: string };
 
 function parseContext(clientPayload: string | null): UploadContext {
   if (!clientPayload) throw new Error("Missing upload context.");
@@ -46,13 +58,20 @@ function parseContext(clientPayload: string | null): UploadContext {
     ctx.kind !== "avatar" &&
     ctx.kind !== "disposal-image" &&
     ctx.kind !== "disposal-doc" &&
-    ctx.kind !== "requirement-doc"
+    ctx.kind !== "requirement-doc" &&
+    ctx.kind !== "entity-doc"
   ) {
     throw new Error("Unknown upload context.");
   }
   // Validate the owner id before it reaches a DB call — a non-uuid would
   // otherwise surface as a raw Postgres cast error.
   if (ctx.kind === "requirement-doc" && !isUuid(String(ctx.requirementId ?? ""))) {
+    throw new Error("Invalid upload context.");
+  }
+  if (
+    ctx.kind === "entity-doc" &&
+    (!isEntityDocType(ctx.entityType) || !isUuid(String(ctx.entityId ?? "")))
+  ) {
     throw new Error("Invalid upload context.");
   }
   if (
@@ -115,6 +134,24 @@ export async function POST(request: Request): Promise<NextResponse> {
             addRandomSuffix: false,
             allowOverwrite: false,
             maximumSizeInBytes: 10 * 1024 * 1024,
+            tokenPayload: clientPayload,
+          };
+        }
+
+        // Company and contact documents: the record must be in the caller's
+        // agency, and the pathname must be that record's own upload path.
+        if (ctx.kind === "entity-doc") {
+          if (!isValidEntityDocPath(pathname, ctx.entityType, ctx.entityId)) {
+            throw new Error("Invalid upload path.");
+          }
+          if (!(await entityExistsInAgency(agencyId, ctx.entityType, ctx.entityId))) {
+            throw new Error("Record not found.");
+          }
+          return {
+            allowedContentTypes: ENTITY_DOC_CONTENT_TYPES,
+            addRandomSuffix: false,
+            allowOverwrite: false,
+            maximumSizeInBytes: ENTITY_DOC_MAX_BYTES,
             tokenPayload: clientPayload,
           };
         }

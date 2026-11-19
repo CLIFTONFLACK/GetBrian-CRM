@@ -163,6 +163,7 @@ export type Database = {
           sector_tags: string[]
           type: string
           updated_at: string
+          date_updated: string
           vat_number: string | null
           website: string | null
         }
@@ -185,6 +186,7 @@ export type Database = {
           sector_tags?: string[]
           type?: string
           updated_at?: string
+          date_updated?: string
           vat_number?: string | null
           website?: string | null
         }
@@ -207,6 +209,7 @@ export type Database = {
           sector_tags?: string[]
           type?: string
           updated_at?: string
+          date_updated?: string
           vat_number?: string | null
           website?: string | null
         }
@@ -368,6 +371,9 @@ export type Database = {
           postcode: string | null
           role: string
           updated_at: string
+          date_updated: string
+          mobile: string | null
+          marketing_property_alerts: boolean | null
         }
         Insert: {
           address_line?: string | null
@@ -390,6 +396,9 @@ export type Database = {
           postcode?: string | null
           role?: string
           updated_at?: string
+          date_updated?: string
+          mobile?: string | null
+          marketing_property_alerts?: boolean | null
         }
         Update: {
           address_line?: string | null
@@ -412,6 +421,9 @@ export type Database = {
           postcode?: string | null
           role?: string
           updated_at?: string
+          date_updated?: string
+          mobile?: string | null
+          marketing_property_alerts?: boolean | null
         }
         Relationships: [
           {
@@ -1549,6 +1561,8 @@ export type Database = {
           tenure_prefs: Database["public"]["Enums"]["tenure_type"][]
           title: string
           updated_at: string
+          date_updated: string
+          listing_rating: number | null
           use_classes: Database["public"]["Enums"]["use_class"][]
         }
         Insert: {
@@ -1579,6 +1593,8 @@ export type Database = {
           tenure_prefs?: Database["public"]["Enums"]["tenure_type"][]
           title: string
           updated_at?: string
+          date_updated?: string
+          listing_rating?: number | null
           use_classes?: Database["public"]["Enums"]["use_class"][]
         }
         Update: {
@@ -1609,6 +1625,8 @@ export type Database = {
           tenure_prefs?: Database["public"]["Enums"]["tenure_type"][]
           title?: string
           updated_at?: string
+          date_updated?: string
+          listing_rating?: number | null
           use_classes?: Database["public"]["Enums"]["use_class"][]
         }
         Relationships: [

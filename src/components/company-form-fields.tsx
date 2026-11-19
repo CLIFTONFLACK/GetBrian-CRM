@@ -167,7 +167,7 @@ export function CompanyFormFields({
 
       <AgentFields
         agents={agents}
-        leadAgentId={company?.lead_agent_id}
+        showLead={false}
         additionalAgentIds={additionalAgentIds}
         idPrefix={idPrefix}
       />

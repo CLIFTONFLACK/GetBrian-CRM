@@ -68,7 +68,8 @@ export function parseCsv(text: string): string[][] {
 
 /** Serialise headers + rows to CSV text (used for downloadable templates). */
 export function toCsv(headers: string[], rows: string[][]): string {
-  const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  // CR as well as LF: a lone carriage return would otherwise be read back as a row break.
+  const esc = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
   return [headers, ...rows].map((r) => r.map(esc).join(",")).join("\r\n");
 }
 
@@ -104,6 +105,7 @@ export const IMPORT_TEMPLATES: Record<
       "postcode",
       "county",
       "notes",
+      "date_updated",
     ],
     example: [
       "Riverside Taverns Ltd",
@@ -118,6 +120,7 @@ export const IMPORT_TEMPLATES: Record<
       "SE1 9PP",
       "",
       "Key operator",
+      "",
     ],
     hint: `sector_tags: ${USE_CLASS_HINT}. Anything else is kept as a free tag. county is derived from postcode/town when blank. Re-uploading updates matching companies (company_number first, then name) — blank cells never clear existing data.`,
   },
@@ -132,6 +135,7 @@ export const IMPORT_TEMPLATES: Record<
       "last_name",
       "email",
       "phone",
+      "mobile",
       "role",
       "company_name",
       "address_line",
@@ -139,12 +143,15 @@ export const IMPORT_TEMPLATES: Record<
       "postcode",
       "county",
       "marketing_opt_in",
+      "marketing_property_alerts",
       "notes",
+      "date_updated",
     ],
     example: [
       "James",
       "Hartley",
       "james@example.co.uk",
+      "+44 20 7123 0000",
       "+44 7700 900000",
       "acquisitions",
       "Riverside Taverns Ltd",
@@ -153,7 +160,9 @@ export const IMPORT_TEMPLATES: Record<
       "SE1 9PP",
       "",
       "true",
+      "",
       "Met at expo",
+      "",
     ],
     hint: "company_name links (or creates) the contact's company. role must match a slug from Admin → Edit contact roles, else it falls back to Other.",
   },
@@ -187,6 +196,7 @@ export const IMPORT_TEMPLATES: Record<
       "max_premium",
       "max_guide_price",
       "notes",
+      "date_updated",
     ],
     example: [
       "REQ-1042",
@@ -210,8 +220,9 @@ export const IMPORT_TEMPLATES: Record<
       "50000",
       "",
       "Needs late licence",
+      "",
     ],
-    hint: `Supply contact_email (must match an existing contact) or company_name — at least one. Import Contacts/Companies first. use_classes: ${USE_CLASS_HINT}. tenure_prefs: freehold, leasehold. target_london_zones: Zone 1 … Zone 9. external_ref is optional: set it and a re-upload updates that row instead of duplicating it.`,
+    hint: `Supply contact_email (must match an existing contact) or company_name — at least one. Import Contacts/Companies first. use_classes: ${USE_CLASS_HINT}. tenure_prefs: freehold, leasehold. target_london_zones: Zone 1 … Zone 9. external_ref is optional: set it and a re-upload updates that row instead of duplicating it. With no external_ref column (an export from another system with no ID), an exact re-upload updates the same rows; a row that changed is matched to the stored requirement by tenant and contact when that is unambiguous, otherwise it is added as a new requirement. Size, Rent and Area text is read where it can be; the rest stays in notes.`,
   },
   listings: {
     label: "Listings",
@@ -323,7 +334,9 @@ export const normaliseHeader = (cell: string) =>
  * Only unambiguous synonyms belong here. A column we would have to guess at —
  * a lone "Size" that could be either end of a range, or an "Area" holding
  * "Within 3 miles of Rupert Street" — is reported as unrecognised instead,
- * because a wrong mapping is worse than a visible gap.
+ * because a wrong mapping is worse than a visible gap. (Requirements now read
+ * Size, Rent and Area as text and parse them in import-parse.ts, which keeps
+ * whatever it cannot place in notes, so those three are no longer gaps.)
  */
 const COMMON_ALIASES: Record<string, string> = {
   emailaddress: "email",
@@ -342,7 +355,19 @@ const COMMON_ALIASES: Record<string, string> = {
   postalcode: "postcode",
   zip: "postcode",
   comments: "notes",
+  comment: "notes",
   note: "notes",
+  generalnotes: "notes",
+  internalnotes: "notes",
+};
+
+/** "Date Updated" and its usual spellings, for the three entities that carry it. */
+const DATE_UPDATED_ALIASES: Record<string, string> = {
+  dateupdated: "date_updated",
+  updated: "date_updated",
+  lastupdated: "date_updated",
+  modified: "date_updated",
+  datemodified: "date_updated",
 };
 
 /** Per-entity synonyms; these win over COMMON_ALIASES. */
@@ -366,6 +391,7 @@ const ENTITY_ALIASES: Record<ImportEntity, Record<string, string>> = {
     vat: "vat_number",
     vatno: "vat_number",
     vatnumber: "vat_number",
+    ...DATE_UPDATED_ALIASES,
   },
   contacts: {
     forename: "first_name",
@@ -376,10 +402,12 @@ const ENTITY_ALIASES: Record<ImportEntity, Record<string, string>> = {
     account: "company_name",
     jobtitle: "role",
     position: "role",
-    marketing: "marketing_opt_in",
-    optin: "marketing_opt_in",
     marketinglatestnews: "marketing_opt_in",
-    marketingpropertyalerts: "marketing_opt_in",
+    marketingpropertyalerts: "marketing_property_alerts",
+    mobilenumber: "mobile",
+    mobilephone: "mobile",
+    cell: "mobile",
+    ...DATE_UPDATED_ALIASES,
   },
   requirements: {
     ref: "external_ref",
@@ -404,7 +432,12 @@ const ENTITY_ALIASES: Record<ImportEntity, Record<string, string>> = {
     minsize: "min_sqft",
     sizeto: "max_sqft",
     maxsize: "max_sqft",
-    rent: "max_rent",
+    // Free-text columns from other systems ("1,000 to 4,000 sq ft", "Up to
+    // £100,000 per annum", "Zone 1, W1, Soho"). They resolve to internal names
+    // that are not template columns; the importer parses them (import-parse.ts).
+    size: "size_text",
+    rent: "rent_text",
+    area: "area_text",
     rentpa: "max_rent",
     premium: "max_premium",
     tenure: "tenure_prefs",
@@ -415,6 +448,7 @@ const ENTITY_ALIASES: Record<ImportEntity, Record<string, string>> = {
     regions: "target_regions",
     neighbourhoods: "target_neighbourhoods",
     postcodedistricts: "target_postcode_districts",
+    ...DATE_UPDATED_ALIASES,
   },
   listings: {
     ref: "external_ref",
@@ -518,6 +552,26 @@ export function mapHeaders(entity: ImportEntity, rows: string[][]): HeaderMap {
 export function splitList(cell: string): string[] {
   const sep = cell.includes(";") ? ";" : ",";
   return cell.split(sep).map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * The most text one upload may carry. Server actions refuse request bodies over
+ * 1 MB by default (next.config.ts leaves that alone), so the importer checks
+ * the same limit itself, with a message the admin can act on, instead of
+ * failing with a bare framework error. Excel files are checked after they are
+ * turned into text.
+ */
+export const MAX_IMPORT_BYTES = 1_000_000;
+
+/** The most data rows one import may carry. */
+export const MAX_IMPORT_ROWS = 20_000;
+
+/** What kind of upload a file name is; null for anything the importer rejects. */
+export function importFileKind(name: string): "csv" | "xlsx" | null {
+  const ext = name.trim().toLowerCase().split(".").pop();
+  if (ext === "csv" || ext === "txt") return "csv";
+  if (ext === "xlsx" || ext === "xls") return "xlsx";
+  return null;
 }
 
 /**

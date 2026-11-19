@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test \"src/**/*.test.ts\""
+    "test": "node --import ./scripts/_alias-register.mjs --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

@@ -9,6 +9,8 @@ import { EmptyState } from "@/components/empty-state";
 import { FilterBar, FilterSelect } from "@/components/filter-bar";
 import { MatchReasons } from "@/components/match-reasons";
 import { PageHeader } from "@/components/page-header";
+import { RecordPanelHost } from "@/components/record-panel/record-panel";
+import { RecordLink } from "@/components/record-panel/row-link";
 import { SendDealModal } from "@/components/send-deal-modal";
 import { SiloTabs } from "@/components/silo-tabs";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +24,7 @@ import type { Database } from "@/lib/database.types";
 import { byMatchQuality, DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
 import { getCompanyTypes } from "@/lib/company-types";
 import { getPairSendHistory } from "@/lib/send-history";
+import { openRecordHref } from "@/lib/record-ref";
 import { filterHref } from "@/lib/sort";
 import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
@@ -78,9 +81,21 @@ export default async function MatchesPage({
     silo?: string;
     rejected?: string;
     shortlisted?: string;
+    record?: string;
+    tab?: string;
   }>;
 }) {
-  const { q, min, use_class, flex, silo, rejected, shortlisted } = await searchParams;
+  const {
+    q,
+    min,
+    use_class,
+    flex,
+    silo,
+    rejected,
+    shortlisted,
+    record: recordParam,
+    tab: tabParam,
+  } = await searchParams;
   const showRejected = rejected === "1";
   const shortlistedOnly = shortlisted === "1";
   const minScore = Math.min(95, Math.max(0, Number(min ?? "50") || 50));
@@ -338,35 +353,41 @@ export default async function MatchesPage({
                       <div className="space-y-1 text-sm">
                         <p className="flex flex-wrap items-center gap-1.5">
                           <Target className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <Link
+                          <RecordLink
                             href={`/requirements/${rq.id}`}
-                            className="font-medium text-foreground hover:text-info hover:underline"
+                            openHref={openRecordHref(params, { type: "requirement", id: rq.id })}
+                            className="hover:underline"
                           >
                             {rq.title}
-                          </Link>
+                          </RecordLink>
                           {rq.company_id && operatorName.has(rq.company_id) ? (
                             <span className="text-xs text-muted-foreground">
                               <span className="font-medium uppercase tracking-wide">
                                 Operator
                               </span>{" "}
-                              <Link
+                              <RecordLink
                                 href={`/companies/${rq.company_id}`}
-                                className="hover:text-info hover:underline"
+                                openHref={openRecordHref(params, {
+                                  type: "company",
+                                  id: rq.company_id,
+                                })}
+                                className="font-normal text-muted-foreground hover:underline"
                               >
                                 {operatorName.get(rq.company_id)}
-                              </Link>
+                              </RecordLink>
                             </span>
                           ) : null}
                         </p>
                         <p className="flex flex-wrap items-center gap-1.5">
                           <Store className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <Link
+                          <RecordLink
                             href={`/listings/${d.id}`}
-                            className="font-medium text-foreground hover:text-info hover:underline"
+                            openHref={openRecordHref(params, { type: "listing", id: d.id })}
+                            className="hover:underline"
                           >
                             {d.title ?? "Untitled listing"}
                             {d.city ? ` · ${d.city}` : ""}
-                          </Link>
+                          </RecordLink>
                           {(() => {
                             const t = listingTypeBadge(d.listing_type);
                             return <Badge tone={t.tone}>{t.label}</Badge>;
@@ -460,6 +481,13 @@ export default async function MatchesPage({
           })}
         </div>
       )}
+
+      <RecordPanelHost
+        recordParam={recordParam}
+        tabParam={tabParam}
+        flexParam={flex}
+        base={params}
+      />
     </div>
   );
 }

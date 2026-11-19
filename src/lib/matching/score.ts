@@ -1,4 +1,5 @@
 import type { Tables } from "@/lib/database.types";
+import { normalizePlace } from "@/lib/matching/place-key";
 import { containsWord } from "@/lib/text-match";
 import { USE_CLASS_CONCEPTS, USE_CLASS_PLANNING } from "@/lib/use-classes";
 import {
@@ -240,7 +241,7 @@ function resolveTargets(req: Requirement): ResolvedTargets {
   // equivalent town brief scored ~0.7. Measured from the county centroid, so it
   // carries a wider radius (see COUNTY_RADIUS_BONUS_MILES).
   for (const c of counties) {
-    const county = getCounty(c);
+    const county = getCounty(normalizePlace(c));
     if (county?.lat != null && county.lng != null) {
       points.push({
         name: county.name,
@@ -256,8 +257,8 @@ function resolveTargets(req: Requirement): ResolvedTargets {
     text: [...towns, ...req.target_regions, ...counties, ...neighbourhoods]
       .map(lc)
       .filter(Boolean),
-    counties: counties.map(lc),
-    regions: expanded.regions.map(lc),
+    counties: counties.map(normalizePlace).filter(Boolean),
+    regions: expanded.regions.map(normalizePlace).filter(Boolean),
     districts: [...new Set(districts)],
     points,
     any:
@@ -310,12 +311,14 @@ function locationFactor(
     return { factor: 1, label: `Location: ${disposalDistrict}` };
   }
 
-  const county = d.county ?? deriveCounty({ postcode: d.postcode, city: d.city });
+  const county =
+    d.county?.trim() || deriveCounty({ postcode: d.postcode, city: d.city });
   if (county) {
-    if (t.counties.includes(lc(county)))
-      return { factor: 1, label: `Location: ${county}` };
-    const region = regionOfCounty(county);
-    if (region && t.regions.includes(lc(region)))
+    const countyKey = normalizePlace(county);
+    if (t.counties.includes(countyKey))
+      return { factor: 1, label: `Location: ${county.trim()}` };
+    const region = regionOfCounty(countyKey);
+    if (region && t.regions.includes(normalizePlace(region)))
       return { factor: 1, label: `Location: ${region}` };
   }
 

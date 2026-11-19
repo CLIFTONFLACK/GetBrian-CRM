@@ -13,29 +13,34 @@ export function AgentFields({
   leadAgentId,
   additionalAgentIds,
   idPrefix = "",
+  showLead = true,
 }: {
   agents: AgentOption[];
   leadAgentId?: string | null;
   additionalAgentIds?: string[];
   /** Keeps ids unique when these fields render in a modal over another form. */
   idPrefix?: string;
+  /** False hides the lead select (companies have no lead agent). Default true. */
+  showLead?: boolean;
 }) {
   const selected = new Set(additionalAgentIds ?? []);
   const leadId = `${idPrefix}lead_agent_id`;
 
   return (
     <div className="space-y-5">
-      <div className="space-y-2">
-        <Label htmlFor={leadId}>Lead agent</Label>
-        <Select id={leadId} name="lead_agent_id" defaultValue={leadAgentId ?? ""}>
-          <option value="">— Unassigned —</option>
-          {agents.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </Select>
-      </div>
+      {showLead ? (
+        <div className="space-y-2">
+          <Label htmlFor={leadId}>Lead agent</Label>
+          <Select id={leadId} name="lead_agent_id" defaultValue={leadAgentId ?? ""}>
+            <option value="">— Unassigned —</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      ) : null}
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">Additional agents</legend>
@@ -61,7 +66,7 @@ export function AgentFields({
           </div>
         )}
         <p className="text-xs text-muted-foreground">
-          The lead agent is included automatically.
+          {showLead ? "The lead agent is included automatically." : "Agents who work on this record."}
         </p>
       </fieldset>
     </div>

@@ -26,12 +26,14 @@ import { byMatchQuality, DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matchin
 import { LocationFlexSlider } from "@/components/location-flex-slider";
 import { MatchOpportunities } from "@/components/match-opportunities";
 import { SendHistoryCard } from "@/components/send-history-card";
+import { StarRating } from "@/components/star-rating";
+import { canEditRating, RATING_NOT_ALLOWED } from "@/lib/listing-rating";
 import { SendToTeam } from "@/components/send-to-team";
 import { getSendHistory } from "@/lib/send-history";
 import { getCompanyTypes } from "@/lib/company-types";
 import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
-import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
+import { currentAgencyId, getAgencyMembers, isAgencyAdmin } from "@/lib/db/queries/agencies";
 import { getCompanyName, listCompanyOptions } from "@/lib/db/queries/companies";
 import {
   getContactById,
@@ -48,6 +50,7 @@ import {
 import { RequirementDocuments } from "@/components/requirement-documents";
 import { signRequirementDocUrl } from "@/lib/requirement-docs";
 import { getExternalSendPairRows } from "@/lib/db/queries/deals";
+import { formatDateUpdated } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 
 function band(min: number | null, max: number | null, unit = "") {
@@ -114,10 +117,17 @@ export default async function RequirementDetailPage({
 
   const s = requirementStatusBadge(r.status);
 
-  const [agentIds, members] = await Promise.all([
+  const [agentIds, members, isAdmin] = await Promise.all([
     getRequirementAgentIds(agencyId, id),
     getAgencyMembers(agencyId),
+    isAgencyAdmin(userId, agencyId),
   ]);
+  // Lead agent or admin only. setRequirementRating checks the same rule again.
+  const canRate = canEditRating({
+    userId,
+    leadAgentId: r.lead_agent_id,
+    isAdmin,
+  });
   const nameOf = new Map(members.map((m) => [m.id, m.name]));
   const leadAgentName = r.lead_agent_id
     ? (nameOf.get(r.lead_agent_id) ?? "Unknown agent")
@@ -183,6 +193,8 @@ export default async function RequirementDetailPage({
     sentByListing.set(s.listing_id, list);
   }
 
+  const dateUpdated = formatDateUpdated(r.date_updated);
+
   return (
     <div className="mx-auto max-w-4xl">
       {actionError ? (
@@ -195,6 +207,16 @@ export default async function RequirementDetailPage({
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-semibold tracking-tight">{r.title}</h1>
             <Badge tone={s.tone}>{s.label}</Badge>
+          </div>
+          <div className="mt-2">
+            <StarRating
+              value={r.listing_rating}
+              requirementId={r.id}
+              readOnly={!canRate}
+            />
+            {canRate ? null : (
+              <p className="text-xs text-muted-foreground">{RATING_NOT_ALLOWED}</p>
+            )}
           </div>
           {r.company_id ? (
             <p className="mt-1 text-sm text-muted-foreground">
@@ -218,6 +240,10 @@ export default async function RequirementDetailPage({
               </Link>
             </p>
           ) : null}
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Date updated:{" "}
+            <span title={dateUpdated.title}>{dateUpdated.text}</span>
+          </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <SendToTeam

@@ -2,13 +2,18 @@
 
 export type SortDir = "asc" | "desc";
 
-/** Build the href that sorts by `column`, toggling direction if already active. */
+/**
+ * Build the href that sorts by `column`, toggling direction if already active.
+ * `firstDir` is the direction of the first click on a column that is not the
+ * active sort (a rating reads best highest first).
+ */
 export function sortHref(
   params: Record<string, string | undefined>,
   column: string,
+  firstDir: SortDir = "asc",
 ): string {
   const sameCol = params.sort === column;
-  const dir: SortDir = sameCol && params.dir !== "desc" ? "desc" : "asc";
+  const dir: SortDir = sameCol ? (params.dir === "desc" ? "asc" : "desc") : firstDir;
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v) sp.set(k, v);
   sp.set("sort", column);

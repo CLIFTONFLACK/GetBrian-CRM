@@ -15,6 +15,7 @@ import { getContactById } from "@/lib/db/queries/contacts";
 import { getCompanyName } from "@/lib/db/queries/companies";
 import { getDisposalsByIds } from "@/lib/db/queries/disposals";
 import type { FormState } from "@/lib/actions/types";
+import { revalidatePanelHosts } from "@/lib/revalidate-panels";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 
@@ -276,6 +277,9 @@ export async function sendDealExternal(
     const msg = e instanceof Error ? e.message : "unknown error";
     return { message: `Sent to ${recipientList} (logging failed: ${msg})` };
   }
+
+  // The "Sent" chips show in the records panel on any host page.
+  revalidatePanelHosts();
 
   const capped = notAttached.length
     ? ` ${notAttached.length} particulars weren't attached (${MAX_ATTACHMENTS} max per email).`

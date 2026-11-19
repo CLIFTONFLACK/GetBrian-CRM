@@ -7,7 +7,15 @@ import { Download, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { importEntityCsv } from "@/lib/actions/import-data";
-import { decodeCsvBytes, IMPORT_TEMPLATES, toCsv, type ImportEntity } from "@/lib/csv";
+import {
+  decodeCsvBytes,
+  IMPORT_TEMPLATES,
+  importFileKind,
+  MAX_IMPORT_BYTES,
+  toCsv,
+  type ImportEntity,
+} from "@/lib/csv";
+import { WorkbookError, workbookToRows } from "@/lib/xlsx-rows";
 import type { FormState } from "@/lib/actions/types";
 
 function EntityImporter({ entity }: { entity: ImportEntity }) {
@@ -15,6 +23,8 @@ function EntityImporter({ entity }: { entity: ImportEntity }) {
   const tpl = IMPORT_TEMPLATES[entity];
   const [csv, setCsv] = React.useState("");
   const [fileName, setFileName] = React.useState<string | null>(null);
+  const [fileError, setFileError] = React.useState<string | null>(null);
+  const [fileNote, setFileNote] = React.useState<string | null>(null);
   const [state, action, pending] = useActionState<FormState, FormData>(
     importEntityCsv,
     {},
@@ -38,13 +48,38 @@ function EntityImporter({ entity }: { entity: ImportEntity }) {
     const f = e.target.files?.[0];
     if (!f) return;
     setFileName(f.name);
-    if (/\.(xlsx|xls)$/i.test(f.name)) {
-      // Parse the first sheet of an Excel workbook to CSV, reusing the CSV pipeline.
-      // Loaded on demand — xlsx is ~120KB gz and most sessions never touch it.
-      const XLSX = await import("xlsx");
-      const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      setCsv(ws ? XLSX.utils.sheet_to_csv(ws) : "");
+    setFileError(null);
+    setFileNote(null);
+    const kind = importFileKind(f.name);
+    if (!kind) {
+      setCsv("");
+      setFileError("Upload a .csv, .xlsx or .xls file.");
+      return;
+    }
+    if (f.size > MAX_IMPORT_BYTES * 2) {
+      setCsv("");
+      setFileError("This file is too large. Split it into smaller files.");
+      return;
+    }
+    if (kind === "xlsx") {
+      // First sheet only, turned into the same rows the CSV path produces:
+      // dates as ISO text, everything else as the sheet shows it (so phone
+      // numbers keep their leading zeros). Loaded on demand — xlsx is ~120KB gz
+      // and most sessions never touch it.
+      try {
+        const XLSX = await import("xlsx");
+        const { rows, sheetName, warnings } = workbookToRows(XLSX, await f.arrayBuffer());
+        setCsv(toCsv(rows[0], rows.slice(1)));
+        setFileNote([`Read sheet "${sheetName}" (the first sheet only).`, ...warnings].join(" "));
+      } catch (err) {
+        setCsv("");
+        setFileError(
+          err instanceof WorkbookError
+            ? err.message
+            : "This Excel file could not be read. It may be corrupt or password-protected. " +
+                "Open it in Excel, remove the password, save it again and retry.",
+        );
+      }
     } else {
       // Not f.text(): that decodes UTF-8 unconditionally and turns a
       // Windows-1252 export's apostrophes and pound signs into "" before the
@@ -65,6 +100,7 @@ function EntityImporter({ entity }: { entity: ImportEntity }) {
       <form action={action} className="space-y-2">
         <input type="hidden" name="entity" value={entity} />
         <input type="hidden" name="csv" value={csv} />
+        <input type="hidden" name="fileName" value={fileName ?? ""} />
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="file"
@@ -73,9 +109,19 @@ function EntityImporter({ entity }: { entity: ImportEntity }) {
             aria-label={`Upload ${tpl.label} CSV or Excel`}
             className="block text-xs file:mr-3 file:cursor-pointer file:rounded-md file:border file:border-input file:bg-background file:px-2.5 file:py-1.5 file:text-xs hover:file:bg-muted"
           />
+          <Button
+            type="submit"
+            name="dryRun"
+            value="1"
+            size="sm"
+            variant="ghost"
+            disabled={pending || !csv}
+          >
+            Check file
+          </Button>
           <Button type="submit" size="sm" variant="secondary" disabled={pending || !csv}>
             <Upload />
-            {pending ? "Importing…" : "Import"}
+            {pending ? "Working…" : "Import"}
           </Button>
         </div>
       </form>
@@ -83,6 +129,8 @@ function EntityImporter({ entity }: { entity: ImportEntity }) {
       {fileName ? (
         <p className="text-xs text-muted-foreground">Selected: {fileName}</p>
       ) : null}
+      {fileNote ? <p className="text-xs text-muted-foreground">{fileNote}</p> : null}
+      {fileError ? <p className="text-xs text-destructive">{fileError}</p> : null}
       {state.error ? <p className="text-xs text-destructive">{state.error}</p> : null}
       {state.message ? (
         <p className="text-xs text-emerald-600 dark:text-emerald-400">{state.message}</p>

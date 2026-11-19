@@ -8,6 +8,7 @@ import { MatchReasons } from "@/components/match-reasons";
 import { SendDealModal } from "@/components/send-deal-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { pgTimestampToIso } from "@/lib/format-date";
 import { listingTypeBadge, matchScoreBadge } from "@/lib/badges";
 import type { EntityOption } from "@/components/creatable-select";
 import type { MatchReason } from "@/lib/matching/score";
@@ -179,7 +180,7 @@ export function MatchOpportunities({
                     <Badge tone="violet">
                       Sent{o.previousSends.length > 1 ? ` ×${o.previousSends.length}` : ""}
                       {" · "}
-                      {new Date(o.previousSends[0].at).toLocaleDateString("en-GB")}
+                      {new Date(pgTimestampToIso(o.previousSends[0].at)).toLocaleDateString("en-GB")}
                     </Badge>
                   ) : null}
                   <Badge tone={ms.tone}>{ms.label}</Badge>

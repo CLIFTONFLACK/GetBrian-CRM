@@ -868,3 +868,49 @@ count logic does). Brian confirmed the CDG tab reads 84 on the deployed site.
 # Feature batch 2026-09-08 (requirements / companies / contacts / matchmaker / deep dive)
 
 Plan lives in its own file: tasks/feature-batch-2026-09-08.md
+
+---
+
+## Records panel batch (2026-11-18)
+
+Branch feat/records-panel-batch. Migration number 0044 (0042 belongs to another session).
+
+- [x] Phase 1: data model
+  - [x] db/migrations/0044_date_updated_rating.sql (date_updated, trigger swap, listing_rating, contact mobile and property alerts)
+  - [x] scripts/verify-0044.sql (written, NOT run: no database access approved)
+  - [x] touchDateUpdated in src/lib/db/queries/date-updated.ts, called from the query layer
+  - [x] date_updated, listing_rating, mobile, marketing_property_alerts on the row types and select lists
+  - [x] src/lib/database.types.ts updated by hand
+  - [ ] Apply 0044 to the database, then run scripts/verify-0044.sql (needs approval)
+- [x] Phase 2: importer (code done; NOT run against a database)
+  - [x] src/lib/import-parse.ts + tests (dates, mergeNotes, size, rent, area, tenant, ref hash, company type)
+  - [x] Date Updated, notes merge, mobile, property alerts, free-text requirement columns, company types, .xlsx, Check file
+  - [x] date_updated pinned by a second statement in the update transaction (src/lib/db/queries/import.ts)
+  - [x] scripts/kato-dry-run.mjs (aggregate counts, no database)
+  - [ ] Listings re-score and coordinates after import: NOT done (see report)
+  - [ ] Run a real "Check file" and import against the database after 0044 is applied
+- [x] Phase 3: companies list and record
+  - [x] Town and county filters removed from the companies list
+  - [x] Lead agent removed from company record and forms (column kept, update no longer writes it)
+  - [x] Date updated on company, contact, requirement records and lists (sortable on all three lists)
+- [ ] Phase 4: slide-out panel (4a done in code, NOT exercised in a browser)
+  - [x] src/lib/record-ref.ts + tests (`?record=<type>:<uuid>&tab=<slug>`)
+  - [x] ui/sheet.tsx, ui/tabs.tsx, components/record-panel/ (company, contact, requirement panels)
+  - [x] RowLink and RecordLink wired into Companies, Contacts, Requirements lists
+  - [x] Tabs done: company Overview, Contacts, Notes & activity, Requirements, Listings, Map; contact Overview, Notes & activity, Requirements, Map; requirement Overview, Contacts, Notes & activity, Matchmaker, Uploads, Send history
+  - [x] 4b: To-do tab on all five record types (tasks.entity_type/entity_id now set, agency-checked), Matchmaker tab on company and contact (top 5 per active requirement at 50+), Uploads tab on company and contact (db/migrations/0045_entity_documents.sql, NOT applied)
+  - [x] 4b: listing and deal panels; RowLink on /listings, CardLink on /deals, record links on /matches, panel on /tasks
+  - [ ] 4b: apply 0045, then try uploads, tasks and panels in a browser (no database or login was available)
+  - [x] RequirementRatingSlot filled (phase 5)
+  - [ ] Browser check with a database (login needed)
+- [x] Phase 5: rating and priority list (code done; NOT exercised against a database or in a browser)
+  - [x] src/lib/listing-rating.ts (labels, canEditRating, input check, filter, row helpers) + tests
+  - [x] setRequirementRating action (lead agent or admin only), agency-scoped write, edit form cannot change the column
+  - [x] StarRating component; record page, panel slot, requirements list column, sort and ?rating= filter
+  - [x] Dashboard "Priority requirements" (listPriorityRequirements, match count, row actions, panel host)
+  - [ ] Apply 0044, then try the rating as lead agent, admin, manager and other agent
+- [ ] Phase 6: matchmaker intel
+  - [x] County and region compare ignores case and stray spaces (src/lib/matching/place-key.ts)
+  - [x] Listing page shows no opportunities for a let, sold or withdrawn listing
+  - [x] src/lib/__tests__/score-location.test.ts (npm test now loads the alias hook)
+  - [ ] Import re-score: NOT done (later step)

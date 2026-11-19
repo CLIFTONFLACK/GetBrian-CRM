@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { WebsiteLink } from "@/components/website-link";
 import { notFound, redirect } from "next/navigation";
 import { Pencil, Plus, ShieldCheck } from "lucide-react";
 
@@ -42,6 +43,7 @@ import { listDisposalsForCompany } from "@/lib/db/queries/disposals";
 import { listActivitiesForEntity } from "@/lib/db/queries/activities";
 import { getLatestKycSummary } from "@/lib/db/queries/kyc";
 import { getLatestCompleteDeepDive } from "@/lib/db/queries/deep-dive";
+import { formatDateUpdated } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 
 // The Deep Dive action on this page calls a web-search model that researches
@@ -99,9 +101,7 @@ export default async function CompanyDetailPage({
   ]);
 
   const nameOf = new Map(members.map((m) => [m.id, m.name]));
-  const leadAgentName = company.lead_agent_id
-    ? (nameOf.get(company.lead_agent_id) ?? "Unknown agent")
-    : null;
+  const updated = formatDateUpdated(company.date_updated);
   const additionalAgents = agentRows.map((agentId) => ({
     id: agentId,
     name: nameOf.get(agentId) ?? "Unknown agent",
@@ -160,14 +160,7 @@ export default async function CompanyDetailPage({
           <CardContent className="space-y-3 text-sm">
             <Detail label="Website">
               {company.website ? (
-                <a
-                  href={company.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-info hover:underline"
-                >
-                  {company.website}
-                </a>
+                <WebsiteLink url={company.website} className="text-info hover:underline" />
               ) : (
                 "—"
               )}
@@ -178,7 +171,6 @@ export default async function CompanyDetailPage({
                 .filter(Boolean)
                 .join(", ") || "—"}
             </Detail>
-            <Detail label="Lead agent">{leadAgentName ?? "—"}</Detail>
             <Detail label="Agents">
               {additionalAgents.length > 0 ? (
                 <span className="flex flex-wrap gap-1.5">
@@ -194,6 +186,9 @@ export default async function CompanyDetailPage({
             </Detail>
             <Detail label="Notes">
               <span className="whitespace-pre-wrap">{company.notes ?? "—"}</span>
+            </Detail>
+            <Detail label="Date updated">
+              <span title={updated.title}>{updated.text}</span>
             </Detail>
           </CardContent>
         </Card>

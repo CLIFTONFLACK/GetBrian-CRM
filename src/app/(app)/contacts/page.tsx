@@ -11,6 +11,8 @@ import { FilterBar, FilterSelect } from "@/components/filter-bar";
 import { FilterTiles } from "@/components/filter-tiles";
 import { Heatmap } from "@/components/heatmap";
 import { PageHeader } from "@/components/page-header";
+import { RecordPanelHost } from "@/components/record-panel/record-panel";
+import { RecordLink, RowLink } from "@/components/record-panel/row-link";
 import { Pagination, resolvePage } from "@/components/pagination";
 import { SortHeader } from "@/components/sort-header";
 import { ViewOnMapButton } from "@/components/view-on-map-button";
@@ -33,6 +35,8 @@ import { currentAgencyId } from "@/lib/db/queries/agencies";
 import { getCompaniesByIds, listCompanyFacetRows } from "@/lib/db/queries/companies";
 import { getContactsByIds, listContactFacetRows } from "@/lib/db/queries/contacts";
 import { deriveCounty, HOME_COUNTIES } from "@/lib/locations";
+import { formatDateUpdated } from "@/lib/format-date";
+import { openRecordHref, parseRecordRef } from "@/lib/record-ref";
 import { filterHref, resolveSort } from "@/lib/sort";
 import { cn } from "@/lib/utils";
 
@@ -53,10 +57,24 @@ export default async function ContactsPage({
     town?: string;
     county?: string;
     page?: string;
+    record?: string;
+    tab?: string;
+    flex?: string;
   }>;
 }) {
   if (!isDbConfigured) redirect("/login");
-  const { q, sort, dir, role, town, county, page: pageParam } = await searchParams;
+  const {
+    q,
+    sort,
+    dir,
+    role,
+    town,
+    county,
+    page: pageParam,
+    record: recordParam,
+    tab: tabParam,
+    flex: flexParam,
+  } = await searchParams;
 
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -66,7 +84,7 @@ export default async function ContactsPage({
   const { column, ascending } = resolveSort(
     sort,
     dir,
-    { name: "first_name", role: "role" },
+    { name: "first_name", role: "role", date_updated: "date_updated" },
     { column: "first_name", ascending: true },
   );
 
@@ -76,7 +94,7 @@ export default async function ContactsPage({
   // set.
   const facetRows = await listContactFacetRows(agencyId, {
     q,
-    column: column as "first_name" | "role",
+    column: column as "first_name" | "role" | "date_updated",
     ascending,
   });
   // `rows` is the tile base (q filtered). The role/town facets are applied to
@@ -97,7 +115,12 @@ export default async function ContactsPage({
       matchesCounty(c.county),
   );
 
+  // `params` feeds every sort, filter and page link, so those links drop
+  // `record` and `tab`: changing the list closes the panel. `panelBase` adds the
+  // page number, so opening a row leaves the list on the same page.
   const params = { q, sort, dir, role, town, county };
+  const panelBase = { ...params, page: pageParam };
+  const openRef = parseRecordRef(recordParam);
 
   const townOptions = [...new Set(rows.map((c) => c.city).filter(Boolean))]
     .sort()
@@ -316,6 +339,12 @@ export default async function ContactsPage({
               <TableHead className="hidden md:table-cell">Company</TableHead>
               <TableHead className="hidden md:table-cell">Email</TableHead>
               <TableHead className="hidden md:table-cell">Phone</TableHead>
+              <SortHeader
+                column="date_updated"
+                label="Date updated"
+                params={params}
+                className="hidden md:table-cell"
+              />
               <TableHead className="w-24 text-right">
                 <span className="sr-only">Map</span>
               </TableHead>
@@ -325,15 +354,18 @@ export default async function ContactsPage({
             {pageRows.map((c) => {
               const r = contactRoleBadge(c.role, roleLabel(roles, c.role));
               const point = contactPoints.get(c.id);
+              const updated = formatDateUpdated(c.date_updated);
+              const openHref = openRecordHref(panelBase, { type: "contact", id: c.id });
               return (
-                <TableRow key={c.id}>
+                <RowLink
+                  key={c.id}
+                  href={openHref}
+                  active={openRef?.type === "contact" && openRef.id === c.id}
+                >
                   <TableCell>
-                    <Link
-                      href={`/contacts/${c.id}`}
-                      className="font-medium text-foreground hover:text-info hover:underline"
-                    >
+                    <RecordLink href={`/contacts/${c.id}`} openHref={openHref}>
                       {[c.first_name, c.last_name].filter(Boolean).join(" ")}
-                    </Link>
+                    </RecordLink>
                   </TableCell>
                   <TableCell>
                     <Badge tone={r.tone}>{r.label}</Badge>
@@ -347,10 +379,13 @@ export default async function ContactsPage({
                   <TableCell className="hidden text-muted-foreground md:table-cell">
                     {c.phone ?? "—"}
                   </TableCell>
+                  <TableCell className="hidden text-muted-foreground md:table-cell">
+                    <span title={updated.title}>{updated.text}</span>
+                  </TableCell>
                   <TableCell className="text-right">
                     {point ? <ViewOnMapButton point={point} /> : null}
                   </TableCell>
-                </TableRow>
+                </RowLink>
               );
             })}
           </TableBody>
@@ -363,6 +398,13 @@ export default async function ContactsPage({
         total={total}
         noun="contacts"
         unfilteredTotal={rows.length}
+      />
+
+      <RecordPanelHost
+        recordParam={recordParam}
+        tabParam={tabParam}
+        flexParam={flexParam}
+        base={panelBase}
       />
     </div>
   );

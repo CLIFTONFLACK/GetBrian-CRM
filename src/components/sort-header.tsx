@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 
 import { TableHead } from "@/components/ui/table";
-import { sortHref } from "@/lib/sort";
+import { sortHref, type SortDir } from "@/lib/sort";
 import { cn } from "@/lib/utils";
 
 /** A sortable table column header — a Link that toggles the URL sort/dir params. */
@@ -11,11 +11,14 @@ export function SortHeader({
   label,
   params,
   className,
+  firstDir = "asc",
 }: {
   column: string;
   label: string;
   params: Record<string, string | undefined>;
   className?: string;
+  /** Direction of the first click when this column is not the active sort. */
+  firstDir?: SortDir;
 }) {
   const active = params.sort === column;
   const asc = params.dir !== "desc";
@@ -23,7 +26,7 @@ export function SortHeader({
   return (
     <TableHead className={className}>
       <Link
-        href={sortHref(params, column)}
+        href={sortHref(params, column, firstDir)}
         aria-label={`Sort by ${label}`}
         className={cn(
           "inline-flex items-center gap-1 transition-colors hover:text-foreground",

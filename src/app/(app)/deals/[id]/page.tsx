@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { EmailLink } from "@/components/email-link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Building2, Target } from "lucide-react";
 
@@ -265,12 +266,7 @@ export default async function DealDetailPage({
                 {listingContact.email ? (
                   <>
                     {" · "}
-                    <a
-                      href={`mailto:${listingContact.email}`}
-                      className="text-info hover:underline"
-                    >
-                      {listingContact.email}
-                    </a>
+                    <EmailLink email={listingContact.email} className="text-info hover:underline" />
                   </>
                 ) : null}
                 {listingContact.phone ? ` · ${listingContact.phone}` : ""}

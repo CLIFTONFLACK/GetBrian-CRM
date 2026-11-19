@@ -2,19 +2,22 @@
 
 import { del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
+import { revalidatePanelHosts } from "@/lib/revalidate-panels";
 import { redirect } from "next/navigation";
 
 import { refreshMatchesForRequirement } from "@/lib/actions/matches";
 import { auth } from "@/lib/auth";
 import { isBlobHostedUrl } from "@/lib/blob-url";
 import { isDbConfigured } from "@/lib/db/client";
-import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { currentAgencyId, isAgencyAdmin } from "@/lib/db/queries/agencies";
 import {
   companyBelongsToAgency,
   contactBelongsToAgency,
   createRequirement as createRequirementRow,
   deleteRequirement as deleteRequirementRow,
   getRequirementForUpdate,
+  getRequirementRatingContext,
+  setRequirementListingRating,
   syncRequirementAgents,
   updateRequirement as updateRequirementRow,
   type RequirementWriteInput,
@@ -22,6 +25,7 @@ import {
 import { createNotifications } from "@/lib/db/queries/messages";
 import { Constants, type Database } from "@/lib/database.types";
 import { requirementLinkError } from "@/lib/requirement-rules";
+import { canEditRating, parseRatingInput, RATING_NOT_ALLOWED } from "@/lib/listing-rating";
 import type { FormState } from "@/lib/actions/types";
 
 type UseClass = Database["public"]["Enums"]["use_class"];
@@ -222,6 +226,7 @@ export async function quickCreateRequirement(
   await refreshMatchesForRequirement(id);
 
   revalidatePath("/requirements");
+  revalidatePanelHosts();
   if (data.companyId) revalidatePath(`/companies/${data.companyId}`);
   if (data.contactId) revalidatePath(`/contacts/${data.contactId}`);
   return { created: { id, name: data.title }, message: `Added ${data.title}.` };
@@ -276,6 +281,7 @@ export async function updateRequirement(
 
   revalidatePath("/requirements");
   revalidatePath(`/requirements/${id}`);
+  revalidatePanelHosts();
   redirect(`/requirements/${id}`);
 }
 
@@ -306,4 +312,48 @@ export async function deleteRequirement(formData: FormData): Promise<void> {
     }
   }
   redirect("/requirements");
+}
+
+/**
+ * Sets or clears a requirement's Listing Rating (1 to 5, or null = not rated).
+ *
+ * THE permission check for the rating lives here: only the requirement's lead
+ * agent or an agency admin may write it. Managers and additional agents may
+ * not. The requirement is loaded by id AND the caller's agency, so one in
+ * another agency gives the same answer as one that does not exist.
+ * updateRequirement (the edit form) never writes this column.
+ */
+export async function setRequirementRating(
+  requirementId: string,
+  rating: number | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const parsed = parseRatingInput(rating);
+  if (!parsed.ok) return { ok: false, error: "Choose a rating from 1 to 5 stars." };
+  if (typeof requirementId !== "string" || requirementId.length === 0) {
+    return { ok: false, error: "Requirement not found." };
+  }
+
+  const caller = await requireCaller();
+  if ("error" in caller) return { ok: false, error: caller.error };
+
+  const current = await getRequirementRatingContext(caller.agencyId, requirementId);
+  if (!current) return { ok: false, error: "Requirement not found." };
+
+  const admin = await isAgencyAdmin(caller.userId, caller.agencyId);
+  if (
+    !canEditRating({ userId: caller.userId, leadAgentId: current.lead_agent_id, isAdmin: admin })
+  ) {
+    return { ok: false, error: `${RATING_NOT_ALLOWED}.` };
+  }
+
+  const saved = await setRequirementListingRating(
+    caller.agencyId,
+    requirementId,
+    parsed.value,
+  );
+  if (!saved) return { ok: false, error: "Requirement not found." };
+
+  revalidatePath(`/requirements/${requirementId}`);
+  revalidatePanelHosts();
+  return { ok: true };
 }

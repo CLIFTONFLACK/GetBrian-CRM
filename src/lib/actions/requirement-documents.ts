@@ -2,6 +2,7 @@
 
 import { del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
+import { revalidatePanelHosts } from "@/lib/revalidate-panels";
 
 import { auth } from "@/lib/auth";
 import { isOurBlobUrl } from "@/lib/blob-url";
@@ -80,6 +81,8 @@ export async function addRequirementDocument(
   });
 
   revalidatePath(`/requirements/${requirementId}`);
+  // The records panel lists these documents on any of the three list pages.
+  revalidatePanelHosts();
   return { message: "Document added." };
 }
 
@@ -102,5 +105,8 @@ export async function deleteRequirementDocument(formData: FormData): Promise<voi
       // Best-effort: the metadata row is already gone either way.
     });
   }
-  if (requirementId) revalidatePath(`/requirements/${requirementId}`);
+  if (requirementId) {
+    revalidatePath(`/requirements/${requirementId}`);
+    revalidatePanelHosts();
+  }
 }

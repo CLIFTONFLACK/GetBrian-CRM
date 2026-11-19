@@ -1,10 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 
 import { auth } from "@/lib/auth";
+import { revalidatePanelHosts } from "@/lib/revalidate-panels";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { entityExistsInAgency } from "@/lib/db/queries/entity-exists";
 import { createNotifications } from "@/lib/db/queries/messages";
 import {
   createTask as createTaskRow,
@@ -12,6 +13,8 @@ import {
   setTaskStatus,
 } from "@/lib/db/queries/tasks";
 import type { FormState } from "@/lib/actions/types";
+import { parseDueInput } from "@/lib/london-time";
+import { parseTaskEntity } from "@/lib/task-entity";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 
@@ -31,10 +34,24 @@ export async function createTask(
   if (!title) return { error: "A task title is required." };
   const details = str(formData, "details") || null;
   const dueAtRaw = str(formData, "due_at");
-  const dueAt = dueAtRaw ? new Date(dueAtRaw).toISOString() : null;
+  // The form sends a wall-clock time with no zone. It means Europe/London time,
+  // which is also how the task is shown, so read it that way (the server is UTC).
+  const dueDate = dueAtRaw ? parseDueInput(dueAtRaw) : null;
+  if (dueAtRaw && !dueDate) return { error: "That due date is not valid." };
+  const dueAt = dueDate ? dueDate.toISOString() : null;
   const assigneeId = str(formData, "assignee_id") || null;
 
-  await createTaskRow(agencyId, session.user.id, { title, details, dueAt, assigneeId });
+  // Optional record. Both fields are checked against the allow-list, and the
+  // record must exist in the caller's agency: the action can be posted to
+  // directly, so the form is not the boundary.
+  const parsed = parseTaskEntity(formData.get("entity_type"), formData.get("entity_id"));
+  if (!parsed.ok) return { error: parsed.error };
+  const entity = parsed.entity;
+  if (entity && !(await entityExistsInAgency(agencyId, entity.type, entity.id))) {
+    return { error: "That record was not found." };
+  }
+
+  await createTaskRow(agencyId, session.user.id, { title, details, dueAt, assigneeId, entity });
 
   // Notify the assignee (if someone else was given the task) — reuses
   // messages.ts's bulk-insert notifications helper rather than duplicating
@@ -47,7 +64,7 @@ export async function createTask(
     });
   }
 
-  revalidatePath("/tasks");
+  revalidatePanelHosts();
   return { message: "Task added." };
 }
 
@@ -66,7 +83,7 @@ export async function toggleTaskStatus(formData: FormData): Promise<void> {
   if (intent !== "mark_done" && intent !== "mark_open") return;
 
   await setTaskStatus(agencyId, id, intent === "mark_done" ? "done" : "open");
-  revalidatePath("/tasks");
+  revalidatePanelHosts();
 }
 
 /** Delete a task. */
@@ -79,5 +96,5 @@ export async function deleteTask(formData: FormData): Promise<void> {
   if (!id || !agencyId) return;
 
   await deleteTaskRow(agencyId, id);
-  revalidatePath("/tasks");
+  revalidatePanelHosts();
 }

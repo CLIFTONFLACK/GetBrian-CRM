@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { EmailLink } from "@/components/email-link";
 import { notFound, redirect } from "next/navigation";
 import { Pencil } from "lucide-react";
 
@@ -24,6 +25,7 @@ import { getContactAgentIds, getContactById } from "@/lib/db/queries/contacts";
 import { listActivitiesForEntity } from "@/lib/db/queries/activities";
 import { listRequirementsForContact } from "@/lib/db/queries/requirements";
 import { requirementStatusBadge } from "@/lib/badges";
+import { formatDateUpdated } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 
 export async function generateMetadata({
@@ -67,6 +69,7 @@ export default async function ContactDetailPage({
     listRequirementsForContact(agencyId, id),
   ]);
 
+  const dateUpdated = formatDateUpdated(contact.date_updated);
   const nameOf = new Map(members.map((m) => [m.id, m.name]));
   const leadAgentName = contact.lead_agent_id
     ? (nameOf.get(contact.lead_agent_id) ?? "Unknown agent")
@@ -137,9 +140,7 @@ export default async function ContactDetailPage({
           </Row>
           <Row label="Email">
             {contact.email ? (
-              <a href={`mailto:${contact.email}`} className="text-info hover:underline">
-                {contact.email}
-              </a>
+              <EmailLink email={contact.email} className="text-info hover:underline" />
             ) : (
               "—"
             )}
@@ -179,6 +180,9 @@ export default async function ContactDetailPage({
           ) : null}
           <Row label="Notes">
             <span className="whitespace-pre-wrap">{contact.notes ?? "—"}</span>
+          </Row>
+          <Row label="Date updated">
+            <span title={dateUpdated.title}>{dateUpdated.text}</span>
           </Row>
         </CardContent>
       </Card>

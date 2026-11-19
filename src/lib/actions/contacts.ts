@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidatePanelHosts } from "@/lib/revalidate-panels";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
@@ -17,6 +18,7 @@ import {
   type ContactWriteInput,
   setContactPrimary,
 } from "@/lib/db/queries/contacts";
+import { isValidContactEmail } from "@/lib/contact-links";
 import { contactRoleSlugExists } from "@/lib/db/queries/lookups";
 import { getCompanyName } from "@/lib/db/queries/companies";
 import { deriveCounty } from "@/lib/locations";
@@ -54,6 +56,9 @@ function writeInput(fd: FormData, role: string): ContactWriteInput {
     marketingOptIn: fd.get("marketing_opt_in") != null,
   };
 }
+
+const EMAIL_ERROR =
+  "The email address is not valid. Enter one address, for example name@company.com.";
 
 function addressParts(input: ContactWriteInput) {
   return { address_line: input.addressLine, city: input.city, postcode: input.postcode };
@@ -109,6 +114,9 @@ export async function createContact(
   const role = await validRole(str(formData, "role") || "other");
   const input = writeInput(formData, role);
   if (!input.firstName) return { error: "A first name is required." };
+  // Empty stays allowed. Anything else must be one plain address: the value is
+  // later used in a mailto: link.
+  if (input.email && !isValidContactEmail(input.email)) return { error: EMAIL_ERROR };
   input.companyId = await ownedCompanyId(agencyId, input.companyId);
   const isPrimary = primaryFlag(formData, input.companyId);
   if (typeof isPrimary !== "boolean") return isPrimary;
@@ -155,6 +163,13 @@ export async function updateContact(
 
   const existing = await getContactForUpdate(agencyId, id);
   if (!existing) return { error: "This contact no longer exists." };
+  // Empty stays allowed. A new or changed address must be one plain address
+  // (it is used in a mailto: link). An address left as it is stored is accepted
+  // even if it fails the check, so an old record can still be edited; the link
+  // for it is simply not made.
+  if (input.email && input.email !== existing.email && !isValidContactEmail(input.email)) {
+    return { error: EMAIL_ERROR };
+  }
 
   const geo = await geocodeForSave(addressParts(input), existing);
   const updated = await updateContactRow(agencyId, id, existing.updated_at, input, geo);
@@ -171,6 +186,7 @@ export async function updateContact(
   revalidatePath("/contacts");
   revalidatePath("/companies");
   revalidatePath(`/contacts/${id}`);
+  revalidatePanelHosts();
   redirect(`/contacts/${id}`);
 }
 
@@ -193,6 +209,9 @@ export async function quickCreateContact(
   const role = await validRole(str(formData, "role") || "other");
   const input = writeInput(formData, role);
   if (!input.firstName) return { error: "A first name is required." };
+  // Empty stays allowed. Anything else must be one plain address: the value is
+  // later used in a mailto: link.
+  if (input.email && !isValidContactEmail(input.email)) return { error: EMAIL_ERROR };
   input.companyId = await ownedCompanyId(agencyId, input.companyId);
 
   if (formData.get("allow_duplicate") == null) {

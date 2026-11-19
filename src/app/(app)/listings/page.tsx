@@ -11,6 +11,7 @@ import { FilterTiles } from "@/components/filter-tiles";
 import { Heatmap } from "@/components/heatmap";
 import { ListingsTable, type ListingTableRow } from "@/components/listings-table";
 import { PageHeader } from "@/components/page-header";
+import { RecordPanelHost } from "@/components/record-panel/record-panel";
 import { Pagination, resolvePage } from "@/components/pagination";
 import { SiloTabs } from "@/components/silo-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +24,7 @@ import { getDisposalsByIds, listDisposalFacetRows } from "@/lib/db/queries/dispo
 import { getMapLayers } from "@/lib/db/queries/map-points";
 import { listingAgentLabel, OWN_BOOK_LABEL } from "@/lib/intel/sources";
 import { deriveCounty, HOME_COUNTIES } from "@/lib/locations";
+import { parseRecordRef } from "@/lib/record-ref";
 import { filterHref, resolveSort } from "@/lib/sort";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +51,9 @@ export default async function ListingsPage({
     agent?: string;
     silo?: string;
     page?: string;
+    record?: string;
+    tab?: string;
+    flex?: string;
   }>;
 }) {
   const {
@@ -62,6 +67,9 @@ export default async function ListingsPage({
     agent,
     silo,
     page: pageParam,
+    record: recordParam,
+    tab: tabParam,
+    flex: flexParam,
   } = await searchParams;
 
   if (!isDbConfigured) redirect("/login");
@@ -185,7 +193,12 @@ export default async function ListingsPage({
     );
   }
 
+  // `params` feeds every sort, filter and page link, so those links drop
+  // `record` and `tab`: changing the list closes the panel. `panelBase` adds the
+  // page number, so opening a row leaves the list on the same page.
   const params = { q, sort, dir, status, disposal_type, town, county, agent, silo: activeSilo };
+  const panelBase = { ...params, page: pageParam };
+  const openRef = parseRecordRef(recordParam);
 
   const townOptions = [...new Set(siloRows.map((r) => r.city).filter(Boolean))]
     .sort()
@@ -419,6 +432,8 @@ export default async function ListingsPage({
             }),
           )}
           params={params}
+          panelBase={panelBase}
+          openListingId={openRef?.type === "listing" ? openRef.id : null}
           agents={agents}
         />
       )}
@@ -429,6 +444,13 @@ export default async function ListingsPage({
         total={total}
         noun="listings"
         unfilteredTotal={siloRows.length}
+      />
+
+      <RecordPanelHost
+        recordParam={recordParam}
+        tabParam={tabParam}
+        flexParam={flexParam}
+        base={panelBase}
       />
     </div>
   );

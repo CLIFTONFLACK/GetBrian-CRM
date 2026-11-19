@@ -1,4 +1,6 @@
 import { sql } from "@/lib/db/client";
+import { touchDateUpdated } from "@/lib/db/queries/date-updated";
+import type { TaskEntity } from "@/lib/task-entity";
 
 // DAO for public.tasks (db/migrations/0029_tasks.sql — standalone to-dos with
 // an optional assignee, due date and a polymorphic entity link). Every
@@ -26,6 +28,9 @@ export type TaskWriteInput = {
   /** ISO timestamp, or null for "no due date". */
   dueAt: string | null;
   assigneeId: string | null;
+  /** The record the task belongs to. The caller has already validated it
+   *  against the allow-list and the agency (see src/lib/actions/tasks.ts). */
+  entity?: TaskEntity | null;
 };
 
 export async function createTask(
@@ -33,12 +38,39 @@ export async function createTask(
   createdBy: string,
   input: TaskWriteInput,
 ): Promise<{ id: string }> {
+  const entity = input.entity ?? null;
   const rows = await sql`
-    insert into public.tasks (agency_id, title, details, due_at, assignee_id, created_by)
-    values (${agencyId}, ${input.title}, ${input.details}, ${input.dueAt}, ${input.assigneeId}, ${createdBy})
+    insert into public.tasks (
+      agency_id, title, details, due_at, assignee_id, created_by, entity_type, entity_id
+    )
+    values (
+      ${agencyId}, ${input.title}, ${input.details}, ${input.dueAt}, ${input.assigneeId},
+      ${createdBy}, ${entity?.type ?? null}, ${entity?.id ?? null}
+    )
     returning id
   `;
+  if (entity) await touchDateUpdated(entity.type, entity.id, agencyId);
   return rows[0] as { id: string };
+}
+
+/** Every task attached to one record: open first (soonest due first, no due
+ *  date last), then done (most recently changed first). */
+export async function listTasksForEntity(
+  agencyId: string,
+  entityType: string,
+  entityId: string,
+  limit = 100,
+): Promise<Task[]> {
+  return (await sql`
+    select id, title, details, due_at::text as due_at, assignee_id,
+           entity_type, entity_id, status, created_by
+    from public.tasks
+    where agency_id = ${agencyId} and entity_type = ${entityType} and entity_id = ${entityId}
+    order by (status = 'done'),
+             case when status = 'open' then due_at end asc nulls last,
+             case when status = 'done' then updated_at end desc
+    limit ${limit}
+  `) as Task[];
 }
 
 /** "My tasks" — assigned to me, or created by me and still unassigned.
@@ -150,8 +182,10 @@ export async function setTaskStatus(
   const rows = await sql`
     update public.tasks set status = ${status}
     where id = ${id} and agency_id = ${agencyId}
-    returning id
+    returning id, entity_type, entity_id
   `;
+  const row = rows[0] as { entity_type: string | null; entity_id: string | null } | undefined;
+  if (row) await touchDateUpdated(row.entity_type, row.entity_id, agencyId);
   return rows.length > 0;
 }
 

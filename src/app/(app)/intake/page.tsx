@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { EmailLink } from "@/components/email-link";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { Inbox, Mail, Phone } from "lucide-react";
@@ -115,9 +116,7 @@ function SubmissionCard({
             {s.email ? (
               <span className="inline-flex items-center gap-1">
                 <Mail className="h-3.5 w-3.5" />
-                <a href={`mailto:${s.email}`} className="hover:underline">
-                  {s.email}
-                </a>
+                <EmailLink email={s.email} className="hover:underline" />
               </span>
             ) : null}
             {s.phone ? (

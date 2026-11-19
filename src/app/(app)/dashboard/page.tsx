@@ -12,6 +12,7 @@ import {
   MessageSquare,
   PoundSterling,
   Sparkles,
+  Star,
   Store,
   Target,
   UserPlus,
@@ -22,6 +23,11 @@ import { redirect } from "next/navigation";
 
 import { ConcentrationMap } from "@/components/concentration-map-lazy";
 import { EmptyState } from "@/components/empty-state";
+import {
+  PriorityRequirements,
+  type PriorityRowView,
+} from "@/components/dashboard/priority-requirements";
+import { RecordPanelHost } from "@/components/record-panel/record-panel";
 import { StatsBar } from "@/components/stats-bar";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -36,8 +42,17 @@ import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId, getAgencyName } from "@/lib/db/queries/agencies";
 import { countCompanies } from "@/lib/db/queries/companies";
-import { listDisposalStatuses } from "@/lib/db/queries/disposals";
-import { countActiveRequirements } from "@/lib/db/queries/requirements";
+import { listDisposalStatuses, listDisposalsForMatching } from "@/lib/db/queries/disposals";
+import {
+  countActiveRequirements,
+  listPriorityRequirements,
+} from "@/lib/db/queries/requirements";
+import {
+  countStrongMatches,
+  PRIORITY_LIMIT,
+  shapePriorityRow,
+} from "@/lib/priority-list";
+import { openRecordHref } from "@/lib/record-ref";
 import { listDealsForReports, listOpenDealReminders } from "@/lib/db/queries/deals";
 import { listRecentActivitiesForAgency } from "@/lib/db/queries/dashboard";
 import { countOpenAssignedTasks, countOverdueAssignedTasks } from "@/lib/db/queries/tasks";
@@ -93,8 +108,13 @@ const fmtWhen = (iso: string) =>
     timeStyle: "short",
   });
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ record?: string; tab?: string; flex?: string }>;
+}) {
   if (!isDbConfigured) redirect("/login");
+  const { record: recordParam, tab: tabParam, flex: flexParam } = await searchParams;
   const session = await auth();
   if (!session?.user) redirect("/login");
   const me = session.user.id;
@@ -114,6 +134,7 @@ export default async function DashboardPage() {
     unreadCount,
     mapLayers,
     agencyName,
+    priorityRows,
   ] = agencyId
     ? await Promise.all([
         countCompanies(agencyId),
@@ -130,13 +151,35 @@ export default async function DashboardPage() {
         countUnreadMessages(agencyId, me),
         getMapLayers(agencyId, { include: ["listing"] }),
         getAgencyName(agencyId),
+        listPriorityRequirements(agencyId, { limit: PRIORITY_LIMIT }),
       ])
-    : [0, [], 0, [], [], 0, 0, [], 0, { listings: [], companies: [], contacts: [] }, null];
+    : [0, [], 0, [], [], 0, 0, [], 0, { listings: [], companies: [], contacts: [] }, null, []];
 
   const openDeals = allDeals.filter((d) => !CLOSED_STAGES.has(d.stage));
   const wonDeals = allDeals.filter((d) => d.stage === "completed");
   const pipelineValue = openDeals.reduce((sum, d) => sum + (d.value ?? 0), 0);
   const wonValue = wonDeals.reduce((sum, d) => sum + (d.value ?? 0), 0);
+
+  // Priority requirements: the match count is scored with the same functions
+  // the requirement page uses. Listings are loaded ONCE for the whole section
+  // (and not at all when nothing is rated 4 or 5), then each of the (at most
+  // PRIORITY_LIMIT) rows is scored against the matchable ones.
+  const matchable =
+    agencyId && priorityRows.length > 0
+      ? (await listDisposalsForMatching(agencyId)).filter((d) => isListingMatchable(d.status))
+      : [];
+  // Links keep the dashboard URL and add or change only `record` and `tab`.
+  const priorityViews: PriorityRowView[] = priorityRows.map((row) => ({
+    ...shapePriorityRow(row, countStrongMatches(row, matchable)),
+    openHref: openRecordHref({}, { type: "requirement", id: row.id }),
+    matchmakerHref: openRecordHref({}, { type: "requirement", id: row.id }, "matchmaker"),
+    companyOpenHref: row.company_id
+      ? openRecordHref({}, { type: "company", id: row.company_id })
+      : null,
+    contactOpenHref: row.contact_id
+      ? openRecordHref({}, { type: "contact", id: row.contact_id })
+      : null,
+  }));
 
   const activeListings = listingStatusRows.filter((l) => isListingMatchable(l.status)).length;
 
@@ -276,6 +319,40 @@ export default async function DashboardPage() {
         })}
       </div>
 
+      {/* ── Priority requirements ─────────────────────────────── */}
+      <section className="mt-8" aria-labelledby="priority-heading">
+        <div className="mb-2 flex items-end justify-between gap-3 px-1">
+          <div>
+            <h2
+              id="priority-heading"
+              className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+            >
+              Priority requirements
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Active requirements rated 4 or 5 stars. The lead agent sets the rating.
+            </p>
+          </div>
+          {priorityViews.length > 0 ? (
+            <Link
+              href="/requirements?rating=4plus"
+              className="inline-flex min-h-11 items-center text-sm text-info hover:underline"
+            >
+              View all
+            </Link>
+          ) : null}
+        </div>
+        {priorityViews.length === 0 ? (
+          <EmptyState
+            icon={Star}
+            title="No requirements are rated 4 or 5 stars yet."
+            description="The lead agent sets the rating on a requirement."
+          />
+        ) : (
+          <PriorityRequirements rows={priorityViews} />
+        )}
+      </section>
+
       {/* ── My work ───────────────────────────────────────────── */}
       <div className="mt-8">
         <p className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -386,6 +463,13 @@ export default async function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      <RecordPanelHost
+        recordParam={recordParam}
+        tabParam={tabParam}
+        flexParam={flexParam}
+        base={{}}
+      />
     </div>
   );
 }

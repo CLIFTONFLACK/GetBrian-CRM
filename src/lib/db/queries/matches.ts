@@ -110,3 +110,18 @@ export async function setMatchStatus(
     where public.matches.agency_id = ${agencyId}
   `;
 }
+
+/** Persisted decisions for a handful of requirements only. The records panel
+ *  needs them for one company's or contact's briefs, not for the whole agency,
+ *  so this binds the ids as one array parameter and reads nothing else. */
+export async function listMatchStatusesForRequirements(
+  agencyId: string,
+  requirementIds: string[],
+): Promise<MatchRow[]> {
+  if (requirementIds.length === 0) return [];
+  return (await sql`
+    select requirement_id, listing_id, status
+    from public.matches
+    where agency_id = ${agencyId} and requirement_id = ANY(${requirementIds}::uuid[])
+  `) as MatchRow[];
+}

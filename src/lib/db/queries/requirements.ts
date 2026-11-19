@@ -1,6 +1,7 @@
 import { sql } from "@/lib/db/client";
 import { escapeLike } from "@/lib/search";
 import type { Database } from "@/lib/database.types";
+import { touchDateUpdated } from "@/lib/db/queries/date-updated";
 
 // DAO for public.requirements (+ its requirement_agents join table). Every
 // function takes the caller's agencyId as a mandatory first parameter and
@@ -39,6 +40,10 @@ export type Requirement = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /** Last touch by edit or child write (0044). Not the optimistic-lock token. */
+  date_updated: string;
+  /** 1 (weak) to 5 (strong); null = unrated (0044). */
+  listing_rating: number | null;
   property_types: string[];
   max_guide_price: number | null;
   fit_out_prefs: string[];
@@ -63,6 +68,7 @@ const FULL_COLUMNS = `
   max_rent::float8 as max_rent, max_premium::float8 as max_premium,
   tenure_prefs::text[] as tenure_prefs, notes, status, created_by,
   created_at::text as created_at, updated_at::text as updated_at,
+  date_updated::text as date_updated, listing_rating,
   property_types, max_guide_price::float8 as max_guide_price, fit_out_prefs, lead_agent_id,
   target_counties, target_postcode_districts, target_neighbourhoods, target_london_zones
 `;
@@ -97,23 +103,35 @@ export type RequirementFacetRow = {
   target_london_zones: string[];
   created_at: string;
   use_classes: UseClass[];
+  listing_rating: number | null;
 };
 
 const FACET_COLUMNS = `
   id, status, target_towns, target_regions, target_counties, target_postcode_districts,
   target_neighbourhoods, target_london_zones, created_at::text as created_at,
-  use_classes::text[] as use_classes
+  use_classes::text[] as use_classes, listing_rating
 `;
 
 /** Whitelist of columns listRequirementFacetRows may ORDER BY — the value
  *  reaches sql.unsafe, so it must be re-checked at runtime, not just typed. */
-const REQUIREMENT_FACET_SORT_COLUMNS = new Set(["title", "max_rent", "status", "created_at"]);
+const REQUIREMENT_FACET_SORT_COLUMNS = new Set([
+  "title",
+  "max_rent",
+  "status",
+  "created_at",
+  "date_updated",
+  "listing_rating",
+]);
 
 /** The requirements-list aggregate pass (search applied, unpaginated, sorted
  *  by the caller's chosen column) — source for the tiles and stats bar. */
 export async function listRequirementFacetRows(
   agencyId: string,
-  opts: { q?: string; column: "title" | "max_rent" | "status"; ascending: boolean },
+  opts: {
+    q?: string;
+    column: "title" | "max_rent" | "status" | "date_updated" | "listing_rating";
+    ascending: boolean;
+  },
 ): Promise<RequirementFacetRow[]> {
   const pattern = opts.q ? `%${escapeLike(opts.q)}%` : null;
   // Re-validate the sort column against a Set here rather than trusting the
@@ -121,7 +139,10 @@ export async function listRequirementFacetRows(
   // param that slipped past the type must not become raw SQL (mirrors the
   // FACET_SORT_COLUMNS pattern in disposals.ts).
   const column = REQUIREMENT_FACET_SORT_COLUMNS.has(opts.column) ? opts.column : "created_at";
-  const order = `${column} ${opts.ascending ? "asc" : "desc"}`;
+  // Unrated rows sort last in both directions.
+  const order = `${column} ${opts.ascending ? "asc" : "desc"}${
+    column === "listing_rating" ? " nulls last" : ""
+  }, id`;
   return (await sql`
     select ${sql.unsafe(FACET_COLUMNS)}
     from public.requirements
@@ -139,6 +160,96 @@ export async function countActiveRequirements(agencyId: string): Promise<number>
     where agency_id = ${agencyId} and status = 'active'
   `;
   return (rows[0] as { count: number }).count;
+}
+
+/** What the rating write path needs to decide who may change a rating. */
+export async function getRequirementRatingContext(
+  agencyId: string,
+  id: string,
+): Promise<{ lead_agent_id: string | null; listing_rating: number | null } | null> {
+  const rows = await sql`
+    select lead_agent_id, listing_rating
+    from public.requirements
+    where id = ${id} and agency_id = ${agencyId}
+    limit 1
+  `;
+  return (rows[0] as { lead_agent_id: string | null; listing_rating: number | null } | undefined) ?? null;
+}
+
+/**
+ * The ONLY write path for requirements.listing_rating from the app (besides the
+ * importer, which does not touch it). Agency scoped. A rating change is not a
+ * form edit: the 0044 trigger ignores listing_rating when it decides whether to
+ * move updated_at, so the optimistic-lock token of an open edit form stays
+ * valid. date_updated is set here, in the same UPDATE, so the record still
+ * reads as recently worked. Returns false when no row matched (missing, or in
+ * another agency).
+ */
+export async function setRequirementListingRating(
+  agencyId: string,
+  id: string,
+  rating: number | null,
+): Promise<boolean> {
+  const rows = await sql`
+    update public.requirements
+    set listing_rating = ${rating}, date_updated = now()
+    where id = ${id} and agency_id = ${agencyId}
+    returning id
+  `;
+  return rows.length > 0;
+}
+
+/** One row of the dashboard's "Priority requirements" list. */
+export type PriorityRequirementRow = MatchRequirement & {
+  status: ReqStatus;
+  listing_rating: number;
+  date_updated: string;
+  company_name: string | null;
+  contact_id: string | null;
+  contact_first_name: string | null;
+  contact_last_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  contact_mobile: string | null;
+  lead_agent_name: string | null;
+};
+
+/**
+ * Active requirements rated 4 or 5, best rating first, then most recently
+ * updated. Carries the MatchMaker columns so the caller can score the rows
+ * without a second requirements query. Agency scoped; uses the partial index
+ * on listing_rating >= 4 from 0044.
+ */
+export async function listPriorityRequirements(
+  agencyId: string,
+  opts: { limit: number },
+): Promise<PriorityRequirementRow[]> {
+  const limit = Math.max(1, Math.min(100, Math.floor(opts.limit)));
+  return (await sql`
+    select r.id, r.title, r.lead_agent_id, r.company_id, r.target_towns, r.target_regions,
+           r.target_counties, r.target_postcode_districts, r.target_neighbourhoods,
+           r.target_london_zones,
+           r.min_sqft::float8 as min_sqft, r.max_sqft::float8 as max_sqft,
+           r.min_covers, r.max_covers,
+           r.use_classes::text[] as use_classes, r.tenure_prefs::text[] as tenure_prefs,
+           r.max_rent::float8 as max_rent, r.max_premium::float8 as max_premium,
+           r.max_guide_price::float8 as max_guide_price,
+           r.status, r.listing_rating, r.date_updated::text as date_updated,
+           c.name as company_name,
+           ct.id as contact_id, ct.first_name as contact_first_name,
+           ct.last_name as contact_last_name, ct.email as contact_email,
+           ct.phone as contact_phone, ct.mobile as contact_mobile,
+           coalesce(u.full_name, u.email) as lead_agent_name
+    from public.requirements r
+    left join public.companies c on c.id = r.company_id and c.agency_id = r.agency_id
+    left join public.contacts ct on ct.id = r.contact_id and ct.agency_id = r.agency_id
+    left join public.users u on u.id = r.lead_agent_id
+    where r.agency_id = ${agencyId}
+      and r.status = 'active'
+      and r.listing_rating >= 4
+    order by r.listing_rating desc, r.date_updated desc, r.id
+    limit ${limit}
+  `) as PriorityRequirementRow[];
 }
 
 /** Cross-entity search hit list (id, title, status) — matches title or
@@ -176,6 +287,8 @@ export type RequirementListRow = {
   target_towns: string[];
   max_rent: number | null;
   company_id: string | null;
+  date_updated: string;
+  listing_rating: number | null;
 };
 
 /** Detail pass for a specific page of ids (order re-applied by the caller). */
@@ -185,7 +298,8 @@ export async function getRequirementsByIds(
 ): Promise<RequirementListRow[]> {
   if (ids.length === 0) return [];
   return (await sql`
-    select id, title, status, target_towns, max_rent::float8 as max_rent, company_id
+    select id, title, status, target_towns, max_rent::float8 as max_rent, company_id,
+           date_updated::text as date_updated, listing_rating
     from public.requirements
     where agency_id = ${agencyId} and id = ANY(${ids}::uuid[])
   `) as RequirementListRow[];
@@ -475,6 +589,7 @@ export async function syncRequirementAgents(
       select ${agencyId}, ${requirementId}, u from unnest(${userIds}::uuid[]) as u
     `,
   ]);
+  await touchDateUpdated("requirement", requirementId, agencyId);
 
   return { added: userIds.filter((id) => !had.has(id)) };
 }
@@ -556,6 +671,7 @@ export async function addRequirementDocumentRow(
        ${input.sizeBytes}, ${uploadedBy})
     returning id
   `;
+  await touchDateUpdated("requirement", requirementId, agencyId);
   return rows[0] as { id: string };
 }
 
@@ -569,9 +685,12 @@ export async function deleteRequirementDocumentRow(
   const rows = await sql`
     delete from public.requirement_documents
     where id = ${id} and agency_id = ${agencyId}
-    returning file_path
+    returning file_path, requirement_id
   `;
-  return (rows[0] as { file_path: string } | undefined) ?? null;
+  const row = rows[0] as { file_path: string; requirement_id: string } | undefined;
+  if (!row) return null;
+  await touchDateUpdated("requirement", row.requirement_id, agencyId);
+  return { file_path: row.file_path };
 }
 
 /** Ownership check for the Blob upload-token route — confirms the requirement

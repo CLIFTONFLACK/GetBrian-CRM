@@ -8,12 +8,15 @@ import { FilterBar, FilterSelect } from "@/components/filter-bar";
 import { FilterTiles } from "@/components/filter-tiles";
 import { PageHeader } from "@/components/page-header";
 import { Pagination, resolvePage } from "@/components/pagination";
+import { RecordPanelHost } from "@/components/record-panel/record-panel";
 import { RequirementsTable } from "@/components/requirements-table";
 import { StatsBar } from "@/components/stats-bar";
 import { buttonVariants } from "@/components/ui/button";
 import { propertyUseBadge } from "@/lib/badges";
 import { getCompanyTypes } from "@/lib/company-types";
 import { HOME_COUNTIES } from "@/lib/locations";
+import { RATING_FILTERS, matchesRatingFilter } from "@/lib/listing-rating";
+import { openRecordHref, parseRecordRef } from "@/lib/record-ref";
 import { filterHref, resolveSort } from "@/lib/sort";
 import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
@@ -44,10 +47,25 @@ export default async function RequirementsPage({
     dir?: string;
     status?: string;
     loc?: string;
+    rating?: string;
     page?: string;
+    record?: string;
+    tab?: string;
+    flex?: string;
   }>;
 }) {
-  const { q, sort, dir, status, loc, page: pageParam } = await searchParams;
+  const {
+    q,
+    sort,
+    dir,
+    status,
+    loc,
+    rating,
+    page: pageParam,
+    record: recordParam,
+    tab: tabParam,
+    flex: flexParam,
+  } = await searchParams;
 
   if (!isDbConfigured) redirect("/login");
   const session = await auth();
@@ -57,7 +75,13 @@ export default async function RequirementsPage({
   const { column, ascending } = resolveSort(
     sort,
     dir,
-    { title: "title", max_rent: "max_rent", status: "status" },
+    {
+      title: "title",
+      max_rent: "max_rent",
+      status: "status",
+      date_updated: "date_updated",
+      listing_rating: "listing_rating",
+    },
     { column: "title", ascending: true },
   );
 
@@ -67,7 +91,7 @@ export default async function RequirementsPage({
   const rows = agencyId
     ? await listRequirementFacetRows(agencyId, {
         q,
-        column: column as "title" | "max_rent" | "status",
+        column: column as "title" | "max_rent" | "status" | "date_updated" | "listing_rating",
         ascending,
       })
     : [];
@@ -92,9 +116,19 @@ export default async function RequirementsPage({
     }
     return targets.includes(loc.toLowerCase());
   };
-  const listRows = rows.filter((r) => (!status || r.status === status) && matchesLoc(r));
+  const listRows = rows.filter(
+    (r) =>
+      (!status || r.status === status) &&
+      matchesLoc(r) &&
+      matchesRatingFilter(r.listing_rating, rating),
+  );
 
-  const params = { q, sort, dir, status, loc };
+  // `params` feeds every sort, filter and page link, so those links drop
+  // `record` and `tab`: changing the list closes the panel. `panelBase` adds the
+  // page number, so opening a row leaves the list on the same page.
+  const params = { q, sort, dir, status, loc, rating };
+  const panelBase = { ...params, page: pageParam };
+  const openRef = parseRecordRef(recordParam);
 
   const locOptions = [...new Set(rows.flatMap(targetsOf).filter(Boolean))]
     .sort()
@@ -192,13 +226,19 @@ export default async function RequirementsPage({
         dir={dir}
         placeholder="Search requirements…"
         basePath="/requirements"
-        hasActiveFilters={Boolean(status || loc)}
+        hasActiveFilters={Boolean(status || loc || rating)}
       >
         <FilterSelect
           name="loc"
           label="Target location"
           value={loc}
           options={locOptions}
+        />
+        <FilterSelect
+          name="rating"
+          label="Listing rating"
+          value={rating}
+          options={RATING_FILTERS.map((f) => ({ value: f.value, label: f.label }))}
         />
         <FilterSelect
           name="status"
@@ -226,14 +266,14 @@ export default async function RequirementsPage({
       {listRows.length === 0 ? (
         <EmptyState
           icon={Target}
-          title={q || status ? "No matches" : "No requirements yet"}
+          title={q || status || loc || rating ? "No matches" : "No requirements yet"}
           description={
-            q || status
+            q || status || loc || rating
               ? "Try a different search or filter."
               : "Capture an operator's requirement to match against disposals."
           }
           action={
-            q || status ? undefined : (
+            q || status || loc || rating ? undefined : (
               <Link
                 href="/requirements/new"
                 className={cn(buttonVariants({ size: "sm" }))}
@@ -247,11 +287,15 @@ export default async function RequirementsPage({
         <RequirementsTable
           rows={pageRows.map((r) => ({
             id: r.id,
+            openHref: openRecordHref(panelBase, { type: "requirement", id: r.id }),
+            active: openRef?.type === "requirement" && openRef.id === r.id,
             title: r.title,
             status: r.status,
             operatorName: r.company_id ? (names.get(r.company_id) ?? null) : null,
             towns: r.target_towns.join(", "),
             maxRent: r.max_rent,
+            dateUpdated: r.date_updated,
+            listingRating: r.listing_rating,
             defaultContactIds: defaultContacts.has(r.id) ? [defaultContacts.get(r.id)!] : undefined,
           }))}
           params={params}
@@ -269,6 +313,13 @@ export default async function RequirementsPage({
         total={total}
         noun="requirements"
         unfilteredTotal={rows.length}
+      />
+
+      <RecordPanelHost
+        recordParam={recordParam}
+        tabParam={tabParam}
+        flexParam={flexParam}
+        base={panelBase}
       />
     </div>
   );

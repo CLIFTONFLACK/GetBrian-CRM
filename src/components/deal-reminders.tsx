@@ -13,6 +13,7 @@ import {
   deleteDealReminder,
   toggleDealReminder,
 } from "@/lib/actions/deal-reminders";
+import { pgTimestampToIso } from "@/lib/format-date";
 import type { FormState } from "@/lib/actions/types";
 import { cn } from "@/lib/utils";
 
@@ -46,7 +47,7 @@ export function DealReminders({
   }, [state, router]);
 
   const fmt = (s: string) =>
-    new Date(s).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+    new Date(pgTimestampToIso(s)).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
 
   return (
     <div className="space-y-4">

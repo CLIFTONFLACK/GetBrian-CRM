@@ -48,6 +48,16 @@ export function EditableDealTitle({
   const [draft, setDraft] = React.useState(title);
   const [state, action] = useActionState<FormState, FormData>(updateDealTitle, {});
 
+  // Follow the prop. A rename saved somewhere else (the deal panel, the full
+  // page) reaches this component as a new `title`. Without this the card keeps
+  // the title it was first rendered with. An open edit keeps the user's draft.
+  const [seenTitle, setSeenTitle] = React.useState(title);
+  if (seenTitle !== title) {
+    setSeenTitle(title);
+    setValue(title);
+    if (!editing) setDraft(title);
+  }
+
   // Adjust state in response to a new action result during render (React's
   // documented pattern for this — avoids an extra effect-triggered render).
   const [handledState, setHandledState] = React.useState(state);

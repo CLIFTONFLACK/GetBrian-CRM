@@ -12,6 +12,8 @@ import {
 import { EditableDealTitle } from "@/components/editable-deal-title";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { RecordPanelHost } from "@/components/record-panel/record-panel";
+import { CardLink } from "@/components/record-panel/row-link";
 import { StatsBar } from "@/components/stats-bar";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -23,6 +25,7 @@ import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId } from "@/lib/db/queries/agencies";
 import { listDealAgentRows, listDealsForBoard, listLatestStageEventPerDeal } from "@/lib/db/queries/deals";
 import { getUserNames } from "@/lib/db/queries/disposals";
+import { openRecordHref, parseRecordRef } from "@/lib/record-ref";
 import { daysSince, isPast } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +50,7 @@ const money = (v: number | null) =>
 export default async function DealsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ agent?: string }>;
+  searchParams: Promise<{ agent?: string; record?: string; tab?: string; flex?: string }>;
 }) {
   if (!isDbConfigured) redirect("/login");
   const session = await auth();
@@ -55,7 +58,10 @@ export default async function DealsPage({
   const agencyId = await currentAgencyId(session.user.id);
   if (!agencyId) redirect("/login");
 
-  const { agent } = await searchParams;
+  const { agent, record: recordParam, tab: tabParam, flex: flexParam } = await searchParams;
+  // The agent filter is the only list param. Opening a card keeps it.
+  const panelBase = { agent };
+  const openRef = parseRecordRef(recordParam);
 
   const allDeals = await listDealsForBoard(agencyId);
 
@@ -206,8 +212,10 @@ export default async function DealsPage({
                       !CLOSED.has(d.stage) &&
                       isPast(`${d.expected_close}T23:59:59`);
                     return (
-                      <article
+                      <CardLink
                         key={d.id}
+                        href={openRecordHref(panelBase, { type: "deal", id: d.id })}
+                        active={openRef?.type === "deal" && openRef.id === d.id}
                         className="flex flex-col rounded-lg border bg-card p-3 transition-colors hover:border-primary/40"
                       >
                         <EditableDealTitle
@@ -274,7 +282,7 @@ export default async function DealsPage({
                             aria-label={`Move “${d.title}” to another stage`}
                           />
                         </div>
-                      </article>
+                      </CardLink>
                     );
                   })}
                 </div>
@@ -283,6 +291,13 @@ export default async function DealsPage({
           })}
         </div>
       )}
+
+      <RecordPanelHost
+        recordParam={recordParam}
+        tabParam={tabParam}
+        flexParam={flexParam}
+        base={panelBase}
+      />
     </div>
   );
 }

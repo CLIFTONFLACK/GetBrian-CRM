@@ -14,6 +14,13 @@ import {
 } from "@/lib/db/queries/deals";
 import { createNotifications } from "@/lib/db/queries/messages";
 import type { FormState } from "@/lib/actions/types";
+import { revalidatePanelHosts } from "@/lib/revalidate-panels";
+
+/** A deal's reminders show in the full page and in the records panel, which can be open on any list page. */
+function revalidateDealViews(dealId: string) {
+  revalidatePath(`/deals/${dealId}`);
+  revalidatePanelHosts();
+}
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 
@@ -60,7 +67,7 @@ export async function addDealReminder(
     });
   }
 
-  revalidatePath(`/deals/${dealId}`);
+  revalidateDealViews(dealId);
   return { message: "Reminder added." };
 }
 
@@ -80,7 +87,7 @@ export async function toggleDealReminder(formData: FormData): Promise<void> {
   if (!id || !agencyId) return;
   if (intent !== "mark_done" && intent !== "mark_open") return;
   await setDealReminderDone(agencyId, id, intent === "mark_done");
-  if (dealId) revalidatePath(`/deals/${dealId}`);
+  if (dealId) revalidateDealViews(dealId);
 }
 
 /** Delete a reminder. */
@@ -93,7 +100,7 @@ export async function deleteDealReminder(formData: FormData): Promise<void> {
   const dealId = str(formData, "deal_id");
   if (!id || !agencyId) return;
   await deleteDealReminderRow(agencyId, id);
-  if (dealId) revalidatePath(`/deals/${dealId}`);
+  if (dealId) revalidateDealViews(dealId);
 }
 
 /**

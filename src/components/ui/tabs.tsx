@@ -49,7 +49,10 @@ export function LinkTabs({
       role="tablist"
       aria-label={label}
       onKeyDown={onKeyDown}
-      className={cn("flex shrink-0 overflow-x-auto border-b px-2 sm:px-3", className)}
+      // Wraps onto a second row rather than scrolling sideways: a tab that is
+      // scrolled out of sight is a tab nobody finds. The labels are short
+      // enough that the widest record (9 tabs) fits one row in the 640px panel.
+      className={cn("flex shrink-0 flex-wrap border-b px-2 sm:px-3", className)}
     >
       {tabs.map((t, i) => {
         const selected = t.slug === active;
@@ -69,7 +72,7 @@ export function LinkTabs({
             scroll={false}
             prefetch={false}
             className={cn(
-              "inline-flex min-h-11 shrink-0 items-center border-b-2 px-3 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+              "inline-flex min-h-11 shrink-0 items-center border-b-2 px-2 text-[13px] font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
               selected
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground",

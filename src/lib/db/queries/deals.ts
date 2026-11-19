@@ -862,12 +862,22 @@ export type DueDealReminder = {
  * each row's own agency_id is used by the caller to scope every downstream
  * read/write back to that reminder's agency — see the route's header note.
  */
-export async function listDueDealReminders(limit = 100): Promise<DueDealReminder[]> {
+export async function listDueDealReminders(
+  limit = 100,
+  scope: { agencyId?: string; notBefore?: string } = {},
+): Promise<DueDealReminder[]> {
   const nowIso = new Date().toISOString();
+  // Optional filters: one agency, and only reminders due at or after notBefore
+  // (the cron passes the agency's enabled_since). Null parameters skip a filter.
+  const agencyId = scope.agencyId ?? null;
+  const notBefore = scope.notBefore ?? null;
   return (await sql`
     select id, agency_id, deal_id, title, due_at::text as due_at, created_by
     from public.deal_reminders
     where done = false and notified_at is null and due_at <= ${nowIso}
+      and (${agencyId}::uuid is null or agency_id = ${agencyId}::uuid)
+      and (${notBefore}::timestamptz is null or due_at >= ${notBefore}::timestamptz)
+    order by due_at
     limit ${limit}
   `) as DueDealReminder[];
 }

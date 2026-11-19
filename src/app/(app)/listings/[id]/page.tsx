@@ -498,8 +498,11 @@ export default async function ListingDetailPage({
                     <EmailLink email={linkedContact.email} className="text-info hover:underline" />
                   </p>
                 ) : null}
+                {linkedContact.mobile ? (
+                  <p className="text-muted-foreground">Mobile: {linkedContact.mobile}</p>
+                ) : null}
                 {linkedContact.phone ? (
-                  <p className="text-muted-foreground">{linkedContact.phone}</p>
+                  <p className="text-muted-foreground">Landline: {linkedContact.phone}</p>
                 ) : null}
               </div>
             ) : null}

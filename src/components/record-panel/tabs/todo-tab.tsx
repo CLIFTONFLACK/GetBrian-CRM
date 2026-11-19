@@ -5,7 +5,7 @@ import { EntityTaskForm } from "@/components/record-panel/tabs/entity-task-form"
 import { toggleTaskStatus } from "@/lib/actions/tasks";
 import { getAgencyMembers } from "@/lib/db/queries/agencies";
 import { listTasksForEntity, type Task } from "@/lib/db/queries/tasks";
-import { formatLondonDateTime } from "@/lib/format-date";
+import { LocalDateTime } from "@/components/local-date-time";
 import { isPast } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -106,7 +106,13 @@ function TaskItems({
                   overdue ? "font-medium text-destructive" : "text-muted-foreground",
                 )}
               >
-                {t.due_at ? `Due ${formatLondonDateTime(t.due_at)}` : "No due date"}
+                {t.due_at ? (
+                  <>
+                    Due <LocalDateTime iso={t.due_at} />
+                  </>
+                ) : (
+                  "No due date"
+                )}
                 {overdue ? " · overdue" : ""}
                 {" · "}
                 {t.assignee_id

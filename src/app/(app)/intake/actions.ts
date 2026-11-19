@@ -158,6 +158,7 @@ export async function approveSubmission(
         lastName: sub.last_name || null,
         email: contactEmail,
         phone: sub.phone || null,
+        mobile: null,
         role: "other",
         companyId,
         county: null,
@@ -206,6 +207,11 @@ export async function approveSubmission(
       .filter(Boolean)
       .join("\n\n"),
     leadAgentId,
+    locationAnchorText: null,
+    locationAnchorLat: null,
+    locationAnchorLng: null,
+    locationRadiusMiles: null,
+    maxRentPsf: null,
   });
 
   const stamped = await approveIntakeSubmission(agencyId, id, requirement.id, userId);

@@ -24,6 +24,11 @@ function req(id: string, title = `Brief ${id}`) {
     max_rent: null,
     max_premium: null,
     max_guide_price: null,
+    location_anchor_text: null,
+    location_anchor_lat: null,
+    location_anchor_lng: null,
+    location_radius_miles: null,
+    max_rent_psf: null,
   };
 }
 

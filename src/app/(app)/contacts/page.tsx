@@ -338,7 +338,8 @@ export default async function ContactsPage({
               <SortHeader column="role" label="Role" params={params} />
               <TableHead className="hidden md:table-cell">Company</TableHead>
               <TableHead className="hidden md:table-cell">Email</TableHead>
-              <TableHead className="hidden md:table-cell">Phone</TableHead>
+              <TableHead className="hidden md:table-cell">Mobile</TableHead>
+              <TableHead className="hidden md:table-cell">Landline</TableHead>
               <SortHeader
                 column="date_updated"
                 label="Date updated"
@@ -375,6 +376,9 @@ export default async function ContactsPage({
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground md:table-cell">
                     {c.email ?? "—"}
+                  </TableCell>
+                  <TableCell className="hidden text-muted-foreground md:table-cell">
+                    {c.mobile ?? "—"}
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground md:table-cell">
                     {c.phone ?? "—"}

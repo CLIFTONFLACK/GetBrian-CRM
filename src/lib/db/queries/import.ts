@@ -458,6 +458,21 @@ export type RequirementImportPatch = {
   maxRent: number | null;
   maxPremium: number | null;
   maxGuidePrice: number | null;
+  /**
+   * "Within N miles of X" and the per-sq-ft ceiling (0046). Unlike the fields
+   * above, an existing non-null value is NEVER replaced: the anchor group is
+   * written only when the row has no anchor text and no radius, and
+   * max_rent_psf only when it is null. An agent may have edited either since
+   * the first import. One exception that replaces nothing: a stored place with
+   * no coordinates (the geocoder missed it, or ran out of its per-import cap)
+   * takes the coordinates of the SAME text, so re-importing the file finishes
+   * the job.
+   */
+  locationAnchorText: string | null;
+  locationAnchorLat: number | null;
+  locationAnchorLng: number | null;
+  locationRadiusMiles: number | null;
+  maxRentPsf: number | null;
   notes: string | null;
   dateUpdated: string | null;
   /** Set only when a changed row is "adopted": the stored requirement takes the new reference. */
@@ -498,6 +513,27 @@ export async function updateRequirementFromImport(
       max_rent                   = coalesce(${p.maxRent}, max_rent),
       max_premium                = coalesce(${p.maxPremium}, max_premium),
       max_guide_price            = coalesce(${p.maxGuidePrice}, max_guide_price),
+      location_anchor_text       = case when location_anchor_text is null and location_radius_miles is null
+                                        then ${p.locationAnchorText}::text else location_anchor_text end,
+      location_anchor_lat        = case when location_anchor_text is null and location_radius_miles is null
+                                        then ${p.locationAnchorLat}::double precision
+                                        when location_anchor_lat is null and location_anchor_lng is null
+                                             and lower(location_anchor_text) = lower(${p.locationAnchorText}::text)
+                                             and ${p.locationAnchorLat}::double precision is not null
+                                             and ${p.locationAnchorLng}::double precision is not null
+                                        then ${p.locationAnchorLat}::double precision
+                                        else location_anchor_lat end,
+      location_anchor_lng        = case when location_anchor_text is null and location_radius_miles is null
+                                        then ${p.locationAnchorLng}::double precision
+                                        when location_anchor_lat is null and location_anchor_lng is null
+                                             and lower(location_anchor_text) = lower(${p.locationAnchorText}::text)
+                                             and ${p.locationAnchorLat}::double precision is not null
+                                             and ${p.locationAnchorLng}::double precision is not null
+                                        then ${p.locationAnchorLng}::double precision
+                                        else location_anchor_lng end,
+      location_radius_miles      = case when location_anchor_text is null and location_radius_miles is null
+                                        then ${p.locationRadiusMiles}::numeric else location_radius_miles end,
+      max_rent_psf               = coalesce(max_rent_psf, ${p.maxRentPsf}::numeric),
       external_ref               = case when external_ref is null or external_ref like 'kato-%'
                                         then coalesce(${p.externalRef}, external_ref)
                                         else external_ref end,

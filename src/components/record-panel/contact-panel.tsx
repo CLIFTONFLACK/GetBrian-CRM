@@ -133,8 +133,8 @@ async function OverviewTab({
           "—"
         )}
       </Field>
-      <Field label="Phone">{contact.phone ?? "—"}</Field>
-      {contact.mobile ? <Field label="Mobile">{contact.mobile}</Field> : null}
+      <Field label="Mobile">{contact.mobile ?? "—"}</Field>
+      <Field label="Landline">{contact.phone ?? "—"}</Field>
       <Field label="Marketing">
         <span className="flex flex-wrap gap-1.5">
           <Badge tone={contact.marketing_opt_in ? "emerald" : "slate"}>

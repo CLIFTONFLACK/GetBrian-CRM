@@ -11,6 +11,9 @@ import {
   legacyRowRef,
   MAX_CELL_CHARS,
   mergeNotes,
+  classifyUkNumber,
+  planCompanyPhones,
+  routeContactPhones,
   parseArea,
   parseBool,
   parseCompanyType,
@@ -25,6 +28,9 @@ import {
 } from "../import-parse.ts";
 import {
   addressChanged,
+  anchorKey,
+  inUkBox,
+  MAX_ANCHOR_GEOCODES,
   capList,
   chunk,
   collectListingIds,
@@ -245,6 +251,57 @@ test("size: empty, no unit, zero and gibberish are not read", () => {
   assert.equal(parseSize("1,000 to 4,000 sq ft").shape, "9,999 to 9,999 sq ft");
 });
 
+test("size: under, less than and maximum give a ceiling only; over, at least, more than, minimum and N+ a floor only", () => {
+  for (const cell of ["Under 2,000 sq ft", "Less than 2,000 sq ft", "less than 2000 sq ft", "Maximum 2,000 sq ft", "Max 2,000 sq ft"]) {
+    const r = parseSize(cell);
+    assert.deepEqual([r.kind, r.minSqft, r.maxSqft, r.keepText], ["upto", null, 2000, false], cell);
+  }
+  for (const cell of ["Over 2,000 sq ft", "At least 2,000 sq ft", "More than 2,000 sq ft", "Minimum 2,000 sq ft", "2,000+ sq ft", "2,000 + sq ft"]) {
+    const r = parseSize(cell);
+    assert.deepEqual([r.kind, r.minSqft, r.maxSqft, r.keepText], ["from", 2000, null, false], cell);
+  }
+  // Metric figures convert the same way.
+  assert.equal(parseSize("Over 100 sq m").minSqft, 1076);
+});
+
+test("size: approx, c. and circa read as one figure, kept in notes like any single figure", () => {
+  for (const cell of ["approx 2,000 sq ft", "c. 2,000 sq ft", "Circa 2,000 sq ft", "approximately 2000 sq ft"]) {
+    const r = parseSize(cell);
+    assert.deepEqual([r.kind, r.maxSqft, r.keepText], ["single", 2000, true], cell);
+  }
+});
+
+test("size: a unit on both numbers is read as a range", () => {
+  const r = parseSize("1,000 sq ft to 4,000 sq ft");
+  assert.deepEqual([r.kind, r.minSqft, r.maxSqft], ["range", 1000, 4000]);
+  const dash = parseSize("1,000 sq ft - 2,000 sq ft");
+  assert.deepEqual([dash.kind, dash.minSqft, dash.maxSqft], ["range", 1000, 2000]);
+  const metric = parseSize("100 sq m to 200 sq m");
+  assert.deepEqual([metric.minSqft, metric.maxSqft], [1076, 2153]);
+  // Two different units on a range cannot be combined.
+  assert.equal(parseSize("1,000 sq ft to 200 sq m").kind, "unparsed");
+});
+
+test("size: sq ft and sq m together take the sq ft figure, either way round", () => {
+  const a = parseSize("2,000 sq ft (186 sq m)");
+  assert.deepEqual([a.kind, a.maxSqft, a.keepText], ["single", 2000, true]);
+  const b = parseSize("186 sq m (2,000 sq ft)");
+  assert.equal(b.maxSqft, 2000);
+  const c = parseSize("1,000 - 2,000 sq ft (93 - 186 sq m)");
+  assert.deepEqual([c.kind, c.minSqft, c.maxSqft], ["range", 1000, 2000]);
+  const d = parseSize("2,000 sq ft / 186 sq m");
+  assert.equal(d.maxSqft, 2000);
+});
+
+test("size: sqft, sf, ft2 and ft² are all square feet", () => {
+  for (const cell of ["1,000 to 2,000 sqft", "1,000 to 2,000 sf", "1,000 to 2,000 ft2", "1,000 to 2,000 ft²", "1,000 to 2,000 SF"]) {
+    const r = parseSize(cell);
+    assert.deepEqual([r.kind, r.minSqft, r.maxSqft], ["range", 1000, 2000], cell);
+  }
+  // A word that merely ends in "sf" or "m2" is not a unit.
+  assert.equal(parseSize("1,000 to 2,000 oversf").kind, "unparsed");
+});
+
 // ---------------------------------------------------------------- rent
 
 test("rent: annual ceilings become max_rent", () => {
@@ -280,10 +337,18 @@ test("rent: a cell that is only a number sets max_rent, as an explicit max_rent 
   assert.equal(parseRent("1,00,000").outcome === "plain_number", false);
 });
 
-test("rent: text with no unit is still NOT converted", () => {
+test("rent: text with no unit is read as annual from 1,000 up, else kept in notes", () => {
   const r = parseRent("Up to £50,000");
-  assert.deepEqual([r.outcome, r.maxRent, r.note], ["no_unit", null, "Rent (as exported): Up to £50,000"]);
-  assert.equal(parseRent("£50,000 - £100,000").outcome, "no_unit");
+  assert.deepEqual([r.outcome, r.maxRent, r.note], ["assumed_annual", 50000, null]);
+  const band = parseRent("£50,000 - £100,000");
+  assert.deepEqual([band.outcome, band.maxRent], ["assumed_annual", 100000]);
+  assert.equal(parseRent("Up to 75k").maxRent, 75000);
+  // Below 1,000 a bare figure could be a per-sq-ft rate: it stays in notes.
+  const small = parseRent("Up to £50");
+  assert.deepEqual([small.outcome, small.maxRent, small.note], ["no_unit", null, "Rent (as exported): Up to £50"]);
+  // Words other than filler around the figure: not read.
+  assert.equal(parseRent("Up to £50,000 plus VAT").outcome, "no_unit");
+  assert.equal(parseRent("£50,000 - £100,000 - £150,000").outcome, "no_unit");
 });
 
 test("rent: a floor (from, min, minimum, over, above, at least, trailing +) has no max and keeps its text", () => {
@@ -305,22 +370,41 @@ test("rent: a floor (from, min, minimum, over, above, at least, trailing +) has 
   assert.equal(parseRent("Up to £50,000 per annum, overheads excluded").maxRent, 50000);
 });
 
-test("rent: per sq ft, per month and bare figures are NOT converted", () => {
+test("rent: per sq ft goes to rentPsf and never to max_rent", () => {
   const sqft = parseRent("Up to £100 per sq ft");
-  assert.deepEqual([sqft.outcome, sqft.maxRent], ["per_sqft", null]);
-  assert.equal(sqft.note, "Rent (as exported): Up to £100 per sq ft");
-  assert.equal(parseRent("£50 - £80 per sq ft").outcome, "per_sqft");
+  assert.deepEqual([sqft.outcome, sqft.maxRent, sqft.rentPsf, sqft.note], ["per_sqft", null, 100, null]);
+  const band = parseRent("£50 - £80 per sq ft");
+  assert.deepEqual([band.outcome, band.maxRent, band.rentPsf], ["per_sqft", null, 80]);
+  for (const cell of ["£25 per sq ft", "£25 psf", "£25/sq ft", "£25 per sq ft pa", "£25 per sqft", "£25 per sq. ft."]) {
+    const r = parseRent(cell);
+    assert.deepEqual([r.outcome, r.maxRent, r.rentPsf, r.note], ["per_sqft", null, 25, null], cell);
+  }
+  assert.equal(parseRent("£12.50 psf").rentPsf, 12.5);
+  // A floor per sq ft has no ceiling.
+  const floor = parseRent("From £25 per sq ft");
+  assert.deepEqual([floor.outcome, floor.maxRent, floor.rentPsf], ["floor", null, null]);
+  // An absurd per-sq-ft figure is not trusted: text kept.
+  const silly = parseRent("£5,000 per sq ft");
+  assert.deepEqual([silly.outcome, silly.rentPsf, silly.note], ["per_sqft", null, "Rent (as exported): £5,000 per sq ft"]);
+});
+
+test("rent: per month is x12 and per week is x52, into the annual max_rent", () => {
   const month = parseRent("Up to £5,000 per month");
-  assert.deepEqual([month.outcome, month.maxRent], ["per_month", null]);
-  assert.equal(parseRent("£5,000 pcm").outcome, "per_month");
-  const bare = parseRent("Up to £100,000");
-  assert.deepEqual([bare.outcome, bare.maxRent, bare.note], ["no_unit", null, "Rent (as exported): Up to £100,000"]);
+  assert.deepEqual([month.outcome, month.maxRent, month.rentPsf, month.note], ["per_month", 60000, null, null]);
+  assert.equal(parseRent("£5,000 pcm").maxRent, 60000);
+  assert.equal(parseRent("£5,000 pm").maxRent, 60000);
+  assert.equal(parseRent("£4,000 - £5,000 per calendar month").maxRent, 60000);
+  const week = parseRent("£100,000 per week");
+  assert.deepEqual([week.outcome, week.maxRent], ["per_week", 5_200_000]);
+  assert.equal(parseRent("£1,000 pw").maxRent, 52000);
+  // A floor per month has no ceiling.
+  assert.equal(parseRent("From £5,000 pcm").outcome, "floor");
+  assert.equal(parseRent("Up to £100,000 per hour").outcome, "other_unit");
   assert.equal(parseRent("100000").outcome, "plain_number"); // a bare number is a plain figure
-  assert.equal(parseRent("£100,000 per week").outcome, "other_unit");
 });
 
 test("rent: empty, foreign currency and too many figures are not converted", () => {
-  assert.deepEqual(parseRent(""), { outcome: "empty", maxRent: null, note: null, shape: "" });
+  assert.deepEqual(parseRent(""), { outcome: "empty", maxRent: null, rentPsf: null, note: null, shape: "" });
   assert.equal(parseRent("   ").outcome, "empty");
   assert.equal(parseRent("Up to $100,000 per annum").outcome, "unparsed");
   assert.equal(parseRent("Up to €100,000 per annum").maxRent, null);
@@ -394,11 +478,12 @@ test("area: London - X maps to the London region; narrower text stays in notes",
   assert.deepEqual(parseArea("London W1", catalog).districts, ["W1"]);
 });
 
-test("area: radius phrases and unknown names are unplaced and kept verbatim", () => {
+test("area: a radius phrase is an anchor, not unplaced text; unknown names are unplaced and kept verbatim", () => {
   const a = parseArea("Within 3 miles of Berwick Street, Yorkshire, Soho", catalog);
   assert.deepEqual(a.neighbourhoods, ["Soho"]);
-  assert.deepEqual(a.unplaced, ["Within 3 miles of Berwick Street", "Yorkshire"]);
-  assert.equal(a.note, "Area (as exported): Within 3 miles of Berwick Street, Yorkshire");
+  assert.deepEqual(a.anchor, { text: "Berwick Street", lat: null, lng: null, miles: 3 });
+  assert.deepEqual(a.unplaced, ["Yorkshire"]);
+  assert.equal(a.note, "Area (as exported): Yorkshire");
 });
 
 test("area: a flexible-radius suffix is placed and the original text is kept too", () => {
@@ -423,6 +508,240 @@ test("area: empty and whitespace cells; duplicates collapse; counts by kind", ()
   assert.deepEqual(a.neighbourhoods, ["Soho"]);
   assert.equal(a.placed.neighbourhood, 2); // counted per token placed, not per distinct value
   assert.equal(a.placed.zone, 1);
+});
+
+const geoCatalog = buildLocationCatalog({
+  neighbourhoods: ["Soho", "King's Cross", "Brick Lane", "Elephant and Castle", "Covent Garden", "Notting Hill", "Kensington"],
+  towns: ["Reading"],
+  counties: ["Surrey"],
+  regions: ["London"],
+  districts: ["W1D", "W1F", "WC2A", "EC1A", "SW1A"],
+  coords: {
+    Soho: [51.5136, -0.1365],
+    "King's Cross": [51.5309, -0.1233],
+    Reading: [51.4543, -0.9781],
+    W1D: [51.5133, -0.1325],
+  },
+});
+
+test("area: zones joined by and, &, / or commas", () => {
+  for (const cell of ["Zone 1 and 2", "Zones 1 & 2", "Zone 1/2", "Zones 1, 2", "zone 1 + 2"]) {
+    const a = parseArea(cell, geoCatalog);
+    assert.deepEqual(a.zones, ["Zone 1", "Zone 2"], cell);
+    assert.equal(a.note, null, cell);
+  }
+  const three = parseArea("Zones 1, 2 and 3", geoCatalog);
+  assert.deepEqual(three.zones, ["Zone 1", "Zone 2", "Zone 3"]);
+  assert.equal(three.note, null);
+  // A range keeps working, and other names in the cell are unaffected.
+  assert.deepEqual(parseArea("Zone 1-3", geoCatalog).zones, ["Zone 1", "Zone 2", "Zone 3"]);
+  const mixed = parseArea("Zones 1 and 2, Soho", geoCatalog);
+  assert.deepEqual([mixed.zones, mixed.neighbourhoods], [["Zone 1", "Zone 2"], ["Soho"]]);
+});
+
+test("area: or, and, & and + split a token, and the semicolon splits like a comma", () => {
+  const a = parseArea("Soho or Kensington", geoCatalog);
+  assert.deepEqual(a.neighbourhoods, ["Soho", "Kensington"]);
+  assert.equal(a.note, null);
+  assert.deepEqual(parseArea("Soho and Reading", geoCatalog).neighbourhoods, ["Soho"]);
+  assert.deepEqual(parseArea("Soho & Kensington + Notting Hill", geoCatalog).neighbourhoods, [
+    "Soho",
+    "Kensington",
+    "Notting Hill",
+  ]);
+  assert.deepEqual(parseArea("Soho; Kensington", geoCatalog).neighbourhoods, ["Soho", "Kensington"]);
+  // A part nobody knows keeps the whole token in notes.
+  const p = parseArea("Soho and Nowhere", geoCatalog);
+  assert.deepEqual(p.neighbourhoods, ["Soho"]);
+  assert.deepEqual(p.partial, ["Soho and Nowhere"]);
+  assert.equal(p.note, "Area (as exported): Soho and Nowhere");
+});
+
+test("area: a known multi-word name is never split, and the longest known name wins", () => {
+  const e = parseArea("Elephant and Castle", geoCatalog);
+  assert.deepEqual(e.neighbourhoods, ["Elephant and Castle"]);
+  assert.equal(e.note, null);
+  const both = parseArea("Elephant and Castle and Soho", geoCatalog);
+  assert.deepEqual(both.neighbourhoods, ["Elephant and Castle", "Soho"]);
+  assert.equal(both.note, null);
+  assert.deepEqual(parseArea("Brick Lane or Soho", geoCatalog).neighbourhoods, ["Brick Lane", "Soho"]);
+  assert.deepEqual(parseArea("Brick Lane", geoCatalog).neighbourhoods, ["Brick Lane"]);
+});
+
+test("area: within N miles of a known place is an anchor with coordinates and is not repeated in notes", () => {
+  const a = parseArea("Within 3 miles of Soho", geoCatalog);
+  assert.deepEqual(a.anchor, { text: "Soho", lat: 51.5136, lng: -0.1365, miles: 3 });
+  assert.equal(a.note, null);
+  assert.deepEqual(a.unplaced, []);
+  assert.deepEqual(a.neighbourhoods, []); // the place is a centre, not a target by name
+  // Apostrophe-free spelling still finds the stored name.
+  const k = parseArea("within 1 mile of Kings Cross", geoCatalog);
+  assert.deepEqual([k.anchor?.lat, k.anchor?.lng, k.anchor?.miles], [51.5309, -0.1233, 1]);
+  // Postcode district, and a bare town.
+  assert.equal(parseArea("within 2 miles of W1D", geoCatalog).anchor?.lat, 51.5133);
+  assert.equal(parseArea("within 10 miles of Reading", geoCatalog).anchor?.lng, -0.9781);
+  // Placed names next to an anchor still place.
+  const mixed = parseArea("Within 3 miles of Soho, Zone 1", geoCatalog);
+  assert.deepEqual(mixed.zones, ["Zone 1"]);
+  assert.notEqual(mixed.anchor, null);
+});
+
+test("area: radius phrase spellings: miles from, km, walking minutes", () => {
+  assert.equal(parseArea("3 miles from Soho", geoCatalog).anchor?.miles, 3);
+  assert.equal(parseArea("within 0.5 mi of Soho", geoCatalog).anchor?.miles, 0.5);
+  assert.equal(parseArea("within 10 km of Soho", geoCatalog).anchor?.miles, 6.21);
+  assert.equal(parseArea("within 10 minutes walk of Soho", geoCatalog).anchor?.miles, 0.5);
+  assert.equal(parseArea("15 min walk from Soho", geoCatalog).anchor?.miles, 0.75);
+  assert.equal(parseArea("within 20 minutes walking distance of Soho", geoCatalog).anchor?.miles, 1);
+});
+
+test("area: an unknown place keeps its text and radius, coordinates null, and is not dropped to notes", () => {
+  const a = parseArea("Within 2 miles of Berwick Street", geoCatalog);
+  assert.deepEqual(a.anchor, { text: "Berwick Street", lat: null, lng: null, miles: 2 });
+  assert.equal(a.note, null);
+  assert.deepEqual(a.unplaced, []);
+});
+
+test("area: an address after 'of' keeps its commas", () => {
+  const a = parseArea("within 3 miles of 34-43 Russell Street, Covent Garden", geoCatalog);
+  assert.deepEqual(a.anchor, { text: "34-43 Russell Street, Covent Garden", lat: null, lng: null, miles: 3 });
+  assert.deepEqual(a.neighbourhoods, []);
+  assert.equal(a.note, null);
+  // Zones and districts after the address are still targets of their own.
+  const b = parseArea("within 3 miles of 34 Russell Street, Covent Garden, Zone 1", geoCatalog);
+  assert.equal(b.anchor?.text, "34 Russell Street, Covent Garden");
+  assert.deepEqual(b.zones, ["Zone 1"]);
+  // A name that does not start with a number is cut at the comma as before.
+  const c = parseArea("within 3 miles of Berwick Street, Soho", geoCatalog);
+  assert.equal(c.anchor?.text, "Berwick Street");
+  assert.deepEqual(c.neighbourhoods, ["Soho"]);
+});
+
+test("area: only one anchor per cell; the rest, driving times and out-of-range radii go to notes", () => {
+  const two = parseArea("within 3 miles of Soho, within 5 miles of Reading", geoCatalog);
+  assert.equal(two.anchor?.text, "Soho");
+  assert.deepEqual(two.unplaced, ["within 5 miles of Reading"]);
+  assert.equal(two.note, "Area (as exported): within 5 miles of Reading");
+  const drive = parseArea("20 minutes drive from Soho", geoCatalog);
+  assert.equal(drive.anchor, null);
+  assert.equal(drive.note, "Area (as exported): 20 minutes drive from Soho");
+  const far = parseArea("within 80 miles of Soho", geoCatalog);
+  assert.equal(far.anchor, null);
+  assert.equal(far.note, "Area (as exported): within 80 miles of Soho");
+  assert.equal(parseArea("within 0 miles of Soho", geoCatalog).anchor, null);
+});
+
+test("area: the flex suffix still places the name and keeps the text", () => {
+  const a = parseArea("Soho (+1 miles)", geoCatalog);
+  assert.deepEqual(a.neighbourhoods, ["Soho"]);
+  assert.equal(a.anchor, null);
+  assert.equal(a.note, "Area (as exported): Soho (+1 miles)");
+});
+
+// ---------------------------------------------------------------- phone
+
+test("phone: UK mobiles, in every written form", () => {
+  for (const n of [
+    "07700 900123",
+    "07700900123",
+    "07700-900-123",
+    "07700.900.123",
+    "(07700) 900123",
+    "+44 7700 900123",
+    "+44 (0)7700 900123",
+    "+44(0)7700900123",
+    "0044 7700 900123",
+    "  07700 900 123  ",
+  ]) {
+    assert.equal(classifyUkNumber(n), "mobile", n);
+  }
+});
+
+test("phone: UK landlines: 01, 02 and 03", () => {
+  for (const n of ["020 7946 0018", "02079460018", "+44 20 7946 0018", "+44 (0) 20 7946 0018", "0161 496 0000", "0113 496 0000", "01632 960001", "0300 123 4567", "(020) 7946 0018"]) {
+    // 01632 960001 is 11 digits in total: 01 + nine digits
+    assert.equal(classifyUkNumber(n), "landline", n);
+  }
+});
+
+test("phone: personal numbering and pagers (070, 076), 08, 09, short and odd numbers are unknown", () => {
+  for (const n of [
+    "07000 123456",
+    "07600 123456",
+    "0800 123 4567",
+    "0845 123 4567",
+    "0905 123 4567",
+    "999",
+    "12345",
+    "07700 90012", // one digit short
+    "07700 9001234", // one digit long
+    "020 7946 001", // one digit short
+    "+1 202 555 0100",
+    "07700 900123 ext 5",
+    "n/a",
+    "",
+    "   ",
+  ]) {
+    assert.equal(classifyUkNumber(n), "unknown", JSON.stringify(n));
+  }
+  assert.equal(classifyUkNumber(null), "unknown");
+  assert.equal(classifyUkNumber(undefined), "unknown");
+  // 077 is a mobile, 070 and 076 are not: the boundary is exact.
+  assert.equal(classifyUkNumber("07700 900123"), "mobile");
+  assert.equal(classifyUkNumber("07100 900123"), "mobile");
+  assert.equal(classifyUkNumber("07900 900123"), "mobile");
+});
+
+test("contact phones: a mobile in the Phone cell moves to mobile; a landline in the Mobile cell moves to phone", () => {
+  const a = routeContactPhones("07700 900123", "");
+  assert.deepEqual([a.phone, a.mobile, a.phoneToMobile], [null, "07700 900123", true]);
+  const b = routeContactPhones("", "020 7946 0018");
+  assert.deepEqual([b.phone, b.mobile, b.mobileToPhone], ["020 7946 0018", null, true]);
+  // Both in the wrong columns: swapped.
+  const c = routeContactPhones("07700 900123", "020 7946 0018");
+  assert.deepEqual([c.phone, c.mobile], ["020 7946 0018", "07700 900123"]);
+  assert.deepEqual([c.phoneToMobile, c.mobileToPhone], [true, true]);
+});
+
+test("contact phones: right numbers in the right columns stay put; unknown numbers stay where they came from", () => {
+  const ok = routeContactPhones("020 7946 0018", "07700 900123");
+  assert.deepEqual([ok.phone, ok.mobile, ok.phoneToMobile, ok.mobileToPhone], ["020 7946 0018", "07700 900123", false, false]);
+  const unk = routeContactPhones("0800 123 4567", "");
+  assert.deepEqual([unk.phone, unk.mobile], ["0800 123 4567", null]);
+  const unkMob = routeContactPhones("", "0800 123 4567");
+  assert.deepEqual([unkMob.phone, unkMob.mobile], [null, "0800 123 4567"]);
+  const none = routeContactPhones("", "  ");
+  assert.deepEqual([none.phone, none.mobile], [null, null]);
+});
+
+test("contact phones: two numbers of the same kind stay in their own columns as exported, and are flagged", () => {
+  const two = routeContactPhones("07700 900123", "07700 900456");
+  assert.deepEqual([two.phone, two.mobile, two.sameClass], ["07700 900123", "07700 900456", "mobile"]);
+  const land = routeContactPhones("020 7946 0018", "020 7946 0019");
+  assert.deepEqual([land.phone, land.mobile, land.sameClass], ["020 7946 0018", "020 7946 0019", "landline"]);
+  // A mobile in Phone beside an unreadable number in Mobile: no move, no loss, no flag.
+  const clash = routeContactPhones("07700 900123", "0800 123 4567");
+  assert.deepEqual([clash.phone, clash.mobile, clash.sameClass], ["07700 900123", "0800 123 4567", null]);
+});
+
+test("company phones: one field, so the landline (else the first) is the phone and every other number goes to notes", () => {
+  const a = planCompanyPhones(["07700 900123", "020 7946 0018"]);
+  assert.equal(a.phone, "020 7946 0018");
+  assert.deepEqual(a.extraLines, ["Mobile (as exported): 07700 900123"]);
+  const b = planCompanyPhones(["020 7946 0018", "07700 900123"]);
+  assert.equal(b.phone, "020 7946 0018");
+  assert.deepEqual(b.extraLines, ["Mobile (as exported): 07700 900123"]);
+  const two = planCompanyPhones(["07700 900123", "07700 900456"]);
+  assert.equal(two.phone, "07700 900123");
+  assert.deepEqual(two.extraLines, ["Mobile (as exported): 07700 900456"]);
+  const other = planCompanyPhones(["020 7946 0018", "0800 123 4567"]);
+  assert.deepEqual(other.extraLines, ["Phone (as exported): 0800 123 4567"]);
+  // The same number twice (spacing aside) is one number; nothing to keep.
+  const same = planCompanyPhones(["020 7946 0018", "020  7946 0018"]);
+  assert.deepEqual([same.phone, same.extraLines], ["020 7946 0018", []]);
+  assert.deepEqual(planCompanyPhones([]), { phone: null, extraLines: [] });
+  // The lines go into notes through mergeNotes without touching what is stored.
+  assert.equal(mergeNotes("Existing note", a.extraLines.join("\n")), "Existing note\n\nMobile (as exported): 07700 900123");
 });
 
 // ---------------------------------------------------------------- tenant
@@ -606,6 +925,37 @@ test("headers: the Kato exports resolve to the right columns", () => {
     [...reqs.columns.keys()],
     ["title", "size_text", "use_classes", "rent_text", "area_text", "contact_email"],
   );
+});
+
+test("headers: a bare Mobile column is the mobile field for contacts and the phone field for companies", () => {
+  const c = mapHeaders("contacts", [["First Name", "Phone", "Mobile"]]);
+  assert.deepEqual(c.columns.get("phone"), [1]);
+  assert.deepEqual(c.columns.get("mobile"), [2]);
+  assert.deepEqual(c.unrecognised, []);
+  const k = mapHeaders("companies", [["Name", "Phone Number", "Mobile Number", "Mobile"]]);
+  assert.deepEqual(k.columns.get("phone"), [1, 2, 3]);
+  assert.equal(k.columns.has("mobile"), false);
+});
+
+test("anchor geocoding helpers: UK box and one key per place", () => {
+  assert.equal(inUkBox(51.5, -0.12), true); // London
+  assert.equal(inUkBox(57.15, -2.09), true); // Aberdeen
+  assert.equal(inUkBox(48.85, 2.35), false); // Paris
+  assert.equal(inUkBox(40.7, -74.0), false); // New York
+  assert.equal(inUkBox(Number.NaN, 0), false);
+  // The edges: 49.8 to 60.9 north, -8.7 to 1.8 east.
+  assert.deepEqual(
+    [inUkBox(49.7, 0), inUkBox(49.8, 0), inUkBox(60.9, 0), inUkBox(61, 0)],
+    [false, true, true, false],
+  );
+  assert.deepEqual(
+    [inUkBox(55, -8.8), inUkBox(55, -8.7), inUkBox(55, 1.8), inUkBox(55, 1.9)],
+    [false, true, true, false],
+  );
+  assert.equal(anchorKey("  Berwick   Street "), anchorKey("berwick street"));
+  assert.equal(anchorKey("King's Cross"), anchorKey("Kings Cross"));
+  assert.notEqual(anchorKey("Berwick Street"), anchorKey("Berwick Road"));
+  assert.equal(MAX_ANCHOR_GEOCODES, 60);
 });
 
 test("headers: date and notes synonyms", () => {
@@ -1030,4 +1380,41 @@ test("addressChanged: only a supplied, different address part counts", () => {
   assert.equal(addressChanged(stored, {}), false);
   // A part the stored row lacks, now supplied, is a change.
   assert.equal(addressChanged({ ...stored, area: null }, { area: "Soho" }), true);
+});
+
+// ── review fixes: rent with two figures, overflow, long chains ────────────────
+
+test("a cell with both a monthly and a yearly figure takes the yearly one", () => {
+  const a = parseRent("£2,000 pcm (£24,000 pa)");
+  assert.equal(a.maxRent, 24000);
+  assert.equal(a.outcome, "converted");
+  const b = parseRent("£24,000 per annum / £2,000 pcm");
+  assert.equal(b.maxRent, 24000);
+  // A monthly figure alone is still x12.
+  assert.equal(parseRent("£2,000 pcm").maxRent, 24000);
+});
+
+test("a converted rent that would overflow numeric(12,2) stays in notes", () => {
+  const a = parseRent("£99,999,999,999 pcm");
+  assert.equal(a.maxRent, null);
+  assert.ok(a.note);
+  const b = parseRent("£99,999,999,999 per week");
+  assert.equal(b.maxRent, null);
+  assert.equal(parseRent("£2,000,000,000 pa").maxRent, null);
+  assert.equal(parseRent("2000000000").maxRent, null);
+  // A big but valid figure still converts.
+  assert.equal(parseRent("£5,000,000 pa").maxRent, 5000000);
+});
+
+test("a long and/or chain in an area cell is left whole and fast", () => {
+  // 330 pieces is about 1,980 characters: just under MAX_CELL_CHARS, so the cell
+  // is parsed (a longer one is refused before it gets here).
+  const cell = Array.from({ length: 330 }, () => "x").join(" and ");
+  assert.ok(cell.length <= MAX_CELL_CHARS);
+  const t0 = Date.now();
+  const r = parseArea(cell, catalog);
+  assert.ok(Date.now() - t0 < 150, "must not take cubic time");
+  assert.equal(r.neighbourhoods.length + r.towns.length + r.districts.length, 0);
+  // A short chain still splits.
+  assert.ok(parseArea("Soho and Mayfair", catalog).neighbourhoods.length >= 1);
 });

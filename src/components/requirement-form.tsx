@@ -159,6 +159,42 @@ export function RequirementForm({
           neighbourhoods={r?.target_neighbourhoods ?? []}
           zones={r?.target_london_zones ?? []}
         />
+        <div className="grid gap-5 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <Field
+            label="Near (place)"
+            htmlFor="location_anchor_text"
+            hint="Optional. A place or address the premises must be close to, such as Soho or a street."
+          >
+            <Input
+              id="location_anchor_text"
+              name="location_anchor_text"
+              defaultValue={r?.location_anchor_text ?? ""}
+              placeholder="e.g. Soho"
+              maxLength={200}
+            />
+          </Field>
+          <Field label="Within (miles)" htmlFor="location_radius_miles" hint="0.1 to 50">
+            <Input
+              id="location_radius_miles"
+              name="location_radius_miles"
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              min="0.1"
+              max="50"
+              defaultValue={r?.location_radius_miles ?? ""}
+            />
+          </Field>
+        </div>
+        {r?.location_anchor_text &&
+        r.location_radius_miles != null &&
+        (r.location_anchor_lat == null || r.location_anchor_lng == null) ? (
+          <Alert tone="error">
+            The place &ldquo;{r.location_anchor_text}&rdquo; was not found, so this brief&apos;s
+            &ldquo;within {r.location_radius_miles} miles&rdquo; is not used for matching. Save again
+            with a town, a postcode district or a fuller address to look it up again.
+          </Alert>
+        ) : null}
       </Section>
 
       <Section
@@ -200,7 +236,7 @@ export function RequirementForm({
           options={TENURES}
           selected={r?.tenure_prefs ?? DEFAULT_TENURES}
         />
-        <div className="grid gap-5 sm:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Max rent (£ pa)" htmlFor="max_rent">
             <Input
               id="max_rent"
@@ -208,6 +244,21 @@ export function RequirementForm({
               type="number"
               inputMode="numeric"
               defaultValue={r?.max_rent ?? ""}
+            />
+          </Field>
+          <Field
+            label="Max rent per sq ft (£)"
+            htmlFor="max_rent_psf"
+            hint="Per year. Checked with the yearly figure."
+          >
+            <Input
+              id="max_rent_psf"
+              name="max_rent_psf"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0.01"
+              defaultValue={r?.max_rent_psf ?? ""}
             />
           </Field>
           <Field label="Max premium (£)" htmlFor="max_premium">

@@ -115,6 +115,9 @@ async function OverviewTab({
     getAgencyMembers(agencyId),
   ]);
   const nameOf = new Map(members.map((m) => [m.id, m.name]));
+  const leadAgentName = company.lead_agent_id
+    ? (nameOf.get(company.lead_agent_id) ?? "Unknown agent")
+    : null;
   const agents = agentIds.map((id) => ({ id, name: nameOf.get(id) ?? "Unknown agent" }));
   const updated = formatDateUpdated(company.date_updated);
 
@@ -147,6 +150,7 @@ async function OverviewTab({
           "—"}
       </Field>
       <Field label="Company number">{company.company_number ?? "—"}</Field>
+      <Field label="Lead agent">{leadAgentName ?? "—"}</Field>
       <Field label="Agents">
         {agents.length > 0 ? (
           <span className="flex flex-wrap gap-1.5">

@@ -38,6 +38,11 @@ type Requirement = Pick<
   | "max_rent"
   | "max_premium"
   | "max_guide_price"
+  | "location_anchor_text"
+  | "location_anchor_lat"
+  | "location_anchor_lng"
+  | "location_radius_miles"
+  | "max_rent_psf"
 >;
 type Disposal = Pick<
   Tables<"disposals">,
@@ -169,6 +174,12 @@ type ResolvedTargets = {
    */
   districts: string[];
   points: TargetPoint[];
+  /**
+   * "Within N miles of X": set only when the brief carries latitude, longitude
+   * and a radius together. A place that could not be found (text and radius but
+   * no coordinates) is not scored, and does not make the location count.
+   */
+  anchor: { text: string; at: LatLng; miles: number } | null;
   any: boolean;
 };
 
@@ -251,6 +262,18 @@ function resolveTargets(req: Requirement): ResolvedTargets {
     }
   }
 
+  const anchor =
+    req.location_anchor_lat != null &&
+    req.location_anchor_lng != null &&
+    req.location_radius_miles != null &&
+    req.location_radius_miles > 0
+      ? {
+          text: req.location_anchor_text?.trim() || "the chosen place",
+          at: { lat: req.location_anchor_lat, lng: req.location_anchor_lng },
+          miles: req.location_radius_miles,
+        }
+      : null;
+
   const resolved: ResolvedTargets = {
     // Neighbourhoods join the text pass so a listing filed under `area = "Soho"`
     // scores a direct hit even when its postcode is missing.
@@ -261,7 +284,9 @@ function resolveTargets(req: Requirement): ResolvedTargets {
     regions: expanded.regions.map(normalizePlace).filter(Boolean),
     districts: [...new Set(districts)],
     points,
+    anchor,
     any:
+      anchor !== null ||
       towns.length > 0 ||
       req.target_regions.length > 0 ||
       counties.length > 0 ||
@@ -322,32 +347,53 @@ function locationFactor(
       return { factor: 1, label: `Location: ${region}` };
   }
 
+  // The best of the two remaining means wins: the brief's own radius, and
+  // proximity to the targeted places above.
+  let best: { factor: number; label: string } = { factor: 0, label: fallback };
+  const at = disposalCoords(d);
+
+  if (t.anchor && at) {
+    const dist = distanceMiles(t.anchor.at, at);
+    const flexMiles = (Math.min(Math.max(flex, 0), 100) / 100) * MAX_RADIUS_MILES;
+    if (dist <= t.anchor.miles) {
+      best = {
+        factor: 1,
+        label: `Location: within ${+t.anchor.miles.toFixed(2)} mi of ${t.anchor.text}`,
+      };
+    } else if (flexMiles > 0 && dist <= t.anchor.miles + flexMiles) {
+      // Just outside the radius: credit fades from 0.8 to 0 over the flex distance.
+      best = {
+        factor: PROXIMITY_CAP * (1 - (dist - t.anchor.miles) / flexMiles),
+        label: `Location: ~${Math.round(dist)} mi from ${t.anchor.text} (radius ${+t.anchor.miles.toFixed(2)} mi)`,
+      };
+    }
+  }
+
   const radius = (Math.min(Math.max(flex, 0), 100) / 100) * MAX_RADIUS_MILES;
   if (radius > 0 && t.points.length > 0) {
-    const at = disposalCoords(d);
     if (at) {
       // Best = strongest credit, not merely nearest: a coarse county centroid
       // carries a wider radius, so 20 mi from a county can beat 20 mi from a
       // town (which earns nothing at all).
-      let best: { name: string; dist: number; factor: number } | null = null;
+      let near: { name: string; dist: number; factor: number } | null = null;
       for (const p of t.points) {
         const reach = Math.min(radius + p.bonus, p.maxReach ?? Infinity);
         if (reach <= 0) continue;
         const dist = distanceMiles(p.at, at);
         if (dist > reach) continue;
         const factor = PROXIMITY_CAP * (1 - dist / reach);
-        if (!best || factor > best.factor) best = { name: p.name, dist, factor };
+        if (!near || factor > near.factor) near = { name: p.name, dist, factor };
       }
-      if (best) {
-        return {
-          factor: best.factor,
-          label: `Location: ${best.dist < 0.95 ? "under a mile" : `~${Math.round(best.dist)} mi`} from ${best.name}`,
+      if (near && near.factor > best.factor) {
+        best = {
+          factor: near.factor,
+          label: `Location: ${near.dist < 0.95 ? "under a mile" : `~${Math.round(near.dist)} mi`} from ${near.name}`,
         };
       }
     }
   }
 
-  return { factor: 0, label: fallback };
+  return best;
 }
 
 /**
@@ -411,12 +457,23 @@ export function scoreMatch(
     `Tenure: ${d.disposal_type}`,
   );
 
-  add(
-    10,
-    req.max_rent != null,
-    d.rent_pa == null || d.rent_pa <= (req.max_rent as number),
-    `Rent: ${d.rent_pa != null ? `${gbp(d.rent_pa)} pa` : "POA"} vs max ${gbp(req.max_rent ?? 0)}`,
-  );
+  // One rent dimension for both ceilings. A listing with no rent (POA) passes,
+  // as before; the per-sq-ft ceiling also needs a size, and passes without one.
+  const psf =
+    d.rent_pa != null && d.size_sqft != null && d.size_sqft > 0 ? d.rent_pa / d.size_sqft : null;
+  const annualOk = req.max_rent == null || d.rent_pa == null || d.rent_pa <= req.max_rent;
+  const psfOk = req.max_rent_psf == null || psf == null || psf <= req.max_rent_psf;
+  const rentLabel = [
+    req.max_rent != null
+      ? `Rent: ${d.rent_pa != null ? `${gbp(d.rent_pa)} pa` : "POA"} vs max ${gbp(req.max_rent)}`
+      : null,
+    req.max_rent_psf != null
+      ? `${req.max_rent == null ? "Rent: " : ""}${psf != null ? `£${(Math.round(psf * 100) / 100).toLocaleString("en-GB")}/sq ft` : "per sq ft unknown"} vs max £${req.max_rent_psf.toLocaleString("en-GB")}/sq ft`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" and ");
+  add(10, req.max_rent != null || req.max_rent_psf != null, annualOk && psfOk, rentLabel);
 
   add(
     5,

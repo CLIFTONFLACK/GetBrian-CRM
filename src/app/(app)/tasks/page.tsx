@@ -14,14 +14,12 @@ import { auth } from "@/lib/auth";
 import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
 import { listMyTasks } from "@/lib/db/queries/tasks";
 import { openRecordHref, RECORD_TYPES, type RecordType } from "@/lib/record-ref";
-import { formatLondonDateTime } from "@/lib/format-date";
+import { LocalDateTime } from "@/components/local-date-time";
 import { isPast } from "@/lib/time";
 import { isUuid } from "@/lib/uuid";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Tasks" };
-
-const fmt = formatLondonDateTime;
 
 /** The record panel a task opens, or null when the task has no (known) record. */
 function taskRecordHref(t: { entity_type: string | null; entity_id: string | null }) {
@@ -105,7 +103,13 @@ function TaskList({
                     overdue ? "font-medium text-destructive" : "text-muted-foreground",
                   )}
                 >
-                  {t.due_at ? `Due ${fmt(t.due_at)}` : "No due date"}
+                  {t.due_at ? (
+                    <>
+                      Due <LocalDateTime iso={t.due_at} />
+                    </>
+                  ) : (
+                    "No due date"
+                  )}
                   {overdue ? " · overdue" : ""}
                   {" · "}
                   {t.assignee_id

@@ -9,7 +9,9 @@ import { refreshMatchesForRequirement } from "@/lib/actions/matches";
 import { auth } from "@/lib/auth";
 import { isBlobHostedUrl } from "@/lib/blob-url";
 import { isDbConfigured } from "@/lib/db/client";
-import { currentAgencyId, isAgencyAdmin } from "@/lib/db/queries/agencies";
+import { currentAgencyId, getAgencyMembers, isAgencyAdmin } from "@/lib/db/queries/agencies";
+import { geocodeAddress } from "@/lib/maps/geocode";
+import { rentPsfError, resolveAnchor } from "@/lib/requirement-anchor";
 import {
   companyBelongsToAgency,
   contactBelongsToAgency,
@@ -91,7 +93,40 @@ function payload(fd: FormData): RequirementWriteInput {
     maxGuidePrice: num(fd, "max_guide_price"),
     notes: nullableStr(fd, "notes"),
     leadAgentId: nullableStr(fd, "lead_agent_id"),
+    // The place and radius are resolved by applyAnchor(), which needs the
+    // database and the geocoder; the quick-create form has no such fields.
+    locationAnchorText: null,
+    locationAnchorLat: null,
+    locationAnchorLng: null,
+    locationRadiusMiles: null,
+    maxRentPsf: num(fd, "max_rent_psf"),
   };
+}
+
+/**
+ * Read "Near (place)" and "Within (miles)" from the form into `data`, finding
+ * the place's coordinates (see src/lib/requirement-anchor.ts). Returns an error
+ * to show, or null. A place that cannot be found is NOT an error: the text and
+ * radius are saved without coordinates (the brief's location is not scored)
+ * and the requirement page shows a warning.
+ */
+async function applyAnchor(
+  fd: FormData,
+  data: RequirementWriteInput,
+  stored: { text: string | null; lat: number | null; lng: number | null } | null,
+): Promise<string | null> {
+  const out = await resolveAnchor(
+    {
+      text: nullableStr(fd, "location_anchor_text"),
+      miles: num(fd, "location_radius_miles"),
+      milesRaw: str(fd, "location_radius_miles"),
+    },
+    stored,
+    (text) => geocodeAddress({ address_line: text }),
+  );
+  if (!out.ok) return out.error;
+  Object.assign(data, out.fields);
+  return null;
 }
 
 /** Lead agent + additional agents (de-duped, lead excluded from extras). */
@@ -118,7 +153,30 @@ async function requirementPayloadError(
   if (data.contactId && !(await contactBelongsToAgency(agencyId, data.contactId))) {
     return "That contact was not found in your agency.";
   }
+  const psf = rentPsfError(data.maxRentPsf);
+  if (psf) return psf;
   return requirementLinkError(data);
+}
+
+/**
+ * The lead agent and the additional agents arrive from the form as bare ids.
+ * Each must be a member of the CALLER's agency, or a crafted POST could put
+ * someone from another tenant on the brief (and send them a notification).
+ * Any member of the agency may change the lead: there is no role rule here.
+ */
+async function agentMembershipError(
+  agencyId: string,
+  fd: FormData,
+): Promise<string | null> {
+  const { lead, extra } = agentsFromForm(fd);
+  const wanted = [...(lead ? [lead] : []), ...extra];
+  if (wanted.length === 0) return null;
+  const members = new Set((await getAgencyMembers(agencyId)).map((m) => m.id));
+  if (lead && !members.has(lead)) return "The lead agent is not a member of your agency.";
+  if (extra.some((id) => !members.has(id))) {
+    return "An additional agent is not a member of your agency.";
+  }
+  return null;
 }
 
 /** Resolves the signed-in caller's user id + agency id, or an error message. */
@@ -171,7 +229,10 @@ export async function createRequirement(
   const { userId, agencyId } = caller;
 
   const data = payload(formData);
-  const invalid = await requirementPayloadError(agencyId, data);
+  const invalid =
+    (await requirementPayloadError(agencyId, data)) ??
+    (await agentMembershipError(agencyId, formData)) ??
+    (await applyAnchor(formData, data, null));
   if (invalid) return { error: invalid };
 
   const { id } = await createRequirementRow(agencyId, userId, data);
@@ -244,7 +305,9 @@ export async function updateRequirement(
   const { userId, agencyId } = caller;
 
   const data = payload(formData);
-  const invalid = await requirementPayloadError(agencyId, data);
+  const invalid =
+    (await requirementPayloadError(agencyId, data)) ??
+    (await agentMembershipError(agencyId, formData));
   if (invalid) return { error: invalid };
 
   // Previous lead agent: a hand-off should ping the incoming agent. Also
@@ -253,6 +316,14 @@ export async function updateRequirement(
   // such guard; AGENTS.md calls for adding it here to match disposals/companies.
   const existing = await getRequirementForUpdate(agencyId, id);
   if (!existing) return { error: "This requirement no longer exists." };
+
+  // The place keeps its stored coordinates when the text did not change.
+  const anchorError = await applyAnchor(formData, data, {
+    text: existing.location_anchor_text,
+    lat: existing.location_anchor_lat,
+    lng: existing.location_anchor_lng,
+  });
+  if (anchorError) return { error: anchorError };
 
   const updated = await updateRequirementRow(agencyId, id, existing.updated_at, data);
   if (!updated) {

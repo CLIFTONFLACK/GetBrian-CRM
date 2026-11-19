@@ -954,6 +954,7 @@ export type LinkedContact = {
   role: string;
   email: string | null;
   phone: string | null;
+  mobile: string | null;
 };
 
 /** The linked landlord/vendor company for #4's "Company & contact" card. */
@@ -975,7 +976,7 @@ export async function getLinkedContact(
   contactId: string,
 ): Promise<LinkedContact | null> {
   const rows = await sql`
-    select id, first_name, last_name, role, email, phone from public.contacts
+    select id, first_name, last_name, role, email, phone, mobile from public.contacts
     where id = ${contactId} and agency_id = ${agencyId}
     limit 1
   `;

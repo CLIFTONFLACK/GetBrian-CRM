@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { LocalDateTime } from "@/components/local-date-time";
 import {
   deleteMessage,
   markMessageRead,
@@ -369,7 +370,7 @@ export default async function MessagesPage({
                             : "text-muted-foreground",
                         )}
                       >
-                        Due {fmt(r.due_at)}
+                        Due <LocalDateTime iso={r.due_at} />
                         {overdue ? " · overdue" : ""}
                       </p>
                     </div>

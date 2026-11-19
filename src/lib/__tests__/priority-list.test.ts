@@ -22,6 +22,11 @@ const req = (over: Partial<Req> = {}): Req =>
     max_rent: null,
     max_premium: null,
     max_guide_price: null,
+    location_anchor_text: null,
+    location_anchor_lat: null,
+    location_anchor_lng: null,
+    location_radius_miles: null,
+    max_rent_psf: null,
     ...over,
   }) as Req;
 
@@ -74,6 +79,11 @@ const row = (over: Record<string, unknown> = {}) =>
     max_rent: 50000,
     max_premium: null,
     max_guide_price: null,
+    location_anchor_text: null,
+    location_anchor_lat: null,
+    location_anchor_lng: null,
+    location_radius_miles: null,
+    max_rent_psf: null,
     status: "active",
     listing_rating: 5,
     date_updated: "2026-11-01T10:00:00Z",

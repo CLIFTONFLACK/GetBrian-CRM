@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { createTask } from "@/lib/actions/tasks";
 import type { FormState } from "@/lib/actions/types";
 import type { AgentOption } from "@/lib/db/queries/agencies";
+import { withIsoDueAt } from "@/lib/local-datetime";
 
 /** Inline "Add a task" form — title, details, due date and an assignee picker. */
 export function NewTaskForm({
@@ -38,7 +39,11 @@ export function NewTaskForm({
   }, [state, router]);
 
   return (
-    <form ref={formRef} action={formAction} className="space-y-4">
+    <form
+      ref={formRef}
+      action={(fd) => formAction(withIsoDueAt(fd))}
+      className="space-y-4"
+    >
       <div className="space-y-2">
         <Label htmlFor="task-title">Title *</Label>
         <Input

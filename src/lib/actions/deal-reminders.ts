@@ -14,6 +14,7 @@ import {
 } from "@/lib/db/queries/deals";
 import { createNotifications } from "@/lib/db/queries/messages";
 import type { FormState } from "@/lib/actions/types";
+import { parseDueInput } from "@/lib/london-time";
 import { revalidatePanelHosts } from "@/lib/revalidate-panels";
 
 /** A deal's reminders show in the full page and in the records panel, which can be open on any list page. */
@@ -52,7 +53,11 @@ export async function addDealReminder(
   if (!title) return { error: "A reminder title is required." };
   if (!dueAt) return { error: "A due date is required." };
 
-  const dueAtIso = new Date(dueAt).toISOString();
+  // The form posts an absolute instant (ISO with Z). A zone-less value from a
+  // direct post is read as Europe/London time, as tasks are.
+  const dueDate = parseDueInput(dueAt);
+  if (!dueDate) return { error: "That due date is not valid." };
+  const dueAtIso = dueDate.toISOString();
   await createDealReminderRow(agencyId, userId, dealId, { title, dueAt: dueAtIso });
 
   // Notify whoever owns the deal today — the lead agent, falling back to the
@@ -62,7 +67,8 @@ export async function addDealReminder(
   if (deal && owner && owner !== userId) {
     await createNotifications(agencyId, [owner], {
       title: `Reminder set on “${deal.title}”`,
-      body: `${title} — due ${new Date(dueAtIso).toLocaleString("en-GB")}`,
+      // The server has no viewer zone, so the time is stated in UTC.
+      body: `${title} — due ${new Date(dueAtIso).toLocaleString("en-GB", { timeZone: "UTC" })} UTC`,
       link: `/deals/${dealId}`,
     });
   }

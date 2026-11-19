@@ -228,9 +228,7 @@ export type CompanyWriteInput = {
   notes: string | null;
   companyNumber: string | null;
   vatNumber: string | null;
-  /** Used by create only (importer passes null). Update never writes lead_agent_id:
-   *  companies have no lead agent in the UI, and stored values are preserved. */
-  leadAgentId?: string | null;
+  leadAgentId: string | null;
   addressLine: string | null;
   city: string | null;
   postcode: string | null;
@@ -251,7 +249,7 @@ export async function createCompany(
     ) values (
       ${agencyId}, ${createdBy}, ${input.name}, ${input.type}, ${input.sectorTags},
       ${input.website}, ${input.phone}, ${input.notes},
-      ${input.companyNumber}, ${input.vatNumber}, ${input.leadAgentId ?? null},
+      ${input.companyNumber}, ${input.vatNumber}, ${input.leadAgentId},
       ${input.addressLine}, ${input.city}, ${input.postcode}, ${input.county},
       ${geo.lat}, ${geo.lng}
     )
@@ -320,6 +318,7 @@ export async function updateCompany(
           notes = ${input.notes},
           company_number = ${input.companyNumber},
           vat_number = ${input.vatNumber},
+          lead_agent_id = ${input.leadAgentId},
           address_line = ${input.addressLine},
           city = ${input.city},
           postcode = ${input.postcode},
@@ -339,6 +338,7 @@ export async function updateCompany(
           notes = ${input.notes},
           company_number = ${input.companyNumber},
           vat_number = ${input.vatNumber},
+          lead_agent_id = ${input.leadAgentId},
           address_line = ${input.addressLine},
           city = ${input.city},
           postcode = ${input.postcode},

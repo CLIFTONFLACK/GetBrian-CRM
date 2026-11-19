@@ -258,17 +258,45 @@ export type ParsedSize = {
 };
 
 const NUM = "(\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.(\\d+))?";
-const SIZE_RANGE = new RegExp(`^${NUM}\\s*(?:to|-)\\s*${NUM}$`);
-const SIZE_UPTO = new RegExp(`^(?:up\\s*to|max(?:imum)?)\\s+${NUM}$`);
-const SIZE_FROM = new RegExp(`^(?:from|min(?:imum)?)\\s+${NUM}$`);
+const SIZE_RANGE = new RegExp(`^(?:between\\s+)?${NUM}\\s*(?:to|-|and)\\s*${NUM}$`);
+const SIZE_UPTO = new RegExp(
+  `^(?:up\\s*to|max(?:imum)?(?:\\s+of)?|under|less\\s+than|no\\s+more\\s+than|below)\\s+${NUM}$`,
+);
+const SIZE_FROM = new RegExp(
+  `^(?:from|min(?:imum)?(?:\\s+of)?|over|at\\s+least|more\\s+than|above)\\s+${NUM}$`,
+);
+const SIZE_PLUS = new RegExp(`^${NUM}\\s*\\+$`);
+const SIZE_APPROX = new RegExp(`^(?:approx(?:imately)?\\.?|c\\.?|circa|about|around|~)\\s*${NUM}$`);
 const SIZE_ONE = new RegExp(`^${NUM}$`);
+
+const SIZE_UNIT_SRC =
+  "(?<![a-z])(?:sq\\.?\\s*ft\\.?|sq\\.?\\s*f(?:ee|oo)t\\.?|sqft|sf|ft2|ft²|sq\\.?\\s*m(?:etres?|eters?)?\\.?|sqm|m2|m²)(?![a-z0-9])";
+const SIZE_UNIT_G = new RegExp(SIZE_UNIT_SRC, "g");
 
 const toNumber = (whole: string, frac?: string) =>
   Number(`${whole.replace(/,/g, "")}${frac ? `.${frac}` : ""}`);
 
 const digitsToNine = (s: string) => s.replace(/\d/g, "9");
 
-/** "1,000 to 4,000 sq ft", "Up to 2,000 sq ft", "From 3,000 sq ft", "175 to 275 sq m". */
+const isMetricUnit = (u: string) => /^(sq\.?\s*m|sqm|m2|m²)/.test(u) && !/^sq\.?\s*f/.test(u);
+
+/** Two readings of one size, "2,000 sq ft (186 sq m)": keep the square-feet one. */
+function pickSquareFeet(a: string, b: string): string | null {
+  const ua = [...a.matchAll(SIZE_UNIT_G)];
+  const ub = [...b.matchAll(SIZE_UNIT_G)];
+  if (ua.length === 0 || ub.length === 0) return null;
+  if (!isMetricUnit(ua[ua.length - 1][0])) return a;
+  if (!isMetricUnit(ub[ub.length - 1][0])) return b;
+  return a;
+}
+
+/**
+ * "1,000 to 4,000 sq ft", "Up to 2,000 sq ft", "From 3,000 sq ft", "175 to 275 sq m".
+ * Also "under / less than / maximum N" (a ceiling), "over / at least / more
+ * than / minimum / N+" (a floor), "approx N", a unit on both numbers
+ * ("1,000 sq ft - 2,000 sq ft") and a second reading in brackets ("2,000 sq ft
+ * (186 sq m)", where the square-feet figure is used).
+ */
 export function parseSize(cell: string | null | undefined): ParsedSize {
   const none: ParsedSize = {
     kind: "empty",
@@ -284,11 +312,35 @@ export function parseSize(cell: string | null | undefined): ParsedSize {
   const shape = digitsToNine(raw);
   const bad: ParsedSize = { ...none, kind: "unparsed", keepText: true, shape };
 
-  const text = raw.toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ");
-  const unit = /\s*(sq\.?\s*ft\.?|sqft|sq\.?\s*feet|sq\.?\s*m(?:etres?|eters?)?\.?|sqm|m2|m²)$/.exec(text);
-  if (!unit) return bad;
-  const isMetric = /^(sq\.?\s*m|sqm|m2|m²)/.test(unit[1]) && !/^sq\.?\s*f/.test(unit[1]);
-  const factor = isMetric ? SQM_TO_SQFT : 1;
+  let text = raw.toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ");
+
+  // A second reading in brackets or after a slash: keep one of them.
+  const bracket = /^(.*?)\s*[([]\s*([^)\]]*?)\s*[)\]]$/.exec(text);
+  if (bracket) {
+    const picked = pickSquareFeet(bracket[1], bracket[2]);
+    if (picked !== null) text = picked.trim();
+  } else if (/\s\/\s/.test(text)) {
+    const [a, b, ...rest] = text.split(/\s\/\s/);
+    const picked = rest.length === 0 ? pickSquareFeet(a, b) : null;
+    if (picked !== null) text = picked.trim();
+  }
+
+  // A unit on both numbers: "1,000 sq ft to 4,000 sq ft". Same family only.
+  let units = [...text.matchAll(SIZE_UNIT_G)];
+  if (units.length > 2) return bad;
+  if (units.length === 2) {
+    if (isMetricUnit(units[0][0]) !== isMetricUnit(units[1][0])) return bad;
+    const first = units[0];
+    text = `${text.slice(0, first.index)}${text.slice(first.index + first[0].length)}`
+      .replace(/\s+/g, " ")
+      .trim();
+    units = [...text.matchAll(SIZE_UNIT_G)];
+  }
+  if (units.length !== 1) return bad;
+  const unit = units[0];
+  if (unit.index + unit[0].length !== text.length) return bad;
+
+  const factor = isMetricUnit(unit[0]) ? SQM_TO_SQFT : 1;
   const body = text.slice(0, unit.index).trim();
   const conv = (n: number) => Math.round(n * factor);
 
@@ -307,13 +359,13 @@ export function parseSize(cell: string | null | undefined): ParsedSize {
     if (n <= 0) return bad;
     return { kind: "upto", minSqft: null, maxSqft: conv(n), swapped: false, keepText: false, shape };
   }
-  m = SIZE_FROM.exec(body);
+  m = SIZE_FROM.exec(body) ?? SIZE_PLUS.exec(body);
   if (m) {
     const n = toNumber(m[1], m[2]);
     if (n <= 0) return bad;
     return { kind: "from", minSqft: conv(n), maxSqft: null, swapped: false, keepText: false, shape };
   }
-  m = SIZE_ONE.exec(body);
+  m = SIZE_APPROX.exec(body) ?? SIZE_ONE.exec(body);
   if (m) {
     const n = toNumber(m[1], m[2]);
     if (n <= 0) return bad;
@@ -332,20 +384,34 @@ export type RentOutcome =
   | "empty"
   | "converted"
   | "plain_number"
+  | "assumed_annual"
   | "floor"
   | "per_sqft"
   | "per_month"
+  | "per_week"
   | "other_unit"
   | "no_unit"
   | "unparsed";
 
 export type ParsedRent = {
   outcome: RentOutcome;
+  /** Annual ceiling. Monthly and weekly figures are already multiplied up. */
   maxRent: number | null;
+  /** Ceiling per square foot per year, from "£25 per sq ft". Never mixed into maxRent. */
+  rentPsf: number | null;
   /** "Rent (as exported): ..." when the figure was not converted. */
   note: string | null;
   shape: string;
 };
+
+// A figure with no unit is read as annual only from this amount up.
+const MIN_ASSUMED_ANNUAL = 1000;
+// requirements.max_rent is numeric(12,2). A converted figure at or above this
+// would overflow it ("numeric field overflow") and fail the row, so it stays in notes.
+const MAX_RENT_PA = 1_000_000_000;
+const ANNUAL_RE = /\bper\s*(annum|year|yr)\b|\bp\.?a\.?(?![a-z])|\bannually\b|\/\s*(annum|year)|\ba year\b/;
+// Words that may sit around a bare figure without changing what it means.
+const BARE_FILLER = /\b(up\s*to|upto|max(?:imum)?|budget|approx(?:imately)?|circa|about|around|to|and|c)\b/g;
 
 // Bounded and anchored on the left: a digit run can only be entered at its
 // start (the lookbehind), and each branch is capped, so an 80,000-digit cell
@@ -366,25 +432,37 @@ function amountsIn(text: string): number[] {
   return out;
 }
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 /**
- * Only annual rents become max_rent: "Up to £100,000 per annum" -> 100000 and
- * "£50,000 - £100,000 per annum" -> 100000 (the ceiling of the band). A cell
- * that is ONLY a number ("100000", "£100,000") sets max_rent and is read as an
- * annual figure, as an explicit max_rent column always was. A floor ("From",
- * "min", "over", "at least", a trailing "+") has no ceiling. Per sq ft, per
- * month and TEXT with no unit ("Up to £50,000") are NOT converted: a
- * per-sq-ft figure stored as a yearly budget would make the requirement match
- * almost nothing, and text with no unit could mean either.
+ * What a rent cell means, read in this order:
+ *  - a cell that is only a number: max_rent, as an explicit max_rent column always was;
+ *  - a floor ("From", "min", "over", "at least", a trailing "+"): no ceiling, text kept;
+ *  - per sq ft ("£25 per sq ft", "£25 psf", "£25/sq ft"): rentPsf, the top of a
+ *    band. It is NEVER put in max_rent: a per-sq-ft figure stored as a yearly
+ *    budget would make the requirement match almost nothing;
+ *  - per month ("pcm", "pm", "per month") x 12, per week x 52: max_rent;
+ *  - annual ("per annum", "pa", "per year"): the top of a band;
+ *  - no unit at all ("Up to £50,000"): read as annual when the figure is 1,000
+ *    or more, otherwise kept in notes.
+ * Dollar and euro amounts are not read. Anything not converted keeps its text
+ * in `note`.
  */
 export function parseRent(cell: string | null | undefined): ParsedRent {
   if ((cell ?? "").length > MAX_CELL_CHARS) {
-    return { outcome: "unparsed", maxRent: null, note: null, shape: "" };
+    return { outcome: "unparsed", maxRent: null, rentPsf: null, note: null, shape: "" };
   }
   const raw = (cell ?? "").trim();
   const shape = digitsToNine(raw);
-  if (!raw) return { outcome: "empty", maxRent: null, note: null, shape };
+  if (!raw) return { outcome: "empty", maxRent: null, rentPsf: null, note: null, shape };
   const note = `Rent (as exported): ${raw}`;
-  const keep = (outcome: RentOutcome): ParsedRent => ({ outcome, maxRent: null, note, shape });
+  const keep = (outcome: RentOutcome): ParsedRent => ({
+    outcome,
+    maxRent: null,
+    rentPsf: null,
+    note,
+    shape,
+  });
   const text = raw.toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ");
 
   // A cell that is only a number is a plain figure, as an explicit max_rent
@@ -392,27 +470,71 @@ export function parseRent(cell: string | null | undefined): ParsedRent {
   const plain = PLAIN_NUMBER_RE.exec(text);
   if (plain) {
     const n = Number(`${plain[1].replace(/[, ]/g, "")}${plain[2] ?? ""}`);
-    return n > 0
-      ? { outcome: "plain_number", maxRent: n, note: null, shape }
+    return n > 0 && n < MAX_RENT_PA
+      ? { outcome: "plain_number", maxRent: n, rentPsf: null, note: null, shape }
       : keep("unparsed");
   }
   if (/[$€]/.test(text)) return keep("unparsed");
-  if (/(per|\/|a)\s*sq\.?\s*(ft|foot|feet)|\bpsf\b|per square f/.test(text)) return keep("per_sqft");
-  if (/\bper\s*(month|mth)\b|\bpcm\b|\bp\.c\.m\b|\bmonthly\b/.test(text)) return keep("per_month");
   // "From", "min", "over", "at least" and a trailing "+" all describe a floor,
-  // not a ceiling: there is no max_rent to set, so the text stays in notes.
+  // not a ceiling: there is no maximum to set, so the text stays in notes.
   if (FLOOR_RE.test(text)) return keep("floor");
-  const annual = /\bper\s*(annum|year|yr)\b|\bp\.?a\.?(?![a-z])|\bannually\b|\/\s*(annum|year)|\ba year\b/.test(text);
-  if (!annual) return /\bper\s+[a-z]/.test(text) ? keep("other_unit") : keep("no_unit");
 
   const amounts = amountsIn(text).filter((n) => n > 0);
-  if (amounts.length === 0 || amounts.length > 2) return keep("unparsed");
-  return { outcome: "converted", maxRent: Math.max(...amounts), note: null, shape };
+  const usable = amounts.length >= 1 && amounts.length <= 2;
+  const top = amounts.length ? Math.max(...amounts) : 0;
+
+  if (/(per|\/|a)\s*sq\.?\s*(ft|foot|feet)|\bper\s*sf\b|\bpsf\b|per square f/.test(text)) {
+    if (!usable || top > 1000) return keep("per_sqft");
+    return { outcome: "per_sqft", maxRent: null, rentPsf: round2(top), note: null, shape };
+  }
+  if (/\bper\s*(calendar\s*)?(month|mth)\b|\bpcm\b|\bp\.c\.m\b|\bpm\b|\bmonthly\b/.test(text)) {
+    if (!usable) return keep("per_month");
+    // "£2,000 pcm (£24,000 pa)": the cell already holds the yearly figure. Do not
+    // multiply the larger (yearly) amount by 12 again.
+    if (amounts.length === 2 && ANNUAL_RE.test(text)) {
+      return top < MAX_RENT_PA
+        ? { outcome: "converted", maxRent: top, rentPsf: null, note: null, shape }
+        : keep("per_month");
+    }
+    if (top * 12 >= MAX_RENT_PA) return keep("per_month");
+    return { outcome: "per_month", maxRent: round2(top * 12), rentPsf: null, note: null, shape };
+  }
+  if (/\bper\s*(week|wk)\b|\bpw\b|\bweekly\b/.test(text)) {
+    if (!usable) return keep("per_week");
+    if (amounts.length === 2 && ANNUAL_RE.test(text)) {
+      return top < MAX_RENT_PA
+        ? { outcome: "converted", maxRent: top, rentPsf: null, note: null, shape }
+        : keep("per_week");
+    }
+    if (top * 52 >= MAX_RENT_PA) return keep("per_week");
+    return { outcome: "per_week", maxRent: round2(top * 52), rentPsf: null, note: null, shape };
+  }
+  const annual = ANNUAL_RE.test(text);
+  if (annual) {
+    if (amounts.length === 0 || amounts.length > 2 || top >= MAX_RENT_PA) return keep("unparsed");
+    return { outcome: "converted", maxRent: top, rentPsf: null, note: null, shape };
+  }
+  if (/\bper\s+[a-z]/.test(text)) return keep("other_unit");
+
+  // No unit at all. Read as annual only when nothing but the figure (and
+  // filler such as "up to") is there and the figure is 1,000 or more.
+  if (usable && top >= MIN_ASSUMED_ANNUAL && top < MAX_RENT_PA) {
+    const rest = text
+      .replace(AMOUNT_RE, " ")
+      .replace(BARE_FILLER, " ")
+      .replace(/[£\-,.\s]/g, "");
+    if (rest === "") {
+      return { outcome: "assumed_annual", maxRent: top, rentPsf: null, note: null, shape };
+    }
+  }
+  return keep("no_unit");
 }
 
 // ---------------------------------------------------------------------------
 // Area
 // ---------------------------------------------------------------------------
+
+export type LatLngPair = { lat: number; lng: number };
 
 export type LocationCatalogInput = {
   neighbourhoods: readonly string[];
@@ -420,6 +542,11 @@ export type LocationCatalogInput = {
   counties: readonly string[];
   regions: readonly string[];
   districts: readonly string[];
+  /**
+   * Optional coordinates, [lat, lng], keyed by place name or postcode district
+   * (any case, apostrophes ignored). Used only to resolve "within N miles of X".
+   */
+  coords?: Readonly<Record<string, readonly [number, number]>>;
 };
 
 export type LocationCatalog = {
@@ -428,6 +555,8 @@ export type LocationCatalog = {
   county: Map<string, string>;
   region: Map<string, string>;
   districts: Set<string>;
+  /** normName(place) -> coordinates. Empty when the input had none. */
+  coords: Map<string, LatLngPair>;
 };
 
 /** Lower-case, drop apostrophes, collapse spaces: "Kings Cross" finds "King's Cross". */
@@ -441,16 +570,30 @@ export function normName(s: string): string {
 
 export function buildLocationCatalog(input: LocationCatalogInput): LocationCatalog {
   const index = (names: readonly string[]) => new Map(names.map((n) => [normName(n), n]));
+  const coords = new Map<string, LatLngPair>();
+  for (const [name, pair] of Object.entries(input.coords ?? {})) {
+    const [lat, lng] = pair;
+    if (Number.isFinite(lat) && Number.isFinite(lng)) coords.set(normName(name), { lat, lng });
+  }
   return {
     neighbourhood: index(input.neighbourhoods),
     town: index(input.towns),
     county: index(input.counties),
     region: index(input.regions),
     districts: new Set(input.districts.map((d) => d.toUpperCase())),
+    coords,
   };
 }
 
 export type AreaKind = "zone" | "neighbourhood" | "town" | "county" | "region" | "district";
+
+/** "Within 3 miles of X": the place, its coordinates when known, the radius in miles. */
+export type ParsedAnchor = {
+  text: string;
+  lat: number | null;
+  lng: number | null;
+  miles: number;
+};
 
 export type ParsedArea = {
   zones: string[];
@@ -465,15 +608,36 @@ export type ParsedArea = {
   unplaced: string[];
   /** Tokens placed in part: the original text is also kept in notes. */
   partial: string[];
+  /**
+   * The first "within N miles of X" in the cell. lat and lng are null when X is
+   * not in the gazetteer: the importer geocodes it later. At most one per cell;
+   * a second one is unplaced and goes to notes.
+   */
+  anchor: ParsedAnchor | null;
   /** "Area (as exported): ..." when anything was not fully placed. */
   note: string | null;
 };
 
 const DISTRICT_SHAPE = /^[A-Z]{1,2}\d[A-Z\d]?$/;
 const DISTRICT_RANGE = /^([A-Z]{1,2})(\d{1,2})\s*-\s*(?:\1)?(\d{1,2})$/;
-const RADIUS = /^within\s+[\d.]+\s+miles?\s+of\b/i;
 const FLEX = /\s*\(\s*\+\s*[\d.]+\s*miles?\s*\)\s*$/i;
 const MAX_RANGE = 20;
+
+// "within 3 miles of X", "3 miles from X", "within 5 km of X", "within 2 miles radius of X".
+const RADIUS_DIST =
+  /^(?:within\s+)?(\d+(?:\.\d+)?)\s*(miles?|mi|km|kilomet(?:re|er)s?)(?:\s+radius)?\s+(?:of|from)\s+/i;
+// "within 10 minutes walk of X", "10 min walk from X". 3 mph: miles = minutes / 20.
+const RADIUS_WALK =
+  /^(?:within\s+)?(\d+(?:\.\d+)?)\s*(?:minutes?|mins?)(?:'s)?\s*walk(?:ing)?(?:\s+distance)?\s+(?:of|from)\s+/i;
+// Driving time is not supported: such a token stays in notes.
+const DRIVE_TIME = /\b\d+\s*(?:minutes?|mins?)\s*(?:drive|driving|by car)\b/i;
+// "Zones 1, 2 and 3", "Zone 1/2", "Zone 1 & 2" (not ranges: "Zone 1-3" is handled by placeName).
+const ZONE_LIST =
+  /\bzones?\s*([1-9](?:\s*(?:,|and|&|\/|\+)\s*[1-9])*)(?![\d\w])(?!\s*(?:-|to)\s*\d)/gi;
+const CONJUNCTION = /(\s+or\s+|\s+and\s+|\s*&\s*|\s+\+\s+)/i;
+const KM_TO_MILES = 0.621371;
+export const MIN_RADIUS_MILES = 0.1;
+export const MAX_RADIUS_MILES = 50;
 
 /** W1 is not a district in the data (W1D, W1F...), but it is a real way to say it. */
 function districtKnown(code: string, catalog: LocationCatalog): boolean {
@@ -530,11 +694,103 @@ function placeName(name: string, catalog: LocationCatalog): Hit[] | null {
   return null;
 }
 
+type Group = { hits: Hit[]; complete: boolean };
+
+/** One name, or a slash group ("Kensington/Notting Hill": whole name first, then its parts). */
+function placeSlashGroup(text: string, catalog: LocationCatalog): Group {
+  const whole = placeName(text, catalog);
+  if (whole) return { hits: whole, complete: true };
+  if (!text.includes("/")) return { hits: [], complete: false };
+  const hits: Hit[] = [];
+  let complete = true;
+  for (const part of text.split("/").map((p) => p.trim()).filter(Boolean)) {
+    const h = placeName(part, catalog);
+    if (h) hits.push(...h);
+    else complete = false;
+  }
+  return { hits, complete };
+}
+
+/**
+ * One comma-free token. The whole token is tried first, so a known name that
+ * contains "and" or "&" is never cut. Then "or", "and", "&" and "+" split it,
+ * and the longest run of pieces that is a known name wins ("Elephant and
+ * Castle and Soho" is two places).
+ */
+function placeGroup(text: string, catalog: LocationCatalog): Group {
+  const whole = placeSlashGroup(text, catalog);
+  if (whole.complete) return whole;
+  const pieces = text.split(CONJUNCTION); // [part, delimiter, part, ...]
+  if (pieces.length < 3) return whole;
+  const n = (pieces.length + 1) / 2;
+  // The run search below costs about n cubed. A real cell names a handful of
+  // places; a longer chain ("x and x and x ...", up to 1,000 pieces in a
+  // 2,000-character cell) is left whole and kept in notes.
+  if (n > 8) return whole;
+  const hits: Hit[] = [];
+  let complete = true;
+  let i = 0;
+  while (i < n) {
+    let took = false;
+    for (let j = n - 1; j > i; j--) {
+      const joined = pieces.slice(2 * i, 2 * j + 1).join("");
+      const h = placeName(joined, catalog);
+      if (h) {
+        hits.push(...h);
+        i = j + 1;
+        took = true;
+        break;
+      }
+    }
+    if (took) continue;
+    const single = placeSlashGroup(pieces[2 * i].trim(), catalog);
+    hits.push(...single.hits);
+    if (!single.complete) complete = false;
+    i++;
+  }
+  return hits.length > 0 ? { hits, complete } : whole;
+}
+
+/** Coordinates for the place a radius is measured from; null when unknown (to be geocoded). */
+function anchorCoords(text: string, catalog: LocationCatalog): LatLngPair | null {
+  const base = normName(text).replace(/\.+$/, "");
+  const candidates = [
+    base,
+    base.replace(/,?\s*london$/, ""),
+    base.replace(/^the\s+/, ""),
+    base.replace(/\s+(?:tube\s+)?station$/, ""),
+  ];
+  for (const c of candidates) {
+    const hit = catalog.coords.get(c);
+    if (hit) return hit;
+  }
+  const upper = text.trim().toUpperCase().replace(/\s+/g, "");
+  if (DISTRICT_SHAPE.test(upper)) return catalog.coords.get(normName(upper)) ?? null;
+  return null;
+}
+
+/** Radius in miles and the length of the phrase, or null when the token does not start with one. */
+function matchRadius(token: string): { miles: number; length: number } | null {
+  const d = RADIUS_DIST.exec(token);
+  if (d) {
+    const n = Number(d[1]);
+    const unit = d[2].toLowerCase();
+    const miles = unit.startsWith("k") ? n * KM_TO_MILES : n;
+    return { miles: Math.round(miles * 100) / 100, length: d[0].length };
+  }
+  const w = RADIUS_WALK.exec(token);
+  if (w) return { miles: Math.round((Number(w[1]) / 20) * 100) / 100, length: w[0].length };
+  return null;
+}
+
 /**
  * Turn a comma-separated Area cell into the requirement's target columns.
  * Anything that could not be placed is returned in `note`, verbatim, so no part
  * of the cell is ever lost. Whole names are matched before slash groups
- * ("Kensington/Notting Hill" is tried as one name, then as its parts).
+ * ("Kensington/Notting Hill" is tried as one name, then as its parts) and
+ * before "or" / "and" / "&" / "+" splits. A radius phrase ("within 3 miles of
+ * X") becomes `anchor`; an address after "of" that starts with a number keeps
+ * its own commas ("34-43 Russell Street, Covent Garden").
  */
 export function parseArea(cell: string | null | undefined, catalog: LocationCatalog): ParsedArea {
   const out: ParsedArea = {
@@ -547,6 +803,7 @@ export function parseArea(cell: string | null | undefined, catalog: LocationCata
     placed: { zone: 0, neighbourhood: 0, town: 0, county: 0, region: 0, district: 0 },
     unplaced: [],
     partial: [],
+    anchor: null,
     note: null,
   };
   if ((cell ?? "").length > MAX_CELL_CHARS) {
@@ -570,15 +827,58 @@ export function parseArea(cell: string | null | undefined, catalog: LocationCata
     out.placed[hit.kind]++;
   };
 
+  // "Zones 1, 2 and 3" would be cut at its commas below: rewrite it first.
+  const prepared = raw.replace(ZONE_LIST, (_m, digits: string) =>
+    (digits.match(/[1-9]/g) ?? []).map((d) => `Zone ${d}`).join(", "),
+  );
+
+  const clean = (s: string) => s.replace(/\s+/g, " ").trim();
+  const segments = prepared.split(/[,;]/);
   const noteTokens: string[] = [];
-  for (const rawToken of raw.split(",")) {
-    const original = rawToken.replace(/\s+/g, " ").trim();
+  const reject = (text: string) => {
+    out.unplaced.push(text);
+    noteTokens.push(text);
+  };
+  const stopsAddress = (seg: string) => {
+    if (matchRadius(seg)) return true;
+    const h = placeName(seg, catalog);
+    return !!h && h.every((x) => x.kind === "zone" || x.kind === "district");
+  };
+
+  for (let i = 0; i < segments.length; i++) {
+    const original = clean(segments[i]);
     if (!original) continue;
-    if (RADIUS.test(original)) {
-      out.unplaced.push(original);
-      noteTokens.push(original);
+
+    const radius = matchRadius(original);
+    if (radius) {
+      let place = original.slice(radius.length).trim();
+      let whole = original;
+      // An address starting with a number ("34-43 Russell Street, Covent
+      // Garden") keeps up to two following segments: they belong to it.
+      if (/^\d/.test(place)) {
+        for (let extra = 0; extra < 2 && i + 1 < segments.length; extra++) {
+          const next = clean(segments[i + 1]);
+          if (!next || stopsAddress(next)) break;
+          place += `, ${next}`;
+          whole += `, ${next}`;
+          i++;
+        }
+      }
+      place = place.replace(/\.+$/, "").trim();
+      const inRange = radius.miles >= MIN_RADIUS_MILES && radius.miles <= MAX_RADIUS_MILES;
+      if (!place || out.anchor || !inRange) {
+        reject(whole);
+        continue;
+      }
+      const at = anchorCoords(place, catalog);
+      out.anchor = { text: place, lat: at?.lat ?? null, lng: at?.lng ?? null, miles: radius.miles };
       continue;
     }
+    if (DRIVE_TIME.test(original)) {
+      reject(original);
+      continue;
+    }
+
     const flexed = FLEX.test(original);
     const token = original.replace(FLEX, "").replace(/\.$/, "").trim();
     if (!token) continue;
@@ -587,7 +887,6 @@ export function parseArea(cell: string | null | undefined, catalog: LocationCata
 
     const london = /^london\s*[-–]\s*(.+)$/i.exec(token);
     const londonDistrict = /^london\s+([A-Za-z]{1,2}\d[A-Za-z\d]?)$/i.exec(token);
-    const whole = london || londonDistrict ? null : placeName(token, catalog);
     if (london) {
       hits = [{ kind: "region", value: catalog.region.get("london") ?? "London" }];
       // "London - Greater London" says nothing more than London; "London -
@@ -596,23 +895,15 @@ export function parseArea(cell: string | null | undefined, catalog: LocationCata
     } else if (londonDistrict) {
       hits = placeName(londonDistrict[1], catalog) ?? [];
       complete = hits.length > 0;
-    } else if (whole) {
-      hits = whole;
-    } else if (token.includes("/")) {
-      const parts = token.split("/").map((p) => p.trim()).filter(Boolean);
-      for (const part of parts) {
-        const h = placeName(part, catalog);
-        if (h) hits.push(...h);
-        else complete = false;
-      }
     } else {
-      complete = false;
+      const g = placeGroup(token, catalog);
+      hits = g.hits;
+      complete = g.complete;
     }
 
     hits.forEach(add);
     if (hits.length === 0) {
-      out.unplaced.push(original);
-      noteTokens.push(original);
+      reject(original);
     } else if (!complete || flexed) {
       out.partial.push(original);
       noteTokens.push(original);
@@ -820,6 +1111,111 @@ export function parseCompanyType(
 /** A name needs at least one letter or digit: "-", "." and "..." are placeholders. */
 export function hasLetterOrDigit(name: string): boolean {
   return /[\p{L}\p{N}]/u.test(name);
+}
+
+// ---------------------------------------------------------------------------
+// Phone numbers
+// ---------------------------------------------------------------------------
+
+export type UkNumberClass = "mobile" | "landline" | "unknown";
+
+/**
+ * Mobile or landline, from the number alone. Spaces, dots, dashes and brackets
+ * are ignored, a "(0)" after +44 is dropped, and a leading +44 or 0044 becomes
+ * a leading 0. Mobile is 07 plus nine digits, except 070 (personal numbering)
+ * and 076 (pagers), which are "unknown". Landline is 01, 02 or 03 plus nine
+ * digits. 08, 09, short numbers, extensions and anything with letters are "unknown".
+ */
+export function classifyUkNumber(raw: string | null | undefined): UkNumberClass {
+  if ((raw ?? "").length > 64) return "unknown";
+  let s = (raw ?? "").trim();
+  if (!s) return "unknown";
+  s = s.replace(/^((?:\+|00)\s*44)\s*\(\s*0\s*\)/, "$1");
+  s = s.replace(/[\s.\-()]/g, "");
+  if (s.startsWith("+44")) s = `0${s.slice(3)}`;
+  else if (s.startsWith("0044")) s = `0${s.slice(4)}`;
+  if (!/^\d+$/.test(s)) return "unknown";
+  if (/^07\d{9}$/.test(s)) return /^07[06]/.test(s) ? "unknown" : "mobile";
+  if (/^0[123]\d{9}$/.test(s)) return "landline";
+  return "unknown";
+}
+
+export type RoutedPhones = {
+  phone: string | null;
+  mobile: string | null;
+  /** The Phone cell held a mobile and it now sits in mobile. */
+  phoneToMobile: boolean;
+  /** The Mobile cell held a landline and it now sits in phone. */
+  mobileToPhone: boolean;
+  /** Both cells hold the same known kind: each stays in its own column as exported. */
+  sameClass: "mobile" | "landline" | null;
+};
+
+/**
+ * File a contact's two phone cells by what each number is: a mobile-class
+ * number goes to mobile, a landline-class number to phone, anything else stays
+ * in the column it came from. When both cells would land in the same field they
+ * are left exactly as exported (and `sameClass` says so when both are the same
+ * known kind), so no number is ever dropped or replaced.
+ */
+export function routeContactPhones(
+  phoneCell: string | null | undefined,
+  mobileCell: string | null | undefined,
+): RoutedPhones {
+  const p = (phoneCell ?? "").trim();
+  const m = (mobileCell ?? "").trim();
+  const pc = classifyUkNumber(p);
+  const mc = classifyUkNumber(m);
+  const dest = (cls: UkNumberClass, own: "phone" | "mobile") =>
+    cls === "mobile" ? "mobile" : cls === "landline" ? "phone" : own;
+  const pd = dest(pc, "phone");
+  const md = dest(mc, "mobile");
+  const out: RoutedPhones = {
+    phone: p || null,
+    mobile: m || null,
+    phoneToMobile: false,
+    mobileToPhone: false,
+    sameClass: null,
+  };
+  if (p && m && pd === md) {
+    if (pc === mc && pc !== "unknown") out.sameClass = pc;
+    return out;
+  }
+  out.phone = null;
+  out.mobile = null;
+  if (p) {
+    if (pd === "mobile") {
+      out.mobile = p;
+      out.phoneToMobile = pc === "mobile";
+    } else out.phone = p;
+  }
+  if (m) {
+    if (md === "phone") {
+      out.phone = m;
+      out.mobileToPhone = mc === "landline";
+    } else out.mobile = m;
+  }
+  return out;
+}
+
+/**
+ * A company has one phone field. Given every number the row carries, the first
+ * landline-class number (else the first number) is the phone; every other
+ * number becomes a notes line, "Mobile (as exported): ..." for a mobile and
+ * "Phone (as exported): ..." for the rest, so none is lost.
+ */
+export function planCompanyPhones(values: readonly string[]): {
+  phone: string | null;
+  extraLines: string[];
+} {
+  const numbers = [...new Set(values.map((v) => v.replace(/\s+/g, " ").trim()).filter(Boolean))];
+  const phone = numbers.find((v) => classifyUkNumber(v) === "landline") ?? numbers[0] ?? null;
+  const extraLines = numbers
+    .filter((v) => v !== phone)
+    .map((v) =>
+      classifyUkNumber(v) === "mobile" ? `Mobile (as exported): ${v}` : `Phone (as exported): ${v}`,
+    );
+  return { phone, extraLines };
 }
 
 // ---------------------------------------------------------------------------

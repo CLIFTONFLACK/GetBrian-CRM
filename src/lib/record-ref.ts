@@ -42,7 +42,7 @@ export const RECORD_TABS: Record<RecordType, readonly TabDef[]> = {
   company: [
     { slug: "overview", label: "Overview" },
     { slug: "contacts", label: "Contacts" },
-    { slug: "notes", label: "Notes & activity" },
+    { slug: "notes", label: "Notes" },
     { slug: "requirements", label: "Requirements" },
     { slug: "listings", label: "Listings" },
     { slug: "map", label: "Map" },
@@ -52,7 +52,7 @@ export const RECORD_TABS: Record<RecordType, readonly TabDef[]> = {
   ],
   contact: [
     { slug: "overview", label: "Overview" },
-    { slug: "notes", label: "Notes & activity" },
+    { slug: "notes", label: "Notes" },
     { slug: "requirements", label: "Requirements" },
     { slug: "map", label: "Map" },
     { slug: "todo", label: "To-do" },
@@ -62,7 +62,7 @@ export const RECORD_TABS: Record<RecordType, readonly TabDef[]> = {
   requirement: [
     { slug: "overview", label: "Overview" },
     { slug: "contacts", label: "Contacts" },
-    { slug: "notes", label: "Notes & activity" },
+    { slug: "notes", label: "Notes" },
     { slug: "matchmaker", label: "Matchmaker" },
     { slug: "uploads", label: "Uploads" },
     { slug: "send-history", label: "Send history" },
@@ -70,7 +70,7 @@ export const RECORD_TABS: Record<RecordType, readonly TabDef[]> = {
   ],
   listing: [
     { slug: "overview", label: "Overview" },
-    { slug: "media", label: "Images & documents" },
+    { slug: "media", label: "Media" },
     { slug: "map", label: "Map" },
     { slug: "matchmaker", label: "Matchmaker" },
     { slug: "deals", label: "Deals" },

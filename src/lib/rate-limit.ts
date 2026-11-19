@@ -2,6 +2,8 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { headers } from "next/headers";
 
+import { pickKvCredentials } from "@/lib/kv-credentials";
+
 // Centralised Upstash Redis rate limiting — the rate-limit-layer equivalent
 // of src/lib/db/client.ts's isDbConfigured. Kept here so every caller can
 // fail *open* (always allow) when Upstash hasn't been provisioned locally,
@@ -11,8 +13,10 @@ import { headers } from "next/headers";
 // injects (its own naming, not the raw UPSTASH_REDIS_REST_URL/TOKEN names
 // @upstash/redis's `Redis.fromEnv()` looks for) — so the client is
 // constructed explicitly with `{ url, token }` instead of using fromEnv().
-const KV_REST_API_URL = process.env.KV_REST_API_URL ?? "";
-const KV_REST_API_TOKEN = process.env.KV_REST_API_TOKEN ?? "";
+//
+// The credentials come from pickKvCredentials (src/lib/kv-credentials.ts): a
+// replacement database injected under a NEW_ prefix wins over the old KV_* pair.
+const { url: KV_REST_API_URL, token: KV_REST_API_TOKEN } = pickKvCredentials(process.env);
 
 /** True once both Upstash REST vars are present. */
 export const isRateLimitConfigured = Boolean(KV_REST_API_URL && KV_REST_API_TOKEN);

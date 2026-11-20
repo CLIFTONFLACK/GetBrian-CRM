@@ -71,6 +71,51 @@ export function scoreRisk(
     flags.push("No active Persons with Significant Control listed.");
   }
 
+  // Identity checks on the people behind the company. A declined check is a
+  // provider saying someone's document failed verification; a name that does
+  // not match the document is not a verdict at all, but it is exactly the kind
+  // of thing a reviewer must see. Their watchlist hits are already counted
+  // above, via data.sanctions.
+  const declined = (data.diditPeople ?? []).filter((p) => p.status === "DECLINED");
+  if (declined.length > 0) {
+    flags.push(
+      `Identity verification declined for ${declined.map((p) => p.contactName).join(", ")}.`,
+    );
+    risk = worse(risk, "high");
+  }
+  const inReview = (data.diditPeople ?? []).filter((p) => p.status === "IN_REVIEW");
+  if (inReview.length > 0) {
+    flags.push(
+      `Identity verification held for manual review: ${inReview
+        .map((p) => p.contactName)
+        .join(", ")}.`,
+    );
+    risk = worse(risk, "medium");
+  }
+  for (const person of data.diditPeople ?? []) {
+    if (person.status !== "APPROVED" || !person.verifiedName) continue;
+    // Compare loosely: case, punctuation and word order all differ innocently
+    // between a CRM record and a passport ("Jane A. Doe" vs "DOE, Jane Ann").
+    // Only a genuinely different set of name words is worth flagging.
+    const words = (value: string) =>
+      new Set(
+        value
+          .toLowerCase()
+          .replace(/[^a-z\s]/g, " ")
+          .split(/\s+/)
+          .filter((w) => w.length > 1),
+      );
+    const crm = words(person.contactName);
+    const doc = words(person.verifiedName);
+    const shared = [...crm].filter((w) => doc.has(w)).length;
+    if (crm.size > 0 && shared === 0) {
+      flags.push(
+        `Verified document name "${person.verifiedName}" does not match contact "${person.contactName}".`,
+      );
+      risk = worse(risk, "medium");
+    }
+  }
+
   if (data.vat && data.vat.valid === false) {
     flags.push("Supplied VAT number is not valid.");
     risk = worse(risk, "medium");

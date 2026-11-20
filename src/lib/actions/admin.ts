@@ -7,6 +7,7 @@ import { hashPassword } from "@/lib/auth/password";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId, isAgencyAdmin } from "@/lib/db/queries/agencies";
 import {
+  clearDiditKey,
   createAgent as createAgentRow,
   emailExists,
   removeMember,
@@ -14,12 +15,13 @@ import {
   updateAgentProfile,
   updateMemberRole,
   upsertAgencySettings,
+  upsertDiditSettings,
   type MemberRole,
 } from "@/lib/db/queries/admin";
 import type { FormState } from "@/lib/actions/types";
+import { DEFAULT_DEEP_DIVE_PROMPT } from "@/lib/deep-dive/prompt";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
-import { DEFAULT_DEEP_DIVE_PROMPT } from "@/lib/deep-dive/prompt";
 const asRole = (v: string): MemberRole =>
   v === "admin" ? "admin" : v === "manager" ? "manager" : "agent";
 
@@ -187,6 +189,51 @@ export async function saveAgencySettings(
 
   revalidatePath("/admin");
   return { message: "AI settings saved." };
+}
+
+/**
+ * Save the agency's Didit identity-verification credentials (admin only).
+ *
+ * Same write-only contract as the OpenRouter key: a blank key field keeps the
+ * saved one, so the secret is never echoed back into the browser. The workflow
+ * id is written on every save — it is not a secret, and it is the field that
+ * actually changes once a key is in place.
+ *
+ * A workflow id is required, because Didit takes the check type from the
+ * workflow: a key alone cannot start an identity check.
+ */
+export async function saveDiditSettings(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const ctx = await requireAgencyAdmin();
+  if ("error" in ctx) return { error: ctx.error };
+
+  const key = str(formData, "didit_api_key") || null;
+  const workflowId = str(formData, "didit_workflow_id") || null;
+
+  if (!workflowId) {
+    return {
+      error: "Pick a workflow — Didit needs one to know what to check.",
+    };
+  }
+
+  await upsertDiditSettings(ctx.agencyId, workflowId, key);
+
+  revalidatePath("/admin");
+  revalidatePath("/kyc");
+  return { message: "Didit settings saved." };
+}
+
+/** Delete the saved Didit key and workflow (admin only). Blank-means-keep makes
+ *  removal impossible through the save form, so it gets its own button. */
+export async function removeDiditKey(): Promise<void> {
+  const ctx = await requireAgencyAdmin();
+  if ("error" in ctx) return;
+
+  await clearDiditKey(ctx.agencyId);
+  revalidatePath("/admin");
+  revalidatePath("/kyc");
 }
 
 /** Remove a member from the agency (admin only — enforced above; RLS used to

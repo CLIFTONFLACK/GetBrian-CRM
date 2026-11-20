@@ -3,18 +3,27 @@ import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DiditKycCard,
+  type ContactOption,
+  type IdentityCheck,
+} from "@/components/kyc/didit-kyc-card";
 import { KycReportView } from "@/components/kyc/kyc-report-view";
 import { KycRunner } from "@/components/kyc/kyc-runner";
 import { kycRiskBadge } from "@/lib/badges";
 import { isKycConfigured } from "@/lib/kyc/config";
 import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
-import { currentAgencyId } from "@/lib/db/queries/agencies";
+import { currentAgencyId, getMemberRole } from "@/lib/db/queries/agencies";
+import { listContactsByCompany } from "@/lib/db/queries/contacts";
 import {
   getLatestKycReport,
   listCompaniesForKyc,
+  listLatestDiditSessionsForCompany,
   listRecentKycReports,
 } from "@/lib/db/queries/kyc";
+import { getAgencyDidit } from "@/lib/kyc/didit-config";
+import { canStartIdentityCheck } from "@/lib/kyc/providers/didit";
 
 function fmtDate(d: string): string {
   const parsed = new Date(d);
@@ -47,15 +56,46 @@ export default async function KycPage({
   ]);
   const nameById = new Map(list.map((c) => [c.id, c.name]));
 
-  const latest = selectedId ? await getLatestKycReport(agencyId, selectedId) : null;
+  const [latest, diditConfig, diditRows, contactRows, role] = await Promise.all([
+    selectedId ? getLatestKycReport(agencyId, selectedId) : null,
+    getAgencyDidit(agencyId),
+    selectedId ? listLatestDiditSessionsForCompany(agencyId, selectedId) : [],
+    selectedId ? listContactsByCompany(agencyId, selectedId) : [],
+    getMemberRole(agencyId, session.user.id),
+  ]);
+
+  const contacts: ContactOption[] = contactRows.map((c) => ({
+    id: c.id,
+    name: [c.first_name, c.last_name].filter(Boolean).join(" ").trim(),
+    role: c.role,
+    email: c.email,
+  }));
+
+  // Only what the panel renders — the decision payload itself stays server-side;
+  // its findings reach the user through the KYC report, which is where they are
+  // scored and explained.
+  const identityChecks: IdentityCheck[] = diditRows.map((d) => ({
+    sessionId: d.session_id,
+    contactId: d.contact_id,
+    contactName: d.contact_name,
+    verifiedName: d.verified_name,
+    status: d.status,
+    url: d.session_url,
+    amlHits: d.aml_hits,
+    error: d.error,
+    startedAt: d.created_at,
+    updatedAt: d.updated_at,
+  }));
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">KYC</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Know-Your-Customer / Know-Your-Business checks against UK official
-          registers — Companies House, OFSI sanctions and HMRC VAT.
+          Two checks. <strong>KYC Companies House Search</strong> is free and
+          covers the company — Companies House, OFSI sanctions and HMRC VAT.{" "}
+          <strong>KYC Didit</strong> is paid and covers a person — their ID
+          document, liveness, face match and watchlist screen.
         </p>
       </div>
 
@@ -81,6 +121,17 @@ export default async function KycPage({
       ) : null}
 
       <KycRunner key={selectedId ?? "none"} companies={list} selectedId={selectedId} />
+
+      {selectedId ? (
+        <DiditKycCard
+          // A fresh card per company, so the selected person resets too.
+          key={selectedId}
+          configured={diditConfig !== null}
+          canStart={canStartIdentityCheck(role)}
+          contacts={contacts}
+          checks={identityChecks}
+        />
+      ) : null}
 
       {latest ? (
         <div className="space-y-3">

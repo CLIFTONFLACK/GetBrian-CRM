@@ -3,7 +3,11 @@
 // risk, and persists a kyc_reports row. Mirrors the orchestration style of
 // importDisposalFromUrl: thin coordination over the provider modules.
 
-import { createKycReport, type KycReport } from "@/lib/db/queries/kyc";
+import {
+  createKycReport,
+  listLatestDiditSessionsForCompany,
+  type KycReport,
+} from "@/lib/db/queries/kyc";
 import { isKycConfigured } from "./config";
 import {
   getCharges,
@@ -15,8 +19,8 @@ import {
 import { screenNames } from "./sanctions";
 import { checkVat } from "./vat";
 import { scoreRisk } from "./risk";
-import { diditProvider } from "./providers/didit";
-import type { KycReportData, KycSummary } from "./types";
+import { isAwaitingDecision, mapDecision, normaliseStatus } from "./providers/didit";
+import type { KycDiditPerson, KycReportData, KycSummary } from "./types";
 
 type CompanyInput = {
   id: string;
@@ -78,13 +82,48 @@ export async function runKycReport(
     if (vat === null) notices.push("VAT number could not be verified.");
   }
 
-  // ── Optional paid provider (Didit KYB/AML) — no-op unless configured ───────
-  if (diditProvider.enabled && num) {
-    const didit = await diditProvider.screenBusiness(num);
-    if (didit) {
-      sources.push("didit");
-      screen.matches.push(...didit.aml);
-    }
+  // ── Didit identity checks — READ ONLY, from the database ─────────────────
+  // Deliberately not an API call. A Didit session is billed to the agency and
+  // is started explicitly (startIdentityCheck), so generating a report folds in
+  // whatever decisions have already been fetched for this company's contacts
+  // and never spends money on its own. No checks, or checks still waiting on
+  // the person, simply contribute nothing.
+  const diditPeople: KycDiditPerson[] = [];
+  const diditRows = await listLatestDiditSessionsForCompany(agencyId, company.id);
+  for (const row of diditRows) {
+    if (!row.decision) continue;
+    const mapped = mapDecision(row.decision);
+    // A decision payload is stored as soon as a session is created, so its
+    // presence does not mean the check is decided. The status decides that. A
+    // check that still waits on the person is counted as pending below, and
+    // adds no person, no source and no watchlist hit.
+    if (isAwaitingDecision(mapped.status || row.status)) continue;
+    // Watchlist hits join the sanctions list so the existing risk rules score
+    // them — same kind of finding as an OFSI hit, from a commercial list, and
+    // the list name on each match says which.
+    screen.matches.push(...mapped.aml);
+    diditPeople.push({
+      sessionId: row.session_id,
+      contactId: row.contact_id,
+      contactName: row.contact_name,
+      verifiedName: mapped.document?.fullName ?? row.verified_name,
+      // One spelling for the risk rules and the report view, which compare
+      // against the upper-case names.
+      status: normaliseStatus(mapped.status || row.status),
+      documentType: mapped.document?.documentType ?? null,
+      faceMatchScore: mapped.faceMatchScore,
+      livenessScore: mapped.livenessScore,
+      amlHits: mapped.aml.length,
+      warnings: mapped.warnings,
+      checkedAt: row.updated_at,
+    });
+  }
+  if (diditPeople.length > 0) sources.push("didit");
+  const pendingChecks = diditRows.length - diditPeople.length;
+  if (pendingChecks > 0) {
+    notices.push(
+      `${pendingChecks} Didit identity check(s) started but not yet decided.`,
+    );
   }
 
   const outstandingCharges = charges.filter(
@@ -117,6 +156,7 @@ export async function runKycReport(
     summary,
     sources,
     notices,
+    diditPeople,
   };
   const { riskRating, flags } = scoreRisk(base);
   const data: KycReportData = { ...base, riskRating, flags };

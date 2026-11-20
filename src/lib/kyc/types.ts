@@ -84,6 +84,30 @@ export type KycSummary = {
   vatValid: boolean | null;
 };
 
+/** One person's Didit identity check, as folded into a company report. Didit
+ *  verifies people, not companies, so what a report gains from it is evidence
+ *  about the individuals behind the company — a director whose passport was
+ *  read and matched to a live selfie. The watchlist hits themselves are merged
+ *  into `sanctions` so the existing risk rules score them. */
+export type KycDiditPerson = {
+  sessionId: string;
+  contactId: string;
+  /** The contact's name as the CRM holds it. */
+  contactName: string;
+  /** The name read off the document — the point of comparison. */
+  verifiedName: string | null;
+  /** Didit's session status, verbatim: APPROVED, IN_REVIEW, AWAITING_USER, … */
+  status: string;
+  documentType: string | null;
+  /** 0..1, or null when the workflow has no such step. */
+  faceMatchScore: number | null;
+  livenessScore: number | null;
+  amlHits: number;
+  warnings: string[];
+  /** When the decision this was built from was last fetched. */
+  checkedAt: string;
+};
+
 /** Full normalised report — stored in kyc_reports.payload. */
 export type KycReportData = {
   profile: ChProfile | null;
@@ -100,6 +124,11 @@ export type KycReportData = {
   sources: string[];
   /** Soft warnings (e.g. "Companies House not configured"). */
   notices: string[];
+  /** Identity checks on the company's contacts. Optional in the type as well as
+   *  nullable: reports written before Didit existed have no such key in their
+   *  stored payload at all, so every reader has to cope with it being absent
+   *  rather than merely empty. */
+  diditPeople?: KycDiditPerson[];
 };
 
 /** A Companies House name-search hit (for the CRN picker). */

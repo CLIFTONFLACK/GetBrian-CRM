@@ -16,18 +16,33 @@ export const OFSI_CONSOLIDATED_LIST_URL =
   process.env.OFSI_CONSOLIDATED_LIST_URL ??
   "https://ofsistorage.blob.core.windows.net/publishlive/2022format/ConList.csv";
 
-/** Didit — OPTIONAL, paid KYB/AML provider ($2/company). Leave blank to disable;
- *  the free official sources (Companies House + OFSI + VAT) remain the source of
- *  truth. Server-only. */
+/** Didit — OPTIONAL, paid KYB/AML provider (~$2.20/session). The free official
+ *  sources (Companies House + OFSI + VAT) remain the source of truth.
+ *
+ *  These env vars are only a FALLBACK for a single-tenant deployment. The
+ *  primary place the credentials live is agency_settings (entered on the Admin
+ *  page), because a session is billed to whichever Didit account started it —
+ *  see src/lib/kyc/didit-config.ts, which prefers the agency row. Server-only. */
 export const DIDIT_API_KEY = process.env.DIDIT_API_KEY ?? "";
+/** Workflow of workflow_type "kyb". Didit takes the check type from the
+ *  workflow, so a key without one cannot start a business check. */
+export const DIDIT_WORKFLOW_ID = process.env.DIDIT_WORKFLOW_ID ?? "";
+/** The one agency that may use the env credentials above. The app is
+ *  multi-tenant and public sign-up makes new agencies, so without this every
+ *  agency with no key of its own would bill the operator's Didit account.
+ *  Unset means no agency uses the env fallback. */
+export const DIDIT_ENV_AGENCY_ID = process.env.DIDIT_ENV_AGENCY_ID?.trim() ?? "";
 export const DIDIT_API_URL =
   process.env.DIDIT_API_URL ?? "https://verification.didit.me";
 
 /** True once the Companies House key is present (gates the core report). */
 export const isKycConfigured = Boolean(COMPANIES_HOUSE_API_KEY);
 
-/** True once a Didit key is present (gates the optional paid KYB/AML provider). */
-export const isDiditConfigured = Boolean(DIDIT_API_KEY);
+/** True once BOTH Didit env vars are present. This only covers the env-var
+ *  fallback — an agency that entered its credentials in Admin is configured
+ *  regardless of what this says, which is why nothing gates a KYB run on it
+ *  (getAgencyDidit() is the real check). */
+export const isDiditEnvConfigured = Boolean(DIDIT_API_KEY && DIDIT_WORKFLOW_ID);
 
 // The UI already shows a "not configured" notice, but that's easy to miss during
 // deployment — surface it once in server logs too.

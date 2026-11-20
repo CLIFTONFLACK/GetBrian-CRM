@@ -167,16 +167,63 @@ export type AgencySettings = {
   openrouter_model: string;
   /** Null = use the built-in default brief (see src/lib/deep-dive/report.ts). */
   deep_dive_prompt: string | null;
+  /** Didit KYB credentials — see db/migrations/0042_didit_kyb.sql. */
+  didit_api_key: string | null;
+  didit_workflow_id: string | null;
 };
 
 export async function getAgencySettings(agencyId: string): Promise<AgencySettings | null> {
   const rows = await sql`
-    select openrouter_api_key, openrouter_model, deep_dive_prompt
+    select openrouter_api_key, openrouter_model, deep_dive_prompt,
+           didit_api_key, didit_workflow_id
     from public.agency_settings
     where agency_id = ${agencyId}
     limit 1
   `;
   return (rows[0] as AgencySettings | undefined) ?? null;
+}
+
+/**
+ * Upserts the agency's Didit KYB credentials. Same write-only contract as the
+ * OpenRouter key above: `apiKey: null` means "leave the saved key alone", so
+ * the Admin form never has to echo the secret back into the browser to keep it.
+ *
+ * Kept as its own statement rather than folded into upsertAgencySettings
+ * because the two forms save independently — saving the AI card must not wipe
+ * the KYB workflow, and vice versa.
+ */
+export async function upsertDiditSettings(
+  agencyId: string,
+  workflowId: string | null,
+  apiKey: string | null,
+): Promise<void> {
+  if (apiKey) {
+    await sql`
+      insert into public.agency_settings (agency_id, didit_api_key, didit_workflow_id)
+      values (${agencyId}, ${apiKey}, ${workflowId})
+      on conflict (agency_id) do update
+        set didit_api_key = excluded.didit_api_key,
+            didit_workflow_id = excluded.didit_workflow_id
+    `;
+  } else {
+    await sql`
+      insert into public.agency_settings (agency_id, didit_workflow_id)
+      values (${agencyId}, ${workflowId})
+      on conflict (agency_id) do update
+        set didit_workflow_id = excluded.didit_workflow_id
+    `;
+  }
+}
+
+/** Clears the saved Didit key (the Admin card's "Remove key" button). A blank
+ *  field can't mean this — blank means "keep the existing key" — so removal
+ *  needs its own explicit path. */
+export async function clearDiditKey(agencyId: string): Promise<void> {
+  await sql`
+    update public.agency_settings
+    set didit_api_key = null, didit_workflow_id = null
+    where agency_id = ${agencyId}
+  `;
 }
 
 /** Upserts the agency's AI settings. `apiKey: null` leaves any existing key

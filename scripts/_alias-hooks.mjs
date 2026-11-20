@@ -45,6 +45,14 @@ export async function resolve(specifier, context, nextResolve) {
     const target = resolveFile(new URL(specifier.slice(2), SRC_DIR));
     return nextResolve(target.href, context);
   }
+  // Relative extensionless imports ("../config") are the same gap inside the
+  // app's own modules: Next's bundler resolves them, Node does not. Taken only
+  // when a real file exists; any other miss passes through unchanged.
+  if ((specifier.startsWith("./") || specifier.startsWith("../")) && context.parentURL) {
+    const wanted = new URL(specifier, context.parentURL);
+    const target = resolveFile(wanted);
+    if (target.href !== wanted.href) return nextResolve(target.href, context);
+  }
   // Node refuses a .json import without an explicit attribute. Supply it on
   // the script's behalf rather than editing the app's modules to suit Node.
   if (specifier.endsWith(".json")) {
@@ -54,5 +62,22 @@ export async function resolve(specifier, context, nextResolve) {
     });
     return { ...resolved, format: "json", importAttributes: JSON_ATTRS };
   }
-  return nextResolve(specifier, context);
+  // Bare subpaths the package does not export with an extension: next/cache is
+  // next/cache.js on disk, and Node's ESM resolver will not find it. Next's
+  // bundler does, so retry with the .js the bundler would have added.
+  try {
+    return await nextResolve(specifier, context);
+  } catch (err) {
+    const bare = !specifier.startsWith(".") && !specifier.startsWith("/") && !specifier.startsWith("node:");
+    if (err?.code === "ERR_MODULE_NOT_FOUND" && bare && !specifier.endsWith(".js")) {
+      try {
+        return await nextResolve(`${specifier}.js`, context);
+      } catch {
+        // The retry was a guess. When it misses too, report the first error,
+        // which names the specifier the code really wrote.
+        throw err;
+      }
+    }
+    throw err;
+  }
 }

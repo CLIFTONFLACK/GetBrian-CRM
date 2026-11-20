@@ -177,3 +177,162 @@ export async function createKycReport(
   `;
   return rows[0] as KycReport;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// public.didit_sessions — the paid Didit identity checks.
+//
+// One row per check started for a CONTACT: a Didit KYC session verifies a
+// person (document, liveness, face match, watchlist), so it hangs off contacts
+// while carrying the company alongside for the company-level views
+// (db/migrations/0042_didit_kyc.sql explains the split from kyc_reports).
+// Same agency-scoping rule as everything above — agencyId is a mandatory first
+// parameter, and it is in the WHERE clause of every read and every update.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type DiditSessionRow = {
+  id: string;
+  agency_id: string;
+  contact_id: string;
+  company_id: string | null;
+  session_id: string;
+  workflow_id: string | null;
+  session_url: string | null;
+  status: string;
+  decision: unknown | null;
+  aml_hits: number;
+  verified_name: string | null;
+  error: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** A session joined to the contact it verifies — what the KYC page lists. */
+export type DiditSessionWithContact = DiditSessionRow & {
+  contact_name: string;
+};
+
+export type CreateDiditSessionInput = {
+  contactId: string;
+  companyId: string | null;
+  sessionId: string;
+  workflowId: string | null;
+  sessionUrl: string | null;
+  status: string;
+  createdBy: string;
+};
+
+export async function createDiditSession(
+  agencyId: string,
+  input: CreateDiditSessionInput,
+): Promise<DiditSessionRow> {
+  const rows = await sql`
+    insert into public.didit_sessions
+      (agency_id, contact_id, company_id, session_id, workflow_id, session_url, status, created_by)
+    values (
+      ${agencyId}, ${input.contactId}, ${input.companyId}, ${input.sessionId},
+      ${input.workflowId}, ${input.sessionUrl}, ${input.status}, ${input.createdBy}
+    )
+    returning id, agency_id, contact_id, company_id, session_id, workflow_id, session_url,
+      status, decision, aml_hits, verified_name, error, created_by,
+      created_at::text as created_at, updated_at::text as updated_at
+  `;
+  return rows[0] as DiditSessionRow;
+}
+
+/** Stores a freshly fetched decision. Unlike kyc_reports (append-only), this
+ *  updates in place: it is the current state of one session, not an audit
+ *  trail, and Didit's decision endpoint always returns the whole thing. */
+export async function updateDiditDecision(
+  agencyId: string,
+  sessionId: string,
+  status: string,
+  decision: unknown,
+  amlHits: number,
+  verifiedName: string | null,
+): Promise<boolean> {
+  const decisionJson = decision === null ? null : JSON.stringify(decision);
+  const rows = await sql`
+    update public.didit_sessions
+    set status = ${status}, decision = ${decisionJson}::jsonb, aml_hits = ${amlHits},
+        verified_name = ${verifiedName}, error = null
+    where agency_id = ${agencyId} and session_id = ${sessionId}
+    returning id
+  `;
+  return rows.length > 0;
+}
+
+/** Records a failed refresh without losing the last good decision. */
+export async function setDiditSessionError(
+  agencyId: string,
+  sessionId: string,
+  message: string,
+): Promise<void> {
+  await sql`
+    update public.didit_sessions
+    set error = ${message}
+    where agency_id = ${agencyId} and session_id = ${sessionId}
+  `;
+}
+
+/** One session by Didit's own id, agency-scoped — the refresh action's lookup,
+ *  and the guard that stops one agency polling another's session. */
+export async function getDiditSession(
+  agencyId: string,
+  sessionId: string,
+): Promise<DiditSessionRow | null> {
+  const rows = await sql`
+    select id, agency_id, contact_id, company_id, session_id, workflow_id, session_url,
+      status, decision, aml_hits, verified_name, error, created_by,
+      created_at::text as created_at, updated_at::text as updated_at
+    from public.didit_sessions
+    where agency_id = ${agencyId} and session_id = ${sessionId}
+    limit 1
+  `;
+  return (rows[0] as DiditSessionRow | undefined) ?? null;
+}
+
+/**
+ * The latest check per contact for one company — the KYC page's Didit panel,
+ * and the source the report pipeline reads (from the database, so generating a
+ * report never triggers a paid call).
+ *
+ * A contact can be checked more than once (a re-verification a year on, or a
+ * retry after a declined document), and only the newest matters here: hence
+ * `distinct on (contact_id)` ordered newest-first, which is Postgres's way of
+ * saying "one row per contact, the latest" without a self-join.
+ */
+export async function listLatestDiditSessionsForCompany(
+  agencyId: string,
+  companyId: string,
+): Promise<DiditSessionWithContact[]> {
+  return (await sql`
+    select distinct on (d.contact_id)
+      d.id, d.agency_id, d.contact_id, d.company_id, d.session_id, d.workflow_id,
+      d.session_url, d.status, d.decision, d.aml_hits, d.verified_name, d.error,
+      d.created_by, d.created_at::text as created_at, d.updated_at::text as updated_at,
+      trim(concat(c.first_name, ' ', coalesce(c.last_name, ''))) as contact_name
+    from public.didit_sessions d
+    join public.contacts c on c.id = d.contact_id
+    where d.agency_id = ${agencyId} and d.company_id = ${companyId}
+    order by d.contact_id, d.created_at desc
+  `) as DiditSessionWithContact[];
+}
+
+/** The latest check for one contact — the per-contact status on the KYC page
+ *  and on a contact record. */
+export async function getLatestDiditSessionForContact(
+  agencyId: string,
+  contactId: string,
+): Promise<DiditSessionRow | null> {
+  const rows = await sql`
+    select id, agency_id, contact_id, company_id, session_id, workflow_id, session_url,
+      status, decision, aml_hits, verified_name, error, created_by,
+      created_at::text as created_at, updated_at::text as updated_at
+    from public.didit_sessions
+    where agency_id = ${agencyId} and contact_id = ${contactId}
+    order by created_at desc
+    limit 1
+  `;
+  return (rows[0] as DiditSessionRow | undefined) ?? null;
+}

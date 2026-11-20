@@ -960,7 +960,7 @@ function DiditSettingsCard({
   return (
     <CollapsibleCard
       title="KYC — Didit identity verification"
-      description="Paid ID verification for a named person: document check, liveness, face match and watchlist screening. Get a key at didit.me."
+      description="Paid ID verification for a named person: document check, liveness and face match. Watchlist (AML) screening runs only if the workflow includes it. Get a key at didit.me."
     >
       <form action={action} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">

@@ -95,7 +95,7 @@ export default async function KycPage({
           Two checks. <strong>KYC Companies House Search</strong> is free and
           covers the company — Companies House, OFSI sanctions and HMRC VAT.{" "}
           <strong>KYC Didit</strong> is paid and covers a person — their ID
-          document, liveness, face match and watchlist screen.
+          document, liveness and face match.
         </p>
       </div>
 

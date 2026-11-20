@@ -78,6 +78,8 @@ export function AdminPanel({
   deepDivePrompt,
   hasDiditKey,
   diditWorkflowId,
+  hasDiditWebhookSecret = false,
+  agencyId = null,
   contactRoles,
   companyTypes,
 }: {
@@ -90,6 +92,10 @@ export function AdminPanel({
   /** Whether a Didit key is saved — never the key itself. */
   hasDiditKey: boolean;
   diditWorkflowId: string | null;
+  /** Whether a Didit webhook secret is saved — never the secret itself. */
+  hasDiditWebhookSecret?: boolean;
+  /** Builds the webhook URL that the admin copies into Didit. */
+  agencyId?: string | null;
   contactRoles: ContactRoleItem[];
   companyTypes: CompanyTypeItem[];
 }) {
@@ -107,7 +113,12 @@ export function AdminPanel({
         prompt={deepDivePrompt}
       />
 
-      <DiditSettingsCard hasKey={hasDiditKey} workflowId={diditWorkflowId} />
+      <DiditSettingsCard
+        hasKey={hasDiditKey}
+        workflowId={diditWorkflowId}
+        hasWebhookSecret={hasDiditWebhookSecret}
+        agencyId={agencyId}
+      />
 
       <ConnectorsCard />
     </div>
@@ -913,13 +924,29 @@ type DiditWorkflowOption = {
  * works, which is why the button says so rather than claiming to "verify" on
  * the strength of the key merely having been stored.
  */
+/** The page origin never changes, so there is nothing to subscribe to. */
+const noopSubscribe = () => () => {};
+
 function DiditSettingsCard({
   hasKey,
   workflowId,
+  hasWebhookSecret,
+  agencyId,
 }: {
   hasKey: boolean;
   workflowId: string | null;
+  hasWebhookSecret: boolean;
+  agencyId: string | null;
 }) {
+  // The origin is read in the browser so the URL matches the host the admin is
+  // on. Empty on the server render, then filled in after hydration.
+  const origin = React.useSyncExternalStore(
+    noopSubscribe,
+    () => window.location.origin,
+    () => "",
+  );
+  const webhookUrl =
+    origin && agencyId ? `${origin}/api/webhooks/didit/${agencyId}` : "";
   const [state, action, pending] = useActionState<FormState, FormData>(
     saveDiditSettings,
     {},
@@ -1041,6 +1068,40 @@ function DiditSettingsCard({
                 starting checks.
               </p>
             ) : null}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="didit_webhook_url">Webhook URL</Label>
+            <Input
+              id="didit_webhook_url"
+              readOnly
+              value={webhookUrl}
+              onFocus={(e) => e.currentTarget.select()}
+            />
+            <p className="text-xs text-muted-foreground">
+              In Didit, add a webhook destination with this URL for the
+              &ldquo;status.updated&rdquo; event. Then the KYC page updates
+              without &ldquo;Refresh&rdquo;.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="didit_webhook_secret">Webhook signing secret</Label>
+            <Input
+              id="didit_webhook_secret"
+              name="didit_webhook_secret"
+              type="password"
+              autoComplete="off"
+              placeholder={
+                hasWebhookSecret ? "•••••• saved — leave blank to keep" : "Paste the secret from Didit"
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              {hasWebhookSecret
+                ? "A secret is saved. The webhook is on."
+                : "No secret yet — the webhook is off. Use “Refresh” on the KYC page."}
+            </p>
           </div>
         </div>
 

@@ -11,11 +11,11 @@ import {
   getDiditSession,
   getKycCompany,
   getLatestDiditSessionForContact,
-  setDiditSessionError,
   updateCompanyRegistration,
   updateDiditDecision,
 } from "@/lib/db/queries/kyc";
 import { getAgencyDidit } from "@/lib/kyc/didit-config";
+import { syncDiditDecision } from "@/lib/kyc/didit-sync";
 import {
   canStartIdentityCheck,
   checkPhase,
@@ -174,11 +174,14 @@ export async function startIdentityCheck(
   const latest = await getLatestDiditSessionForContact(agencyId, contact.id);
   if (latest) {
     let status = latest.status;
-    // There is no webhook, so the stored status is only as new as the last
-    // Refresh. An old "open" row can hide a result that is already decided at
-    // Didit. Ask Didit (free) before this row is allowed to be replaced.
+    // The stored status is only as new as the last webhook or Refresh, and an
+    // agency may have no webhook set up. An old "open" row can hide a result
+    // that is already decided at Didit. Ask Didit (free) before this row is
+    // allowed to be replaced.
     if (checkPhase(status) === "open" && isOlderThan(latest.created_at, OPEN_CHECK_BLOCK_DAYS)) {
       try {
+        // Stamped before the call, so a newer webhook save is not overwritten.
+        const fetchedAt = new Date();
         const decision = await getDecision(config.apiKey, latest.session_id);
         const mapped = mapDecision(decision.raw);
         await updateDiditDecision(
@@ -188,6 +191,7 @@ export async function startIdentityCheck(
           decision.raw,
           mapped.aml.length,
           mapped.document?.fullName ?? null,
+          fetchedAt,
         );
         status = decision.status;
       } catch {
@@ -330,23 +334,12 @@ export async function refreshIdentityCheck(
   if (!config) return { error: "Didit is not configured." };
 
   try {
-    const decision = await getDecision(config.apiKey, row.session_id);
-    const mapped = mapDecision(decision.raw);
-    await updateDiditDecision(
-      agencyId,
-      row.session_id,
-      decision.status,
-      decision.raw,
-      mapped.aml.length,
-      mapped.document?.fullName ?? null,
-    );
-    revalidatePath("/kyc");
-    if (row.company_id) revalidatePath(`/companies/${row.company_id}`);
+    const { status } = await syncDiditDecision(agencyId, row, config.apiKey);
     return {
-      message: `Identity check is ${decision.status.toLowerCase().replace(/_/g, " ")}.`,
+      message: `Identity check is ${status.toLowerCase().replace(/_/g, " ")}.`,
     };
   } catch (err) {
-    await setDiditSessionError(agencyId, row.session_id, (err as Error).message);
+    // syncDiditDecision has already saved the error on the row.
     return { error: (err as Error).message };
   }
 }

@@ -170,12 +170,14 @@ export type AgencySettings = {
   /** Didit KYB credentials — see db/migrations/0042_didit_kyb.sql. */
   didit_api_key: string | null;
   didit_workflow_id: string | null;
+  /** Signs Didit webhook deliveries — see db/migrations/0048. */
+  didit_webhook_secret: string | null;
 };
 
 export async function getAgencySettings(agencyId: string): Promise<AgencySettings | null> {
   const rows = await sql`
     select openrouter_api_key, openrouter_model, deep_dive_prompt,
-           didit_api_key, didit_workflow_id
+           didit_api_key, didit_workflow_id, didit_webhook_secret
     from public.agency_settings
     where agency_id = ${agencyId}
     limit 1
@@ -221,8 +223,22 @@ export async function upsertDiditSettings(
 export async function clearDiditKey(agencyId: string): Promise<void> {
   await sql`
     update public.agency_settings
-    set didit_api_key = null, didit_workflow_id = null
+    set didit_api_key = null, didit_workflow_id = null, didit_webhook_secret = null
     where agency_id = ${agencyId}
+  `;
+}
+
+/** Saves the Didit webhook signing secret. Only called with a non-empty value:
+ *  a blank Admin field keeps the saved secret, like the API key. */
+export async function setDiditWebhookSecret(
+  agencyId: string,
+  secret: string,
+): Promise<void> {
+  await sql`
+    insert into public.agency_settings (agency_id, didit_webhook_secret)
+    values (${agencyId}, ${secret})
+    on conflict (agency_id) do update
+      set didit_webhook_secret = excluded.didit_webhook_secret
   `;
 }
 

@@ -15,6 +15,7 @@ import {
   updateAgentProfile,
   updateMemberRole,
   upsertAgencySettings,
+  setDiditWebhookSecret,
   upsertDiditSettings,
   type MemberRole,
 } from "@/lib/db/queries/admin";
@@ -217,8 +218,19 @@ export async function saveDiditSettings(
       error: "Pick a workflow — Didit needs one to know what to check.",
     };
   }
+  // A short secret can be guessed offline from one captured delivery. Didit's
+  // own secrets are much longer, so this only stops a typo or a placeholder.
+  const webhookSecretInput = str(formData, "didit_webhook_secret");
+  if (webhookSecretInput && webhookSecretInput.length < 16) {
+    return {
+      error: "That webhook secret is too short. Copy the full secret from Didit.",
+    };
+  }
 
   await upsertDiditSettings(ctx.agencyId, workflowId, key);
+  // Blank keeps the saved secret, the same rule as the API key.
+  const webhookSecret = str(formData, "didit_webhook_secret");
+  if (webhookSecret) await setDiditWebhookSecret(ctx.agencyId, webhookSecret);
 
   revalidatePath("/admin");
   revalidatePath("/kyc");

@@ -250,15 +250,30 @@ export async function updateDiditDecision(
   decision: unknown,
   amlHits: number,
   verifiedName: string | null,
+  /** When this decision's fetch STARTED. When given, the save is skipped if the
+   *  row already holds a decision fetched later (migration 0048), so a slow
+   *  fetch of an older state cannot overwrite a newer one. */
+  fetchedAt: Date | null = null,
 ): Promise<boolean> {
   const decisionJson = decision === null ? null : JSON.stringify(decision);
-  const rows = await sql`
-    update public.didit_sessions
-    set status = ${status}, decision = ${decisionJson}::jsonb, aml_hits = ${amlHits},
-        verified_name = ${verifiedName}, error = null
-    where agency_id = ${agencyId} and session_id = ${sessionId}
-    returning id
-  `;
+  const fetchedIso = fetchedAt ? fetchedAt.toISOString() : null;
+  const rows = fetchedIso
+    ? await sql`
+        update public.didit_sessions
+        set status = ${status}, decision = ${decisionJson}::jsonb, aml_hits = ${amlHits},
+            verified_name = ${verifiedName}, error = null,
+            decision_fetched_at = ${fetchedIso}::timestamptz
+        where agency_id = ${agencyId} and session_id = ${sessionId}
+          and (decision_fetched_at is null or decision_fetched_at <= ${fetchedIso}::timestamptz)
+        returning id
+      `
+    : await sql`
+        update public.didit_sessions
+        set status = ${status}, decision = ${decisionJson}::jsonb, aml_hits = ${amlHits},
+            verified_name = ${verifiedName}, error = null
+        where agency_id = ${agencyId} and session_id = ${sessionId}
+        returning id
+      `;
   return rows.length > 0;
 }
 

@@ -242,7 +242,12 @@ export async function getDecision(
     apiKey,
     `/v3/session/${encodeURIComponent(sessionId)}/decision/`,
   );
-  return { status: (raw?.status as DiditStatus) ?? "NOT_STARTED", raw };
+  // Every real decision has a status. A 200 with no status (an HTML page from a
+  // proxy, an empty body) must not be saved as NOT_STARTED over a real result.
+  if (typeof raw?.status !== "string" || !raw.status.trim()) {
+    throw new DiditError("Didit returned a decision with no status.");
+  }
+  return { status: raw.status as DiditStatus, raw };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

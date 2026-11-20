@@ -114,6 +114,8 @@ export default async function AdminPage() {
         deepDivePrompt={deepDivePrompt}
         hasDiditKey={hasDiditKey}
         diditWorkflowId={diditWorkflowId}
+        hasDiditWebhookSecret={Boolean(settings?.didit_webhook_secret)}
+        agencyId={agencyId}
         contactRoles={contactRoles}
         companyTypes={companyTypes}
       />

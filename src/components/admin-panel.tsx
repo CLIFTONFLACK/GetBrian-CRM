@@ -26,7 +26,9 @@ import { DEFAULT_DEEP_DIVE_PROMPT } from "@/lib/deep-dive/prompt";
 import {
   createAgent,
   removeAgent,
+  removeDiditKey,
   saveAgencySettings,
+  saveDiditSettings,
   setAgentPassword,
   updateAgent,
   updateAgentRole,
@@ -74,6 +76,8 @@ export function AdminPanel({
   hasOpenRouterKey,
   openRouterModel,
   deepDivePrompt,
+  hasDiditKey,
+  diditWorkflowId,
   contactRoles,
   companyTypes,
 }: {
@@ -83,6 +87,9 @@ export function AdminPanel({
   openRouterModel: string;
   /** Agency override for the Deep Dive brief; null = built-in default. */
   deepDivePrompt: string | null;
+  /** Whether a Didit key is saved — never the key itself. */
+  hasDiditKey: boolean;
+  diditWorkflowId: string | null;
   contactRoles: ContactRoleItem[];
   companyTypes: CompanyTypeItem[];
 }) {
@@ -99,6 +106,8 @@ export function AdminPanel({
         model={openRouterModel}
         prompt={deepDivePrompt}
       />
+
+      <DiditSettingsCard hasKey={hasDiditKey} workflowId={diditWorkflowId} />
 
       <ConnectorsCard />
     </div>
@@ -877,6 +886,189 @@ function AgencySettingsCard({
           <Button type="submit" disabled={pending}>
             {pending ? "Saving…" : "Save AI settings"}
           </Button>
+      </form>
+    </CollapsibleCard>
+  );
+}
+
+type DiditWorkflowOption = {
+  id: string;
+  label: string;
+  type: string;
+  status: string;
+  price: number | null;
+  features: string | null;
+};
+
+/**
+ * Didit credentials.
+ *
+ * Two fields, and both are needed: Didit decides what a session checks from the
+ * *workflow*, not from anything in the request, so a key on its own cannot run
+ * an identity check.
+ *
+ * The workflow list is loaded on demand from /api/kyc/didit/workflows using the
+ * key already saved on the server — the key is never sent from the browser and
+ * never sent back to it. That fetch is also the only real test that a saved key
+ * works, which is why the button says so rather than claiming to "verify" on
+ * the strength of the key merely having been stored.
+ */
+function DiditSettingsCard({
+  hasKey,
+  workflowId,
+}: {
+  hasKey: boolean;
+  workflowId: string | null;
+}) {
+  const [state, action, pending] = useActionState<FormState, FormData>(
+    saveDiditSettings,
+    {},
+  );
+  const [workflows, setWorkflows] = useState<DiditWorkflowOption[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [selected, setSelected] = useState(workflowId ?? "");
+
+  async function loadWorkflows() {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await fetch("/api/kyc/didit/workflows");
+      const body = (await res.json()) as {
+        workflows?: DiditWorkflowOption[];
+        error?: string;
+      };
+      if (!res.ok) {
+        setLoadError(body.error ?? "Could not reach Didit.");
+        setWorkflows(null);
+      } else {
+        setWorkflows(body.workflows ?? []);
+      }
+    } catch {
+      setLoadError("Could not reach Didit.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Only KYC workflows verify a person. A draft one is still listed, labelled
+  // as draft, because hiding it makes the account look empty — but Didit will
+  // not start a session on a draft, so the label matters.
+  const kyc = (workflows ?? []).filter((w) => w.type === "kyc");
+  const chosen = kyc.find((w) => w.id === selected) ?? null;
+
+  return (
+    <CollapsibleCard
+      title="KYC — Didit identity verification"
+      description="Paid ID verification for a named person: document check, liveness, face match and watchlist screening. Get a key at didit.me."
+    >
+      <form action={action} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="didit_api_key">Didit API key</Label>
+            <Input
+              id="didit_api_key"
+              name="didit_api_key"
+              type="password"
+              autoComplete="off"
+              placeholder={hasKey ? "•••••• saved — leave blank to keep" : "Paste your key"}
+            />
+            <p className="text-xs text-muted-foreground">
+              {hasKey
+                ? "A key is saved. Enter a new one to replace it."
+                : "No key yet — Didit checks are disabled until one is added."}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="didit_workflow_id">Identity workflow</Label>
+            {kyc.length > 0 ? (
+              <Select
+                id="didit_workflow_id"
+                name="didit_workflow_id"
+                value={selected}
+                onChange={(e) => setSelected(e.target.value)}
+              >
+                <option value="">Select a workflow…</option>
+                {kyc.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.label}
+                    {w.price !== null ? ` — $${w.price.toFixed(2)}` : ""}
+                    {w.status !== "published" ? ` (${w.status})` : ""}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <Input
+                id="didit_workflow_id"
+                name="didit_workflow_id"
+                value={selected}
+                onChange={(e) => setSelected(e.target.value)}
+                placeholder="Workflow UUID"
+                autoComplete="off"
+              />
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => void loadWorkflows()}
+                disabled={loading || !hasKey}
+              >
+                {loading ? "Checking…" : "Test key & load workflows"}
+              </Button>
+              {!hasKey ? (
+                <span className="text-xs text-muted-foreground">Save a key first.</span>
+              ) : null}
+            </div>
+            {loadError ? (
+              <p className="text-xs text-red-700 dark:text-red-300">{loadError}</p>
+            ) : null}
+            {workflows !== null && !loadError ? (
+              <p className="text-xs text-muted-foreground">
+                Key works — {kyc.length} identity workflow
+                {kyc.length === 1 ? "" : "s"} on this account
+                {kyc.length === 0 ? ". Create one in the Didit dashboard." : "."}
+              </p>
+            ) : null}
+            {chosen?.features ? (
+              <p className="text-xs text-muted-foreground">{chosen.features}</p>
+            ) : null}
+            {chosen && chosen.status !== "published" ? (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                This workflow is a draft. Publish it in the Didit dashboard before
+                starting checks.
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <Notice state={state} />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit" disabled={pending}>
+            {pending ? "Saving…" : "Save Didit settings"}
+          </Button>
+          {hasKey ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => void removeDiditKey()}
+            >
+              <Trash2 className="h-4 w-4" />
+              Remove key
+            </Button>
+          ) : null}
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          Didit bills this account for every session it starts, so a check only
+          ever begins when someone presses &ldquo;KYC Didit&rdquo; on the KYC page
+          — never automatically, and never by running the free Companies House
+          search.
+        </p>
       </form>
     </CollapsibleCard>
   );

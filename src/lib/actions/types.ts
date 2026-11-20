@@ -9,4 +9,7 @@ export type FormState = {
   message?: string;
   /** Set by inline "quick-create" actions so a modal can select the new record. */
   created?: { id: string; name: string };
+  /** Set by startIdentityCheck when the person already has an identity result
+   *  and a new paid check needs an explicit tick. */
+  needsRecheckConfirm?: boolean;
 };

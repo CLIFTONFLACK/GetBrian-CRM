@@ -55,6 +55,9 @@ export default async function AdminPage() {
   ]);
 
   const hasOpenRouterKey = Boolean(settings?.openrouter_api_key);
+  // Only ever whether a key exists — the key itself must not reach the client.
+  const hasDiditKey = Boolean(settings?.didit_api_key);
+  const diditWorkflowId = settings?.didit_workflow_id ?? null;
   const openRouterModel = settings?.openrouter_model ?? "perplexity/sonar";
   // Null means "no override" — the editor shows the built-in default instead.
   const deepDivePrompt = settings?.deep_dive_prompt ?? null;
@@ -109,6 +112,8 @@ export default async function AdminPage() {
         hasOpenRouterKey={hasOpenRouterKey}
         openRouterModel={openRouterModel}
         deepDivePrompt={deepDivePrompt}
+        hasDiditKey={hasDiditKey}
+        diditWorkflowId={diditWorkflowId}
         contactRoles={contactRoles}
         companyTypes={companyTypes}
       />

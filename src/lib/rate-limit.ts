@@ -41,6 +41,10 @@ const LIMITS = {
   // endpoint is a resource-exhaustion / junk-tenant vector. A handful per IP
   // per hour covers genuine retries; anything past that is abuse.
   signup: { requests: 5, window: "1 h" as const },
+  // Cost control on startIdentityCheck. Each call that passes this creates a
+  // billed Didit session. Keyed by agency + user, not by IP. 20 an hour covers
+  // a manager who verifies all the people at a new client in one sitting.
+  diditStart: { requests: 20, window: "1 h" as const },
 } satisfies Record<string, { requests: number; window: `${number} ${"s" | "m" | "h"}` }>;
 
 export type RateLimitBucket = keyof typeof LIMITS;

@@ -74,7 +74,7 @@ export function KycRunner({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Run a KYC report</CardTitle>
+        <CardTitle>KYC Companies House Search</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Company picker */}
@@ -209,7 +209,7 @@ export function KycRunner({
             <form action={runAction} className="flex items-center gap-3">
               <input type="hidden" name="company_id" value={selected.id} />
               <Button type="submit" disabled={running}>
-                {running ? "Running…" : "Run KYC report"}
+                {running ? "Running…" : "KYC Companies House Search"}
               </Button>
               {!selected.company_number ? (
                 <span className="text-sm text-muted-foreground">

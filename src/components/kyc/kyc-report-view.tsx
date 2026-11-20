@@ -11,7 +11,7 @@ const SOURCE_LABELS: Record<string, string> = {
   companies_house: "Companies House",
   ofsi_sanctions: "OFSI sanctions",
   vat: "VAT (HMRC)",
-  didit: "Didit KYB/AML",
+  didit: "Didit identity checks",
 };
 
 const CH_BASE = "https://find-and-update.company-information.service.gov.uk";
@@ -202,6 +202,67 @@ export function KycReportView({ report }: { report: KycReport }) {
           )}
         </CardContent>
       </Card>
+
+      {/* Didit identity checks — only present once a paid check on one of the
+          company's contacts has a decision. Reports written before this existed
+          have no `diditPeople` key at all, hence the optional chain rather than
+          a length check on a guaranteed array. */}
+      {data?.diditPeople && data.diditPeople.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Identity verification (Didit)</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm">
+            <ul className="divide-y">
+              {data.diditPeople.map((p) => (
+                <li key={p.sessionId} className="space-y-1 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium">{p.contactName}</span>
+                    <Badge
+                      tone={
+                        p.status === "APPROVED"
+                          ? "emerald"
+                          : p.status === "DECLINED"
+                            ? "red"
+                            : "amber"
+                      }
+                    >
+                      {p.status.toLowerCase().replace(/_/g, " ")}
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    {p.verifiedName ? (
+                      <span>
+                        Document name:{" "}
+                        <span className="text-foreground">{p.verifiedName}</span>
+                      </span>
+                    ) : null}
+                    {p.documentType ? <span>{p.documentType}</span> : null}
+                    {p.faceMatchScore !== null ? (
+                      <span>Face match {Math.round(p.faceMatchScore * 100)}%</span>
+                    ) : null}
+                    {p.livenessScore !== null ? (
+                      <span>Liveness {Math.round(p.livenessScore * 100)}%</span>
+                    ) : null}
+                    {p.amlHits > 0 ? (
+                      <span className="text-red-700 dark:text-red-300">
+                        {p.amlHits} watchlist hit(s) — see Sanctions screening
+                      </span>
+                    ) : null}
+                  </div>
+                  {p.warnings.length > 0 ? (
+                    <ul className="list-disc pl-5 text-xs text-amber-700 dark:text-amber-300">
+                      {p.warnings.map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Officers + PSCs */}
       <div className="grid gap-4 md:grid-cols-2">

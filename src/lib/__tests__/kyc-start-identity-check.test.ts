@@ -592,3 +592,21 @@ test("a Didit HTTP error reply does not say the check may have been billed", asy
   assert.equal(result.error, "API key is not valid");
   assert.doesNotMatch(result.error ?? "", /billed/);
 });
+
+// ── Callback: the person returns to the public verified page, never to a CRM page ──
+
+test("the Didit callback is the public verified page when the contact has a company", async () => {
+  await startIdentityCheck({}, formFor("c-1"));
+
+  const body = JSON.parse(String(fetchSpy.mock.calls[0].arguments[1].body));
+  assert.equal(body.callback, "https://crm.getbrian.xyz/verified");
+});
+
+test("the Didit callback is the public verified page when the contact has no company", async () => {
+  getContactById.mock.mockImplementation(() => Promise.resolve({ ...CONTACT, company_id: null }));
+
+  await startIdentityCheck({}, formFor("c-1"));
+
+  const body = JSON.parse(String(fetchSpy.mock.calls[0].arguments[1].body));
+  assert.equal(body.callback, "https://crm.getbrian.xyz/verified");
+});

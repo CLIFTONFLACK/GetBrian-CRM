@@ -236,12 +236,9 @@ export async function startIdentityCheck(
       // contact id — that is what a later payload has to be matched against.
       vendorData: contact.id,
       email: contact.email,
-      callbackUrl:
-        origin && contact.company_id
-          ? `${origin}/kyc?company=${contact.company_id}`
-          : origin
-            ? `${origin}/contacts/${contact.id}`
-            : null,
+      // The person who opens this link has no CRM account, so the page after
+      // the check must be public. A CRM page sent them to the login screen.
+      callbackUrl: origin ? `${origin}/verified` : null,
     });
   } catch (err) {
     if (isDiditOutcomeUnknown(err)) {

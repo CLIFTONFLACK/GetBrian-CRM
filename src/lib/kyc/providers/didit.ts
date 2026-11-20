@@ -214,7 +214,9 @@ export async function createIdentitySession(
       body: {
         workflow_id: input.workflowId,
         vendor_data: input.vendorData,
-        ...(input.callbackUrl ? { callback_url: input.callbackUrl } : {}),
+        // Didit's field is `callback`. An unknown key such as `callback_url` is
+        // ignored without an error, and the workflow's default page is used.
+        ...(input.callbackUrl ? { callback: input.callbackUrl } : {}),
         ...(input.email ? { contact_details: { email: input.email } } : {}),
       },
     },
@@ -278,6 +280,9 @@ type RawScored = { status?: string; score?: number; similarity?: number };
  *  reports them — the session decision's `aml_screenings[]` and the standalone
  *  endpoint's `aml` — so the mapper below iterates one type, not a union. */
 type RawAmlHit = {
+  /** The matched entity's name in a session decision (docs.didit.me, AML
+   *  screening report, per-hit fields). */
+  caption?: string;
   matched_name?: string;
   name?: string;
   match_score?: number;
@@ -314,6 +319,11 @@ function unitScore(value: number | undefined): number | null {
   if (typeof value !== "number" || Number.isNaN(value)) return null;
   const scaled = value > 1 ? value / 100 : value;
   return Math.max(0, Math.min(1, scaled));
+}
+
+/** A trimmed string, or "" for anything that is not a string. */
+function text(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function warningText(w: string | { risk?: string; short_description?: string }): string {
@@ -359,7 +369,10 @@ export function mapDecision(raw: unknown): DiditKycSummary {
     for (const hit of screen.hits ?? []) {
       aml.push({
         query,
-        matchedName: hit.matched_name ?? hit.name ?? "(unnamed match)",
+        // `||`, not `??`: an empty name must fall through, not show a blank.
+        // text() also turns a non-string from the payload into "", not a throw.
+        matchedName:
+          text(hit.caption) || text(hit.matched_name) || text(hit.name) || "(unnamed match)",
         listName: hit.watchlist ?? hit.source ?? hit.sources?.[0] ?? "Didit AML",
         score: unitScore(hit.match_score ?? hit.score) ?? 0,
       });

@@ -111,7 +111,8 @@ export function DiditKycCard({
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
           Verifies a <strong>person</strong>: their ID document, a liveness check,
-          a face match against the document, and a watchlist screen of their name.
+          and a face match against the document. A watchlist screen of their name
+          runs only if the agency&apos;s Didit workflow includes AML.
           Results are folded into the next Companies House report you run for this
           company.
         </p>

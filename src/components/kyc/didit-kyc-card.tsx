@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { refreshIdentityCheck, startIdentityCheck } from "@/lib/actions/kyc";
+import { emailLinkHref, safeLink } from "@/lib/kyc/verification-link";
 import type { FormState } from "@/lib/actions/types";
 
 export type ContactOption = {
@@ -49,6 +50,35 @@ function statusTone(status: string): "emerald" | "amber" | "red" | "slate" {
   if (status === "EXPIRED" || status === "ABANDONED" || status === "KYC_EXPIRED")
     return "slate";
   return "amber";
+}
+
+/** Copies the verification link. Falls back to a plain message when the browser refuses. */
+function CopyLinkButton({ url }: { url: string }) {
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Clear the reset timer on unmount, and before each new click starts one.
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(url);
+          setState("copied");
+        } catch {
+          setState("failed");
+        }
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setState("idle"), 2500);
+      }}
+    >
+      {state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy link"}
+    </Button>
+  );
 }
 
 function fmt(d: string): string {
@@ -234,16 +264,29 @@ export function DiditKycCard({
                         {refreshing ? "Checking…" : "Refresh"}
                       </Button>
                     </form>
-                    {c.url ? (
-                      <a
-                        className="text-xs text-info hover:underline"
-                        href={c.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Verification link →
-                      </a>
-                    ) : null}
+                    {(() => {
+                      const link = safeLink(c.url);
+                      if (!link) return null;
+                      const mail = emailLinkHref(contact?.email, link);
+                      return (
+                        <>
+                          <a
+                            className="text-xs text-info hover:underline"
+                            href={link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Verification link →
+                          </a>
+                          <CopyLinkButton url={link} />
+                          {mail ? (
+                            <a className="text-xs text-info hover:underline" href={mail}>
+                              Email link
+                            </a>
+                          ) : null}
+                        </>
+                      );
+                    })()}
                   </div>
                 </li>
               );

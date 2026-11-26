@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -35,6 +36,8 @@ function fmtDate(d: string): string {
         year: "numeric",
       });
 }
+
+export const metadata: Metadata = { title: "Identity and company checks" };
 
 export default async function KycPage({
   searchParams,

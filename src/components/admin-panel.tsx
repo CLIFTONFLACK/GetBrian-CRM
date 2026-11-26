@@ -17,6 +17,7 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { CollapsibleCard } from "@/components/ui/collapsible-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -251,7 +252,13 @@ function AddAgentForm({ onDone }: { onDone?: () => void }) {
           <Label htmlFor="password">
             Password<span className="text-destructive"> *</span>
           </Label>
-          <Input id="password" name="password" required />
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            required
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="role">Role</Label>
@@ -409,14 +416,14 @@ function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
               </form>
               <form action={removeAgent}>
                 <input type="hidden" name="user_id" value={member.id} />
-                <Button
-                  type="submit"
+                <ConfirmSubmitButton
                   variant="ghost"
                   size="sm"
                   className="text-destructive hover:bg-destructive/10"
+                  confirmMessage={`Remove ${member.email ?? "this team member"} from the agency? They lose access straight away.`}
                 >
                   Remove
-                </Button>
+                </ConfirmSubmitButton>
               </form>
             </div>
           )}
@@ -530,6 +537,8 @@ function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
               <Input
                 id={`pw-${member.id}`}
                 name="password"
+                type="password"
+                autoComplete="new-password"
                 className="h-8 w-48"
                 placeholder="Set a new password"
               />
@@ -1116,7 +1125,14 @@ function DiditSettingsCard({
               type="button"
               variant="secondary"
               size="sm"
-              onClick={() => void removeDiditKey()}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Remove the saved Didit API key? Nobody can start an identity check until a new key is saved.",
+                  )
+                )
+                  void removeDiditKey();
+              }}
             >
               <Trash2 className="h-4 w-4" />
               Remove key

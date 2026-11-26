@@ -1,11 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { scoreMatch } from "../matching/score.ts";
+import { scoreMatch as scoreMatchWithDamping } from "../matching/score.ts";
 import { normalizePlace, samePlace } from "../matching/place-key.ts";
 
-type Req = Parameters<typeof scoreMatch>[0];
-type Listing = Parameters<typeof scoreMatch>[1];
+type Req = Parameters<typeof scoreMatchWithDamping>[0];
+type Listing = Parameters<typeof scoreMatchWithDamping>[1];
+
+// These tests check one criterion at a time, so the brief is thin on purpose.
+// Switch the thin-brief reduction off here; score-thin-brief.test.ts covers it.
+const scoreMatch = (r: Req, d: Listing, o: Parameters<typeof scoreMatchWithDamping>[2] = {}) =>
+  scoreMatchWithDamping(r, d, { ...o, dampenThinBriefs: false });
 
 // A requirement with a location target and nothing else, so the score is the
 // location factor alone: 100 for a hit, 0 for a miss, between for proximity.

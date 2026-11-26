@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { pgTimestampToIso } from "@/lib/format-date";
 import { listingTypeBadge, matchScoreBadge } from "@/lib/badges";
 import type { EntityOption } from "@/components/creatable-select";
-import type { MatchReason } from "@/lib/matching/score";
+import { thinBriefHint, type MatchReason } from "@/lib/matching/score";
 import type { AgentOption } from "@/lib/db/queries/agencies";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,10 @@ export type Opportunity = {
   listingType: string | null;
   score: number;
   reasons: MatchReason[];
+  /** The requirement sets few criteria, so the score was lowered. */
+  thin?: boolean;
+  coverage?: number;
+  missing?: string[];
   /** Prior external sends of this exact requirement ↔ listing pair. */
   previousSends?: { name: string; at: string }[];
 };
@@ -181,6 +185,14 @@ export function MatchOpportunities({
                       Sent{o.previousSends.length > 1 ? ` ×${o.previousSends.length}` : ""}
                       {" · "}
                       {new Date(pgTimestampToIso(o.previousSends[0].at)).toLocaleDateString("en-GB")}
+                    </Badge>
+                  ) : null}
+                  {o.thin ? (
+                    <Badge
+                      tone="amber"
+                      title={thinBriefHint({ coverage: o.coverage ?? 0, missing: o.missing ?? [] })}
+                    >
+                      Thin brief
                     </Badge>
                   ) : null}
                   <Badge tone={ms.tone}>{ms.label}</Badge>

@@ -408,13 +408,16 @@ export default async function RequirementDetailPage({
         </CardHeader>
         <CardContent>
           <MatchOpportunities
-            opportunities={matches.map(({ d, score, reasons }) => ({
+            opportunities={matches.map(({ d, score, reasons, thin, coverage, missing }) => ({
               id: d.id,
               title: d.title ?? "Untitled listing",
               city: d.city,
               listingType: d.listing_type,
               score,
               reasons,
+              thin,
+              coverage,
+              missing,
               previousSends: sentByListing.get(d.id),
             }))}
             requirementId={r.id}

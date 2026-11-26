@@ -68,7 +68,9 @@ function listing(
 
 test("the fixtures score as the other tests assume", () => {
   const r = req("r1");
-  assert.equal(scoreMatch(r, listing("a")).score, 100);
+  // The brief sets 40 of 100 points (town and size), so it is thin: a perfect
+  // fit scores 100 x 40 / 50 = 80, not 100.
+  assert.equal(scoreMatch(r, listing("a")).score, 80);
   // Right town, size outside the band: only the 25 location points of 40.
   const partial = scoreMatch(r, listing("b", { size_sqft: 9000 })).score;
   assert.ok(partial >= MIN_MATCH_SCORE && partial < 100, String(partial));

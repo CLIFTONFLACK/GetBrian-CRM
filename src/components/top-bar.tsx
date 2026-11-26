@@ -11,7 +11,7 @@ export function TopBar({
   isAdmin,
   notifications,
 }: {
-  user: { email?: string } | null;
+  user: { email?: string; name?: string } | null;
   demo?: boolean;
   isAdmin?: boolean;
   notifications?: Note[];
@@ -46,9 +46,12 @@ export function TopBar({
         </Link>
         <NotificationsBell initialNotes={notifications} />
         <ThemeToggle />
-        {user?.email ? (
-          <span className="hidden text-sm text-muted-foreground sm:inline">
-            {user.email}
+        {user?.name || user?.email ? (
+          <span
+            className="hidden text-sm text-muted-foreground sm:inline"
+            title={user.email}
+          >
+            {user.name || user.email}
           </span>
         ) : null}
       </div>

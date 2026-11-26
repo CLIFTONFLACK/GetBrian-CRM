@@ -5,6 +5,7 @@ import { Check, X } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { approveSubmission, rejectSubmission } from "./actions";
 import type { FormState } from "@/lib/actions/types";
 
@@ -37,15 +38,15 @@ export function ReviewActions({ id }: { id: string }) {
         </form>
         <form action={reject}>
           <input type="hidden" name="id" value={id} />
-          <Button
-            type="submit"
+          <ConfirmSubmitButton
             size="sm"
             variant="secondary"
             disabled={approving || rejecting}
+            confirmMessage="Reject this submission? It leaves the intake queue."
           >
             <X />
             {rejecting ? "Rejecting…" : "Reject"}
-          </Button>
+          </ConfirmSubmitButton>
         </form>
       </div>
       {state.error ? <Alert tone="error">{state.error}</Alert> : null}

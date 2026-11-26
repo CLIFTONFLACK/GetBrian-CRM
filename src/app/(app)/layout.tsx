@@ -18,7 +18,7 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  let user: { email?: string } | null = null;
+  let user: { email?: string; name?: string } | null = null;
   let isAdmin = false;
   let notifications: Note[] = [];
   let unreadMessages = 0;
@@ -32,7 +32,10 @@ export default async function AppLayout({
     const session = await auth();
     if (!session?.user) redirect("/login");
     const userId = session.user.id;
-    user = { email: session.user.email ?? undefined };
+    user = {
+      email: session.user.email ?? undefined,
+      name: session.user.name?.trim() || undefined,
+    };
 
     // Scope to the caller's OWN membership row — an unscoped role='admin'
     // check would leak the Admin nav to any non-admin whose agency has an

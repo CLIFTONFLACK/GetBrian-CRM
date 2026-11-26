@@ -1,21 +1,28 @@
 import { ActivityTimeline } from "@/components/activity-timeline";
 import { EmptyNote, PanelSection } from "@/components/record-panel/fields";
+import { EditableField } from "@/components/record-panel/inline-edit";
 import { LogActivityForm } from "@/components/log-activity-form";
+import type { FormState } from "@/lib/actions/types";
 import { listActivitiesForEntity } from "@/lib/db/queries/activities";
 import { getAgencyMembers } from "@/lib/db/queries/agencies";
 
 import type { RecordTabProps } from "./placeholder";
 
 /**
- * Notes field, the log-activity form and the timeline. Shared by all three
- * record types: activities support company, contact and requirement.
+ * Summary note, the log-activity form and the timeline. Shared by the company,
+ * contact and requirement panels. Pass `summaryEdit` to make the summary note
+ * editable in place; without it the note is read-only.
  */
 export async function NotesActivityTab({
   entityType,
   entityId,
   agencyId,
   notes,
-}: RecordTabProps & { notes: string | null }) {
+  summaryEdit,
+}: RecordTabProps & {
+  notes: string | null;
+  summaryEdit?: { action: (prev: FormState, fd: FormData) => Promise<FormState> };
+}) {
   const [activities, members] = await Promise.all([
     listActivitiesForEntity(agencyId, entityType, entityId, 20),
     getAgencyMembers(agencyId),
@@ -24,8 +31,22 @@ export async function NotesActivityTab({
 
   return (
     <>
-      <PanelSection title="Notes">
-        {notes ? (
+      <PanelSection title="Summary note">
+        {summaryEdit ? (
+          <EditableField
+            action={summaryEdit.action}
+            recordId={entityId}
+            field="notes"
+            label="Summary note"
+            kind="textarea"
+            value={notes ?? ""}
+            display={
+              notes ? undefined : (
+                <span className="text-muted-foreground">No summary note yet. Use the pencil to add one.</span>
+              )
+            }
+          />
+        ) : notes ? (
           <p className="whitespace-pre-wrap text-sm text-foreground">{notes}</p>
         ) : (
           <EmptyNote>No notes yet.</EmptyNote>

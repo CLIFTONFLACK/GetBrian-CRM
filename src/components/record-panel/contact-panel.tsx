@@ -5,6 +5,12 @@ import {
   PanelSection,
 } from "@/components/record-panel/fields";
 import { EmailLink } from "@/components/email-link";
+import {
+  EditableAddress,
+  EditableAgents,
+  EditableContactCompany,
+  EditableField,
+} from "@/components/record-panel/inline-edit";
 import { PanelFrame, RecordNotFound } from "@/components/record-panel/panel-frame";
 import { MapTab } from "@/components/record-panel/tabs/map-tab";
 import { MatchmakerTab } from "@/components/record-panel/tabs/matchmaker-tab";
@@ -13,6 +19,12 @@ import { TodoTab } from "@/components/record-panel/tabs/todo-tab";
 import { UploadsTab } from "@/components/record-panel/tabs/uploads-tab";
 import { QuickRequirementModal } from "@/components/quick-requirement-modal";
 import { Badge } from "@/components/ui/badge";
+import {
+  patchContactAddress,
+  patchContactAgents,
+  patchContactCompany,
+  patchContactField,
+} from "@/lib/actions/panel-edit";
 import { contactRoleBadge, requirementStatusBadge } from "@/lib/badges";
 import { getContactRoles, roleLabel } from "@/lib/contact-roles";
 import { getAgencyMembers } from "@/lib/db/queries/agencies";
@@ -52,13 +64,33 @@ export async function ContactPanel({
   let content: React.ReactNode;
   switch (tab) {
     case "notes":
-      content = <NotesActivityTab {...tabProps} notes={contact.notes} />;
+      content = (
+        <NotesActivityTab
+          {...tabProps}
+          notes={contact.notes}
+          summaryEdit={{ action: patchContactField }}
+        />
+      );
       break;
     case "requirements":
       content = <RequirementsTab agencyId={agencyId} contact={contact} base={base} />;
       break;
     case "map":
-      content = <MapTab lat={contact.lat} lng={contact.lng} label={name} />;
+      content = (
+        <MapTab
+          lat={contact.lat}
+          lng={contact.lng}
+          label={name}
+          recordId={contact.id}
+          address={{
+            address_line: contact.address_line,
+            city: contact.city,
+            postcode: contact.postcode,
+            county: contact.county,
+          }}
+          addressAction={patchContactAddress}
+        />
+      );
       break;
     case "todo":
       content = <TodoTab {...tabProps} userId={userId} />;
@@ -71,7 +103,13 @@ export async function ContactPanel({
       break;
     default:
       content = (
-        <OverviewTab agencyId={agencyId} contact={contact} roleText={r.label} base={base} />
+        <OverviewTab
+          agencyId={agencyId}
+          contact={contact}
+          roleText={r.label}
+          roles={roles}
+          base={base}
+        />
       );
   }
 
@@ -92,11 +130,13 @@ async function OverviewTab({
   agencyId,
   contact,
   roleText,
+  roles,
   base,
 }: {
   agencyId: string;
   contact: Contact;
   roleText: string;
+  roles: { slug: string; label: string }[];
   base: SearchParamsLike;
 }) {
   const [companyName, agentIds, members] = await Promise.all([
@@ -111,53 +151,134 @@ async function OverviewTab({
   const agents = agentIds.map((id) => ({ id, name: nameOf.get(id) ?? "Unknown agent" }));
   const updated = formatDateUpdated(contact.date_updated);
 
+  const edit = { recordId: contact.id, action: patchContactField } as const;
+
   return (
     <PanelSection>
-      <Field label="Role">{roleText}</Field>
+      <Field label="First name">
+        <EditableField
+          {...edit}
+          field="first_name"
+          label="First name"
+          kind="text"
+          value={contact.first_name}
+        />
+      </Field>
+      <Field label="Last name">
+        <EditableField
+          {...edit}
+          field="last_name"
+          label="Last name"
+          kind="text"
+          value={contact.last_name ?? ""}
+        />
+      </Field>
+      <Field label="Role">
+        <EditableField
+          {...edit}
+          field="role"
+          label="Role"
+          kind="select"
+          value={contact.role}
+          display={roleText}
+          options={roles.map((x) => ({ value: x.slug, label: x.label }))}
+        />
+      </Field>
       <Field label="Company">
-        {contact.company_id ? (
-          <PanelLink
-            href={openRecordHref(base, { type: "company", id: contact.company_id })}
-            className="text-info"
-          >
-            {companyName ?? "View company"}
-          </PanelLink>
-        ) : (
-          "—"
-        )}
+        <EditableContactCompany
+          action={patchContactCompany}
+          contactId={contact.id}
+          companyId={contact.company_id}
+          isPrimary={contact.is_primary}
+          display={
+            contact.company_id ? (
+              <>
+                <PanelLink
+                  href={openRecordHref(base, { type: "company", id: contact.company_id })}
+                  className="text-info"
+                >
+                  {companyName ?? "View company"}
+                </PanelLink>
+                {contact.is_primary ? <span className="text-muted-foreground"> · primary contact</span> : null}
+              </>
+            ) : (
+              "—"
+            )
+          }
+        />
       </Field>
       <Field label="Email">
-        {contact.email ? (
-          <EmailLink email={contact.email} className="text-info hover:underline" />
-        ) : (
-          "—"
-        )}
+        <EditableField
+          {...edit}
+          field="email"
+          label="Email"
+          kind="email"
+          value={contact.email ?? ""}
+          display={
+            contact.email ? (
+              <EmailLink email={contact.email} className="text-info hover:underline" />
+            ) : undefined
+          }
+        />
       </Field>
-      <Field label="Mobile">{contact.mobile ?? "—"}</Field>
-      <Field label="Landline">{contact.phone ?? "—"}</Field>
+      <Field label="Mobile">
+        <EditableField {...edit} field="mobile" label="Mobile" kind="phone" value={contact.mobile ?? ""} />
+      </Field>
+      <Field label="Landline">
+        <EditableField {...edit} field="phone" label="Landline" kind="phone" value={contact.phone ?? ""} />
+      </Field>
+      <Field label="Address">
+        <EditableAddress
+          action={patchContactAddress}
+          recordId={contact.id}
+          address={{
+            address_line: contact.address_line,
+            city: contact.city,
+            postcode: contact.postcode,
+            county: contact.county,
+          }}
+        />
+      </Field>
       <Field label="Marketing">
-        <span className="flex flex-wrap gap-1.5">
-          <Badge tone={contact.marketing_opt_in ? "emerald" : "slate"}>
-            Marketing: {contact.marketing_opt_in ? "Yes" : "No"}
-          </Badge>
-          <Badge tone={contact.marketing_property_alerts ? "emerald" : "slate"}>
-            Property alerts: {contact.marketing_property_alerts ? "Yes" : "No"}
-          </Badge>
-        </span>
+        <EditableField
+          {...edit}
+          field="marketing_opt_in"
+          label="Marketing: latest news"
+          kind="boolean"
+          value={String(contact.marketing_opt_in === true)}
+        />
       </Field>
-      <Field label="Lead agent">{leadAgent ?? "—"}</Field>
+      <Field label="Alerts">
+        <EditableField
+          {...edit}
+          field="marketing_property_alerts"
+          label="Marketing: property alerts"
+          kind="boolean"
+          value={String(contact.marketing_property_alerts === true)}
+        />
+      </Field>
       <Field label="Agents">
-        {agents.length > 0 ? (
-          <span className="flex flex-wrap gap-1.5">
-            {agents.map((a) => (
-              <Badge key={a.id} tone="slate">
-                {a.name}
-              </Badge>
-            ))}
-          </span>
-        ) : (
-          "—"
-        )}
+        <EditableAgents
+          action={patchContactAgents}
+          recordId={contact.id}
+          agents={members}
+          leadAgentId={contact.lead_agent_id}
+          additionalAgentIds={agentIds}
+          display={
+            <>
+              <span>Lead: {leadAgent ?? "—"}</span>
+              {agents.length > 0 ? (
+                <span className="flex flex-wrap gap-1.5">
+                  {agents.map((a) => (
+                    <Badge key={a.id} tone="slate">
+                      {a.name}
+                    </Badge>
+                  ))}
+                </span>
+              ) : null}
+            </>
+          }
+        />
       </Field>
       <Field label="Date updated">
         <span title={updated.title}>{updated.text}</span>

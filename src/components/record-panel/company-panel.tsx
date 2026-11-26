@@ -8,6 +8,11 @@ import {
   PanelLink,
   PanelSection,
 } from "@/components/record-panel/fields";
+import {
+  EditableAddress,
+  EditableAgents,
+  EditableField,
+} from "@/components/record-panel/inline-edit";
 import { PanelFrame, RecordNotFound } from "@/components/record-panel/panel-frame";
 import { MapTab } from "@/components/record-panel/tabs/map-tab";
 import { MatchmakerTab } from "@/components/record-panel/tabs/matchmaker-tab";
@@ -23,6 +28,11 @@ import {
   listingStatusBadge,
   requirementStatusBadge,
 } from "@/lib/badges";
+import {
+  patchCompanyAddress,
+  patchCompanyAgents,
+  patchCompanyField,
+} from "@/lib/actions/panel-edit";
 import { getCompanyTypes, typeLabel } from "@/lib/company-types";
 import { getContactRoles, roleLabel } from "@/lib/contact-roles";
 import { getAgencyMembers } from "@/lib/db/queries/agencies";
@@ -64,7 +74,13 @@ export async function CompanyPanel({
       content = <ContactsTab agencyId={agencyId} companyId={company.id} base={base} />;
       break;
     case "notes":
-      content = <NotesActivityTab {...tabProps} notes={company.notes} />;
+      content = (
+        <NotesActivityTab
+          {...tabProps}
+          notes={company.notes}
+          summaryEdit={{ action: patchCompanyField }}
+        />
+      );
       break;
     case "requirements":
       content = <RequirementsTab agencyId={agencyId} companyId={company.id} base={base} />;
@@ -73,7 +89,21 @@ export async function CompanyPanel({
       content = <ListingsTab agencyId={agencyId} companyId={company.id} base={base} />;
       break;
     case "map":
-      content = <MapTab lat={company.lat} lng={company.lng} label={company.name} />;
+      content = (
+        <MapTab
+          lat={company.lat}
+          lng={company.lng}
+          label={company.name}
+          recordId={company.id}
+          address={{
+            address_line: company.address_line,
+            city: company.city,
+            postcode: company.postcode,
+            county: company.county,
+          }}
+          addressAction={patchCompanyAddress}
+        />
+      );
       break;
     case "todo":
       content = <TodoTab {...tabProps} userId={userId} />;
@@ -85,7 +115,14 @@ export async function CompanyPanel({
       content = <UploadsTab {...tabProps} />;
       break;
     default:
-      content = <OverviewTab agencyId={agencyId} company={company} typeText={t.label} />;
+      content = (
+        <OverviewTab
+          agencyId={agencyId}
+          company={company}
+          typeText={t.label}
+          types={companyTypes}
+        />
+      );
   }
 
   return (
@@ -105,10 +142,12 @@ async function OverviewTab({
   agencyId,
   company,
   typeText,
+  types,
 }: {
   agencyId: string;
   company: NonNullable<Awaited<ReturnType<typeof getCompanyById>>>;
   typeText: string;
+  types: { slug: string; label: string }[];
 }) {
   const [agentIds, members] = await Promise.all([
     getCompanyAgentIds(agencyId, company.id),
@@ -121,48 +160,113 @@ async function OverviewTab({
   const agents = agentIds.map((id) => ({ id, name: nameOf.get(id) ?? "Unknown agent" }));
   const updated = formatDateUpdated(company.date_updated);
 
+  const edit = { recordId: company.id, action: patchCompanyField } as const;
+
   return (
     <PanelSection className="space-y-3">
-      <Field label="Type">{typeText}</Field>
+      <Field label="Name">
+        <EditableField {...edit} field="name" label="Name" kind="text" value={company.name} />
+      </Field>
+      <Field label="Type">
+        <EditableField
+          {...edit}
+          field="type"
+          label="Type"
+          kind="select"
+          value={company.type}
+          display={typeText}
+          options={types.map((x) => ({ value: x.slug, label: x.label }))}
+        />
+      </Field>
       <Field label="Tags">
-        {company.sector_tags.length > 0 ? (
-          <span className="flex flex-wrap gap-1.5">
-            {company.sector_tags.map((tag) => (
-              <Badge key={tag} tone="slate">
-                {tag}
-              </Badge>
-            ))}
-          </span>
-        ) : (
-          "—"
-        )}
+        <EditableField
+          {...edit}
+          field="sector_tags"
+          label="Tags"
+          kind="tags"
+          value={company.sector_tags.join(", ")}
+          display={
+            company.sector_tags.length > 0 ? (
+              <span className="flex flex-wrap gap-1.5">
+                {company.sector_tags.map((tag) => (
+                  <Badge key={tag} tone="slate">
+                    {tag}
+                  </Badge>
+                ))}
+              </span>
+            ) : undefined
+          }
+        />
       </Field>
       <Field label="Website">
-        {company.website ? (
-          <WebsiteLink url={company.website} className="text-info hover:underline" />
-        ) : (
-          "—"
-        )}
+        <EditableField
+          {...edit}
+          field="website"
+          label="Website"
+          kind="url"
+          value={company.website ?? ""}
+          display={
+            company.website ? (
+              <WebsiteLink url={company.website} className="text-info hover:underline" />
+            ) : undefined
+          }
+        />
       </Field>
-      <Field label="Phone">{company.phone ?? "—"}</Field>
+      <Field label="Phone">
+        <EditableField {...edit} field="phone" label="Phone" kind="phone" value={company.phone ?? ""} />
+      </Field>
       <Field label="Address">
-        {[company.address_line, company.city, company.postcode].filter(Boolean).join(", ") ||
-          "—"}
+        <EditableAddress
+          action={patchCompanyAddress}
+          recordId={company.id}
+          address={{
+            address_line: company.address_line,
+            city: company.city,
+            postcode: company.postcode,
+            county: company.county,
+          }}
+        />
       </Field>
-      <Field label="Company number">{company.company_number ?? "—"}</Field>
-      <Field label="Lead agent">{leadAgentName ?? "—"}</Field>
+      <Field label="Company number">
+        <EditableField
+          {...edit}
+          field="company_number"
+          label="Company number"
+          kind="text"
+          value={company.company_number ?? ""}
+        />
+      </Field>
+      <Field label="VAT number">
+        <EditableField
+          {...edit}
+          field="vat_number"
+          label="VAT number"
+          kind="text"
+          value={company.vat_number ?? ""}
+        />
+      </Field>
       <Field label="Agents">
-        {agents.length > 0 ? (
-          <span className="flex flex-wrap gap-1.5">
-            {agents.map((a) => (
-              <Badge key={a.id} tone="slate">
-                {a.name}
-              </Badge>
-            ))}
-          </span>
-        ) : (
-          "—"
-        )}
+        <EditableAgents
+          action={patchCompanyAgents}
+          recordId={company.id}
+          agents={members}
+          leadAgentId={company.lead_agent_id}
+          additionalAgentIds={agentIds}
+          display={
+            <>
+              <span>Lead: {leadAgentName ?? "—"}</span>
+              {agents.length > 0 ? (
+                <span className="flex flex-wrap gap-1.5">
+                  {agents.map((a) => (
+                    <Badge key={a.id} tone="slate">
+                      {a.name}
+                    </Badge>
+                  ))}
+                </span>
+              ) : null}
+            </>
+          }
+        />
       </Field>
       <Field label="Date updated">
         <span title={updated.title}>{updated.text}</span>

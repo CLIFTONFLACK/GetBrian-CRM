@@ -10,6 +10,14 @@ import {
   PanelLink,
   PanelSection,
 } from "@/components/record-panel/fields";
+import {
+  EditableAddress,
+  EditableAgents,
+  EditableField,
+  EditableLinks,
+  EditableMulti,
+  type InlineKind,
+} from "@/components/record-panel/inline-edit";
 import { PanelFrame, RecordNotFound } from "@/components/record-panel/panel-frame";
 import { MapTab } from "@/components/record-panel/tabs/map-tab";
 import { NotesActivityTab } from "@/components/record-panel/tabs/notes-tab";
@@ -22,9 +30,25 @@ import {
   listingTypeBadge,
   matchScoreBadge,
 } from "@/lib/badges";
+import {
+  patchListingAddress,
+  patchListingAgents,
+  patchListingField,
+  patchListingLinks,
+  patchListingUseClasses,
+} from "@/lib/actions/panel-edit-listing";
 import { getAgencyMembers } from "@/lib/db/queries/agencies";
+import {
+  DISPOSAL_TYPES,
+  FIT_OUT_STATES,
+  LISTING_STATUSES,
+  LISTING_TYPES,
+  PRICE_QUALIFIERS,
+} from "@/lib/panel-fields/listing";
+import { parseUseClasses, USE_CLASS_OPTIONS } from "@/lib/use-classes";
 import { getDealsForListing } from "@/lib/db/queries/deals";
 import {
+  getDisposalAgentIds,
   getDisposalById,
   getLinkedCompany,
   getLinkedContact,
@@ -87,7 +111,16 @@ export async function ListingPanel({
       content = <MediaTab agencyId={agencyId} d={d} />;
       break;
     case "map":
-      content = <MapTab lat={d.lat} lng={d.lng} label={d.title ?? "Listing"} />;
+      content = (
+        <MapTab
+          lat={d.lat}
+          lng={d.lng}
+          label={d.title ?? "Listing"}
+          recordId={d.id}
+          address={{ address_line: d.address_line, city: d.city, postcode: d.postcode, county: d.county }}
+          addressAction={patchListingAddress}
+        />
+      );
       break;
     case "matchmaker":
       content = (
@@ -123,6 +156,16 @@ export async function ListingPanel({
   );
 }
 
+const PRICE_QUALIFIER_LABELS: Record<string, string> = {
+  fixed: "Fixed price",
+  offers_in_region: "Offers in the region of",
+  offers_in_excess: "Offers in excess of",
+  on_application: "On application",
+};
+
+const labelled = (values: readonly string[], labels: Record<string, string>) =>
+  values.map((v) => ({ value: v, label: labels[v] ?? v }));
+
 async function OverviewTab({
   agencyId,
   d,
@@ -132,99 +175,233 @@ async function OverviewTab({
   d: Disposal;
   base: SearchParamsLike;
 }) {
-  const [members, company, contact] = await Promise.all([
-    d.lead_agent_id ? getAgencyMembers(agencyId) : Promise.resolve([]),
+  const [members, agentIds, company, contact] = await Promise.all([
+    getAgencyMembers(agencyId),
+    getDisposalAgentIds(agencyId, d.id),
     d.company_id ? getLinkedCompany(agencyId, d.company_id) : Promise.resolve(null),
     d.contact_id ? getLinkedContact(agencyId, d.contact_id) : Promise.resolve(null),
   ]);
-  const leadAgent = d.lead_agent_id
-    ? (members.find((m) => m.id === d.lead_agent_id)?.name ?? "Unknown agent")
-    : null;
+  const nameOf = new Map(members.map((m) => [m.id, m.name]));
+  const leadAgent = d.lead_agent_id ? (nameOf.get(d.lead_agent_id) ?? "Unknown agent") : null;
+  const agents = agentIds.map((id) => ({ id, name: nameOf.get(id) ?? "Unknown agent" }));
   const ls = listingStatusBadge(d.status);
   const lt = listingTypeBadge(d.listing_type);
-  const address = [d.address_line, d.city, d.county, d.postcode].filter(Boolean).join(", ");
   const contactName = contact
     ? [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Unnamed contact"
     : null;
+  const classes = parseUseClasses(d.property_type, d.use_class);
+
+  // One editable row. `value` is the stored value as text; `display` replaces it in the read view.
+  const row = (
+    label: string,
+    field: string,
+    kind: InlineKind,
+    value: string | number | boolean | null | undefined,
+    display?: React.ReactNode,
+    options?: { value: string; label: string }[],
+  ) => (
+    <Field label={label}>
+      <EditableField
+        action={patchListingField}
+        recordId={d.id}
+        field={field}
+        label={label}
+        kind={kind}
+        value={value == null ? "" : String(value)}
+        display={display}
+        options={options}
+      />
+    </Field>
+  );
+  const flag = (label: string, field: string, value: boolean | null) =>
+    row(label, field, "boolean", Boolean(value));
+  const cash = (label: string, field: string, value: number | null, suffix = "") =>
+    row(
+      label,
+      field,
+      "number",
+      value,
+      value != null ? (
+        <>
+          <span className="font-mono tabular-nums">{money(value)}</span>
+          {suffix ? <span className="text-muted-foreground"> {suffix}</span> : null}
+        </>
+      ) : undefined,
+    );
 
   return (
     <>
       <PanelSection>
-        <Field label="Status">
-          <Badge tone={ls.tone}>{ls.label}</Badge>
-        </Field>
-        <Field label="Listing type">
-          <Badge tone={lt.tone}>{lt.label}</Badge>
-        </Field>
-        <Field label="Lead agent">{leadAgent ?? "—"}</Field>
+        {row("Title", "title", "text", d.title)}
+        {row(
+          "Status",
+          "status",
+          "select",
+          d.status,
+          <Badge tone={ls.tone}>{ls.label}</Badge>,
+          LISTING_STATUSES.map((v) => ({ value: v, label: v })),
+        )}
+        {row(
+          "Listing type",
+          "listing_type",
+          "select",
+          d.listing_type,
+          <Badge tone={lt.tone}>{lt.label}</Badge>,
+          LISTING_TYPES.map((v) => ({ value: v, label: v === "cdg" ? "CDG" : "Market intel" })),
+        )}
         <Field label="Company">
-          {company ? (
-            <PanelLink
-              href={openRecordHref(base, { type: "company", id: company.id })}
-              className="text-info"
-            >
-              {company.name}
-            </PanelLink>
-          ) : (
-            "—"
-          )}
+          <EditableLinks
+            action={patchListingLinks}
+            recordId={d.id}
+            companyId={d.company_id}
+            contactId={d.contact_id}
+            hint={d.source === "manual" ? "A listing made by hand needs a contact." : undefined}
+            display={
+              <span className="flex flex-col gap-0.5">
+                <span>
+                  {company ? (
+                    <PanelLink
+                      href={openRecordHref(base, { type: "company", id: company.id })}
+                      className="text-info"
+                    >
+                      {company.name}
+                    </PanelLink>
+                  ) : (
+                    "—"
+                  )}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Contact:{" "}
+                  {contact && contactName ? (
+                    <PanelLink
+                      href={openRecordHref(base, { type: "contact", id: contact.id })}
+                      className="text-info"
+                    >
+                      {contactName}
+                    </PanelLink>
+                  ) : (
+                    "—"
+                  )}
+                </span>
+              </span>
+            }
+          />
         </Field>
-        <Field label="Contact">
-          {contact && contactName ? (
-            <PanelLink
-              href={openRecordHref(base, { type: "contact", id: contact.id })}
-              className="text-info"
-            >
-              {contactName}
-            </PanelLink>
-          ) : (
-            "—"
-          )}
+        <Field label="Agents">
+          <EditableAgents
+            action={patchListingAgents}
+            recordId={d.id}
+            agents={members}
+            leadAgentId={d.lead_agent_id}
+            additionalAgentIds={agentIds}
+            display={
+              <>
+                <span>Lead: {leadAgent ?? "—"}</span>
+                {agents.length > 0 ? (
+                  <span className="flex flex-wrap gap-1.5">
+                    {agents.map((a) => (
+                      <Badge key={a.id} tone="slate">
+                        {a.name}
+                      </Badge>
+                    ))}
+                  </span>
+                ) : null}
+              </>
+            }
+          />
         </Field>
       </PanelSection>
+
       <PanelSection title="Location" className="border-t">
-        <Field label="Address">{address || "—"}</Field>
-        <Field label="Area">{d.area ?? "—"}</Field>
+        <Field label="Address">
+          <EditableAddress
+            action={patchListingAddress}
+            recordId={d.id}
+            address={{ address_line: d.address_line, city: d.city, postcode: d.postcode, county: d.county }}
+          />
+        </Field>
+        {row("Area", "area", "text", d.area)}
       </PanelSection>
+
       <PanelSection title="Premises" className="border-t">
-        <Field label="Type">
-          {DISPOSAL_TYPE_LABELS[d.disposal_type] ?? d.disposal_type}
-          {d.to_let ? " · To let" : ""}
-          {d.for_sale ? " · For sale" : ""}
+        {row(
+          "Type",
+          "disposal_type",
+          "select",
+          d.disposal_type,
+          DISPOSAL_TYPE_LABELS[d.disposal_type] ?? d.disposal_type,
+          labelled(DISPOSAL_TYPES, DISPOSAL_TYPE_LABELS),
+        )}
+        {flag("To let", "to_let", d.to_let)}
+        {flag("For sale", "for_sale", d.for_sale)}
+        <Field label="Use class">
+          <EditableMulti
+            action={patchListingUseClasses}
+            recordId={d.id}
+            field="use_classes"
+            label="Use class"
+            options={USE_CLASS_OPTIONS.map(([value, label]) => ({ value, label }))}
+            values={classes}
+            display={d.property_type ?? d.use_class ?? "—"}
+          />
         </Field>
-        <Field label="Use class">{d.use_class ?? "—"}</Field>
-        <Field label="Property">{d.property_type ?? "—"}</Field>
-        <Field label="Size">
-          {d.size_sqft != null ? `${Number(d.size_sqft).toLocaleString("en-GB")} sq ft` : "—"}
-          {d.size_sqm != null ? ` (${Number(d.size_sqm).toLocaleString("en-GB")} sq m)` : ""}
-        </Field>
-        <Field label="Covers">
-          {d.covers_internal != null ? `${d.covers_internal} internal` : "—"}
-          {d.covers_external != null ? ` + ${d.covers_external} external` : ""}
-        </Field>
-        <Field label="Fit-out">
-          {d.fit_out_state ? (FIT_OUT_LABELS[d.fit_out_state] ?? d.fit_out_state) : "—"}
-        </Field>
-        <Field label="EPC">{d.epc_rating ?? "—"}</Field>
+        {row("Size (sq ft)", "size_sqft", "number", d.size_sqft, d.size_sqft != null ? `${Number(d.size_sqft).toLocaleString("en-GB")} sq ft` : undefined)}
+        {row("Size (sq m)", "size_sqm", "number", d.size_sqm, d.size_sqm != null ? `${Number(d.size_sqm).toLocaleString("en-GB")} sq m` : undefined)}
+        {row("Covers (in)", "covers_internal", "number", d.covers_internal)}
+        {row("Covers (out)", "covers_external", "number", d.covers_external)}
+        {row(
+          "Fit-out",
+          "fit_out_state",
+          "select",
+          d.fit_out_state,
+          d.fit_out_state ? (FIT_OUT_LABELS[d.fit_out_state] ?? d.fit_out_state) : undefined,
+          [{ value: "", label: "— Not stated —" }, ...labelled(FIT_OUT_STATES, FIT_OUT_LABELS)],
+        )}
+        {row("EPC", "epc_rating", "text", d.epc_rating)}
+        {row("Key features", "key_features", "tags", d.key_features.join(", "))}
       </PanelSection>
+
       <PanelSection title="Commercials" className="border-t">
-        <Field label="Rent">
-          <span className="font-mono tabular-nums">{money(d.rent_pa)}</span>
-          {d.rent_pa != null ? <span className="text-muted-foreground"> pa</span> : null}
-        </Field>
-        <Field label="Premium">
-          <span className="font-mono tabular-nums">{money(d.premium)}</span>
-        </Field>
-        <Field label="Guide price">
-          <span className="font-mono tabular-nums">{money(d.guide_price)}</span>
-        </Field>
-        <Field label="Rateable">
-          <span className="font-mono tabular-nums">{money(d.rateable_value)}</span>
-        </Field>
-        <Field label="Service charge">
-          <span className="font-mono tabular-nums">{money(d.service_charge)}</span>
-        </Field>
-        <Field label="Tenure">{d.tenure_raw ?? "—"}</Field>
+        {cash("Rent", "rent_pa", d.rent_pa, "pa")}
+        {cash("Premium", "premium", d.premium)}
+        {cash("Guide price", "guide_price", d.guide_price)}
+        {row(
+          "Price qualifier",
+          "price_qualifier",
+          "select",
+          d.price_qualifier,
+          d.price_qualifier ? (PRICE_QUALIFIER_LABELS[d.price_qualifier] ?? d.price_qualifier) : undefined,
+          [{ value: "", label: "— None —" }, ...labelled(PRICE_QUALIFIERS, PRICE_QUALIFIER_LABELS)],
+        )}
+        {cash("Rateable value", "rateable_value", d.rateable_value)}
+        {cash("Service charge", "service_charge", d.service_charge)}
+        {row("Tenure", "tenure_raw", "text", d.tenure_raw)}
+      </PanelSection>
+
+      <PanelSection title="Lease and statutory" className="border-t">
+        <details>
+          <summary className="cursor-pointer text-sm text-muted-foreground">Show lease terms, rates and charges</summary>
+          <div className="mt-3 space-y-3">
+            {row("Lease term (years)", "lease_term_years", "number", d.lease_term_years)}
+            {row("Lease expiry", "lease_expiry", "date", d.lease_expiry)}
+            {row("Rent review basis", "rent_review_basis", "text", d.rent_review_basis)}
+            {row("Next review (year)", "next_rent_review", "number", d.next_rent_review)}
+            {row("Rent period", "rent_period", "text", d.rent_period)}
+            {flag("1954 Act", "inside_1954_act", d.inside_1954_act)}
+            {flag("VAT applies", "vat_applicable", d.vat_applicable)}
+            {cash("Business rates", "business_rates", d.business_rates)}
+            {cash("Estate charge", "estate_charge", d.estate_charge)}
+            {cash("Parking charge", "parking_charge", d.parking_charge)}
+          </div>
+        </details>
+      </PanelSection>
+
+      <PanelSection title="Description" className="border-t">
+        {row("Description", "description", "textarea", d.description)}
+        {row("Summary", "summary", "textarea", d.summary)}
+        {row("Location", "location_description", "textarea", d.location_description)}
+        {row("Licensing", "licensing_notes", "textarea", d.licensing_notes)}
+        {row("Brochure", "brochure_url", "url", d.brochure_url)}
       </PanelSection>
     </>
   );

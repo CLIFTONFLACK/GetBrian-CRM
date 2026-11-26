@@ -4,7 +4,7 @@
 // A caller that writes several columns at once (an address) also passes the
 // updated_at it loaded, as an optimistic lock.
 
-export const PATCHABLE_TABLES = ["companies", "contacts"] as const;
+export const PATCHABLE_TABLES = ["companies", "contacts", "disposals", "requirements"] as const;
 export type PatchableTable = (typeof PATCHABLE_TABLES)[number];
 
 const COLUMN = /^[a-z][a-z0-9_]*$/;

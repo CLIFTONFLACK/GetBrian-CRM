@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidatePanelHosts } from "@/lib/revalidate-panels";
 
 import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
@@ -46,6 +47,7 @@ export async function addDisposalArea(
   });
 
   revalidatePath(`/listings/${disposalId}`);
+  revalidatePanelHosts();
   return { message: "Area added." };
 }
 
@@ -59,5 +61,8 @@ export async function deleteDisposalArea(formData: FormData): Promise<void> {
   const disposalId = str(formData, "disposal_id");
   if (!id || !agencyId) return;
   await deleteDisposalAreaRow(agencyId, id);
-  if (disposalId) revalidatePath(`/listings/${disposalId}`);
+  if (disposalId) {
+    revalidatePath(`/listings/${disposalId}`);
+    revalidatePanelHosts();
+  }
 }

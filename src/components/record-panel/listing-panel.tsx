@@ -32,7 +32,12 @@ import {
 } from "@/lib/db/queries/disposals";
 import { listActiveRequirementsForMatching } from "@/lib/db/queries/requirements";
 import { signDisposalDocUrl } from "@/lib/disposal-docs";
-import { byMatchQuality, DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
+import {
+  byMatchQuality,
+  DEFAULT_LOCATION_FLEX,
+  scoreMatch,
+  thinBriefHint,
+} from "@/lib/matching/score";
 import {
   formatRecordRef,
   openRecordHref,
@@ -309,7 +314,7 @@ async function ListingMatchmaker({
         <EmptyNote>No operator requirements match this listing yet.</EmptyNote>
       ) : (
         <ul className="space-y-3">
-          {matches.map(({ rq, score, reasons }) => {
+          {matches.map(({ rq, score, reasons, thin, coverage, missing }) => {
             const ms = matchScoreBadge(score);
             return (
               <li key={rq.id} className="rounded-md border p-3">
@@ -318,6 +323,11 @@ async function ListingMatchmaker({
                     {rq.title}
                   </PanelLink>
                   <div className="flex items-center gap-2">
+                    {thin ? (
+                      <Badge tone="amber" title={thinBriefHint({ coverage, missing })}>
+                        Thin brief
+                      </Badge>
+                    ) : null}
                     <Badge tone={ms.tone}>{ms.label}</Badge>
                     <CreateDealButton requirementId={rq.id} listingId={d.id} />
                   </div>

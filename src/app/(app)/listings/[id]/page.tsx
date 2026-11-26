@@ -20,7 +20,12 @@ import {
 } from "@/lib/badges";
 import { deleteDisposal } from "@/lib/actions/disposals";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
-import { byMatchQuality, DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
+import {
+  byMatchQuality,
+  DEFAULT_LOCATION_FLEX,
+  scoreMatch,
+  thinBriefHint,
+} from "@/lib/matching/score";
 import { LocationFlexSlider } from "@/components/location-flex-slider";
 import { CreateDealButton } from "@/components/create-deal-button";
 import { MatchReasons } from "@/components/match-reasons";
@@ -384,7 +389,7 @@ export default async function ListingDetailPage({
             </p>
           ) : (
             <ul className="space-y-3">
-              {matches.map(({ rq, score, reasons }) => {
+              {matches.map(({ rq, score, reasons, thin, coverage, missing }) => {
                 const ms = matchScoreBadge(score);
                 return (
                   <li key={rq.id} className="rounded-md border p-3">
@@ -396,6 +401,11 @@ export default async function ListingDetailPage({
                         {rq.title}
                       </Link>
                       <div className="flex items-center gap-2">
+                        {thin ? (
+                          <Badge tone="amber" title={thinBriefHint({ coverage, missing })}>
+                            Thin brief
+                          </Badge>
+                        ) : null}
                         <Badge tone={ms.tone}>{ms.label}</Badge>
                         <CreateDealButton requirementId={rq.id} listingId={d.id} />
                       </div>

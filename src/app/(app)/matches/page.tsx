@@ -21,7 +21,12 @@ import { setMatchStatus } from "@/lib/actions/matches";
 import { isListingMatchable, listingTypeBadge, matchScoreBadge } from "@/lib/badges";
 import { USE_CLASS_OPTIONS } from "@/lib/use-classes";
 import type { Database } from "@/lib/database.types";
-import { byMatchQuality, DEFAULT_LOCATION_FLEX, scoreMatch } from "@/lib/matching/score";
+import {
+  byMatchQuality,
+  DEFAULT_LOCATION_FLEX,
+  scoreMatch,
+  thinBriefHint,
+} from "@/lib/matching/score";
 import { getCompanyTypes } from "@/lib/company-types";
 import { getPairSendHistory } from "@/lib/send-history";
 import { openRecordHref } from "@/lib/record-ref";
@@ -77,6 +82,7 @@ export default async function MatchesPage({
     q?: string;
     min?: string;
     use_class?: string;
+    brief?: string;
     flex?: string;
     silo?: string;
     rejected?: string;
@@ -89,6 +95,7 @@ export default async function MatchesPage({
     q,
     min,
     use_class,
+    brief,
     flex,
     silo,
     rejected,
@@ -167,6 +174,9 @@ export default async function MatchesPage({
   if (use_class) {
     pairs = pairs.filter((p) => p.rq.use_classes.includes(use_class as never));
   }
+  // "thin" = requirements that set few criteria, so the score was lowered.
+  if (brief === "thin") pairs = pairs.filter((p) => p.thin);
+  else if (brief === "full") pairs = pairs.filter((p) => !p.thin);
 
   // Decisions applied last, so the toggle counts describe the current filters.
   const statusOf = (p: { rq: { id: string }; d: { id: string } }) =>
@@ -206,7 +216,7 @@ export default async function MatchesPage({
     ? await getDefaultSendContactsForRequirements(agencyId, [...new Set(shown.map((p) => p.rq.id))])
     : new Map<string, string>();
 
-  const params = { q, min, use_class, flex, silo, rejected, shortlisted };
+  const params = { q, min, use_class, brief, flex, silo, rejected, shortlisted };
 
   const stats = [
     { label: "Active requirements", value: requirements.length, icon: Target },
@@ -257,6 +267,7 @@ export default async function MatchesPage({
         basePath="/matches"
         hasActiveFilters={
           Boolean(use_class) ||
+          Boolean(brief) ||
           Boolean(silo) ||
           (min != null && min !== "50") ||
           locationFlex !== DEFAULT_LOCATION_FLEX
@@ -279,6 +290,15 @@ export default async function MatchesPage({
           label="Use class"
           value={use_class}
           options={USE_CLASS_FILTERS}
+        />
+        <FilterSelect
+          name="brief"
+          label="Brief detail"
+          value={brief}
+          options={[
+            { value: "full", label: "Full briefs only" },
+            { value: "thin", label: "Thin briefs only" },
+          ]}
         />
       </FilterBar>
 
@@ -316,7 +336,7 @@ export default async function MatchesPage({
         />
       ) : (
         <div className="space-y-3">
-          {shown.map(({ rq, d, score, reasons }) => {
+          {shown.map(({ rq, d, score, reasons, thin, coverage, missing }) => {
             const ms = matchScoreBadge(score);
             const accent = SCORE_ACCENT[ms.tone] ?? SCORE_ACCENT.slate;
             const pairKey = `${rq.id}:${d.id}`;
@@ -392,6 +412,11 @@ export default async function MatchesPage({
                             const t = listingTypeBadge(d.listing_type);
                             return <Badge tone={t.tone}>{t.label}</Badge>;
                           })()}
+                          {thin ? (
+                            <Badge tone="amber" title={thinBriefHint({ coverage, missing })}>
+                              Thin brief
+                            </Badge>
+                          ) : null}
                         </p>
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center gap-2">

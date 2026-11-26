@@ -64,7 +64,20 @@ type Disposal = Pick<
 >;
 
 export type MatchReason = { label: string; ok: boolean; partial?: boolean };
-export type MatchResult = { score: number; reasons: MatchReason[] };
+export type MatchResult = {
+  score: number;
+  reasons: MatchReason[];
+  /**
+   * Weight (out of 100) of the criteria the brief sets. A brief with a budget,
+   * a size, a use class and a place scores on all 100; one with only a size and
+   * a use class scores on 35.
+   */
+  coverage: number;
+  /** True when `coverage` is below THIN_BRIEF_COVERAGE: the score was lowered. */
+  thin: boolean;
+  /** Names of the criteria the brief does not set, for the "add X" hint. */
+  missing: string[];
+};
 export type ScoreOptions = {
   /**
    * Location flexibility 0–100: how far outside the targeted locations a
@@ -73,6 +86,12 @@ export type ScoreOptions = {
    * miles, with credit fading linearly to zero at the edge.
    */
   locationFlex?: number;
+  /**
+   * Lower the score of a thin brief (default true). Tests that check one
+   * criterion on its own pass false, so a brief with a single criterion still
+   * reads 100 for a hit.
+   */
+  dampenThinBriefs?: boolean;
 };
 
 export const DEFAULT_LOCATION_FLEX = 50;
@@ -94,6 +113,22 @@ const COUNTY_RADIUS_BONUS_MILES = 15;
  */
 const NEIGHBOURHOOD_MAX_REACH_MILES = 3;
 const ZONE_MAX_REACH_MILES = 2;
+
+/**
+ * A brief that sets fewer criteria than this (weight out of 100) is "thin". The
+ * score of a thin brief is scaled by coverage / THIN_BRIEF_COVERAGE, never below
+ * THIN_BRIEF_FLOOR. Without it, a brief that sets only a size and a use class
+ * scores 100% for every listing that fits those two, and outranks a full brief
+ * that scores 90% on eight checks.
+ */
+export const THIN_BRIEF_COVERAGE = 50;
+const THIN_BRIEF_FLOOR = 0.5;
+
+/** One line for a tooltip: why the score is lowered and what would firm it up. */
+export function thinBriefHint(m: Pick<MatchResult, "coverage" | "missing">): string {
+  const add = m.missing.length ? ` Add ${m.missing.join(", ")} to the requirement.` : "";
+  return `Thin brief: the requirement sets few criteria (${m.coverage} of 100 points), so the score is lowered.${add}`;
+}
 
 const lc = (s: string) => s.toLowerCase();
 const gbp = (n: number) => `£${Number(n).toLocaleString("en-GB")}`;
@@ -410,13 +445,18 @@ export function scoreMatch(
   const reasons: MatchReason[] = [];
   let gained = 0;
   let possible = 0;
+  const missing: string[] = [];
   const add = (
+    dimension: string,
     weight: number,
     applicable: boolean,
     okOrFactor: boolean | number,
     label: string,
   ) => {
-    if (!applicable) return;
+    if (!applicable) {
+      missing.push(dimension);
+      return;
+    }
     const factor = typeof okOrFactor === "number" ? okOrFactor : okOrFactor ? 1 : 0;
     possible += weight;
     gained += weight * factor;
@@ -429,9 +469,10 @@ export function scoreMatch(
 
   const targets = resolveTargets(req);
   const loc = locationFactor(targets, d, opts.locationFlex ?? DEFAULT_LOCATION_FLEX);
-  add(25, targets.any, loc.factor, loc.label);
+  add("location", 25, targets.any, loc.factor, loc.label);
 
   add(
+    "size",
     15,
     req.min_sqft != null || req.max_sqft != null,
     withinBand(d.size_sqft, req.min_sqft, req.max_sqft),
@@ -439,6 +480,7 @@ export function scoreMatch(
   );
 
   add(
+    "covers",
     10,
     req.min_covers != null || req.max_covers != null,
     withinBand(d.covers_internal, req.min_covers, req.max_covers),
@@ -448,9 +490,10 @@ export function scoreMatch(
   // Use class absorbed the old, separate "property types" dimension — the two
   // asked the same question of the same listing, so they now share one weight.
   const use = scoreUseClass(req.use_classes, d);
-  add(20, req.use_classes.length > 0, use.factor, use.label);
+  add("use class", 20, req.use_classes.length > 0, use.factor, use.label);
 
   add(
+    "tenure",
     10,
     req.tenure_prefs.length > 0,
     req.tenure_prefs.some((p) => (TENURE_MAP[p] ?? []).includes(d.disposal_type)),
@@ -473,9 +516,10 @@ export function scoreMatch(
   ]
     .filter(Boolean)
     .join(" and ");
-  add(10, req.max_rent != null || req.max_rent_psf != null, annualOk && psfOk, rentLabel);
+  add("rent", 10, req.max_rent != null || req.max_rent_psf != null, annualOk && psfOk, rentLabel);
 
   add(
+    "premium",
     5,
     req.max_premium != null,
     d.premium == null || d.premium <= (req.max_premium as number),
@@ -483,14 +527,20 @@ export function scoreMatch(
   );
 
   add(
+    "guide price",
     5,
     req.max_guide_price != null,
     d.guide_price == null || d.guide_price <= (req.max_guide_price as number),
     `Guide: ${d.guide_price != null ? gbp(d.guide_price) : "—"}`,
   );
 
-  const score = possible > 0 ? Math.round((gained / possible) * 100) : 0;
-  return { score, reasons };
+  const thin = possible > 0 && possible < THIN_BRIEF_COVERAGE;
+  const factor =
+    thin && opts.dampenThinBriefs !== false
+      ? Math.max(THIN_BRIEF_FLOOR, possible / THIN_BRIEF_COVERAGE)
+      : 1;
+  const score = possible > 0 ? Math.round((gained / possible) * 100 * factor) : 0;
+  return { score, reasons, coverage: possible, thin, missing };
 }
 
 /**

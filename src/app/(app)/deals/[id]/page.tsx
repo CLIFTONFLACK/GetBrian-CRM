@@ -9,21 +9,17 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { EditableDealTitle } from "@/components/editable-deal-title";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DealForm } from "@/components/deal-form";
-import { DealReminders } from "@/components/deal-reminders";
+import { NotesTodosSection } from "@/components/notes-todos/notes-todos-section";
 import { DealShareActions } from "@/components/deal-share-actions";
-import { ActivityTimeline } from "@/components/activity-timeline";
-import { LogActivityForm } from "@/components/log-activity-form";
 import { SendDealModal } from "@/components/send-deal-modal";
 import { SendToTeam } from "@/components/send-to-team";
 import { ExistingDealNotice } from "./existing-deal-notice";
 import { dealStageBadge } from "@/lib/badges";
 import { deleteDeal } from "@/lib/actions/deals";
-import { isPast } from "@/lib/time";
 import { getCompanyTypes } from "@/lib/company-types";
 import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
-import { listActivitiesForEntity } from "@/lib/db/queries/activities";
 import { getCompanyName, listCompanyOptions } from "@/lib/db/queries/companies";
 import {
   getDefaultSendContactsForRequirements,
@@ -34,7 +30,6 @@ import {
   getDealAgentIds,
   getDealById,
   getDealListingSummary,
-  listDealReminders,
 } from "@/lib/db/queries/deals";
 import { getLinkedCompany, getLinkedContact, getUserNames } from "@/lib/db/queries/disposals";
 import { getRequirementTitle } from "@/lib/db/queries/requirements";
@@ -74,7 +69,6 @@ export default async function DealDetailPage({
   if (!deal) notFound();
 
   const members = await getAgencyMembers(agencyId);
-  const memberNames = Object.fromEntries(members.map((m) => [m.id, m.name]));
 
   const [listing, requirementTitle, companyName] = await Promise.all([
     deal.listing_id ? getDealListingSummary(agencyId, deal.listing_id) : Promise.resolve(null),
@@ -102,14 +96,6 @@ export default async function DealDetailPage({
     const names = await getUserNames([deal.created_by]);
     ownerName = names.get(deal.created_by) ?? null;
   }
-
-  const reminderRows = await listDealReminders(agencyId, id);
-  const reminders = reminderRows.map((r) => ({
-    ...r,
-    overdue: isPast(r.due_at),
-  }));
-
-  const activities = await listActivitiesForEntity(agencyId, "deal", id, 30);
 
   // Pickers for the Send Deal wizard's external step — only needed when the
   // deal is linked to a requirement and/or listing (otherwise nothing to send).
@@ -322,20 +308,16 @@ export default async function DealDetailPage({
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>Reminders &amp; deadlines</CardTitle>
+          <CardTitle>Notes &amp; to-dos</CardTitle>
         </CardHeader>
         <CardContent>
-          <DealReminders dealId={deal.id} reminders={reminders} />
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Updates &amp; notes</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <LogActivityForm entityType="deal" entityId={deal.id} />
-          <ActivityTimeline activities={activities} actorNames={memberNames} />
+          <NotesTodosSection
+            entityType="deal"
+            entityId={deal.id}
+            agencyId={agencyId}
+            userId={userId}
+            idPrefix="deal-nt"
+          />
         </CardContent>
       </Card>
     </div>

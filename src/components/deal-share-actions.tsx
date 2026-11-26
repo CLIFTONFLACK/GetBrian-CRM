@@ -3,7 +3,7 @@
 import { Mail, MessageCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { logDealShare } from "@/lib/actions/deal-reminders";
+import { logDealShare } from "@/lib/actions/activities";
 
 /**
  * Share a deal update by email or WhatsApp (#11). Composes a plain-text update

@@ -17,8 +17,9 @@ import {
 import { auth } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
-import { listDealIdsLedBy, listOpenDealReminders } from "@/lib/db/queries/deals";
+import { listMyTodos } from "@/lib/db/queries/activities";
 import { getUserNames } from "@/lib/db/queries/disposals";
+import { fullRecordHref } from "@/lib/record-ref";
 import {
   getMessagesByIds,
   listInboxMessages,
@@ -47,22 +48,19 @@ export default async function MessagesPage({
   const { view } = await searchParams;
   const showSent = view === "sent";
 
-  const [msgs, sentMsgs, notes, reminders] = await Promise.all([
+  const [msgs, sentMsgs, notes, todos] = await Promise.all([
     listInboxMessages(agencyId, me, 50),
     showSent ? listSentMessages(agencyId, me, 50) : Promise.resolve([]),
     listNotifications(agencyId, me, 30),
-    listOpenDealReminders(agencyId, 100),
+    listMyTodos(agencyId, me, 100),
   ]);
 
   const messages = msgs;
   const sent = sentMsgs;
   const notifications = notes;
 
-  // "My" reminders only: ones I set, or on deals where I'm the lead agent.
-  const leadDealIds = new Set(await listDealIdsLedBy(agencyId, me));
-  const dueReminders = reminders
-    .filter((r) => r.created_by === me || leadDealIds.has(r.deal_id))
-    .slice(0, 30);
+  // My open to-dos with a due date, soonest first (listMyTodos orders them).
+  const dueTodos = todos.filter((t) => t.status === "open" && t.due_at).slice(0, 30);
 
   // Threading: subjects/snippets of the messages being replied to.
   const parentIds = [
@@ -337,30 +335,31 @@ export default async function MessagesPage({
         </CardContent>
       </Card>
 
-      {/* ── Reminders (mine: set by me, or on deals I lead) ───── */}
+      {/* ── My to-dos with a due date ─────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground" />
-            My reminders
+            My to-dos
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {dueReminders.length === 0 ? (
+          {dueTodos.length === 0 ? (
             <EmptyState
               icon={Clock}
-              title="No open reminders"
-              description="Reminders you set, or on deals you lead, appear here until they're marked done."
+              title="No open to-dos"
+              description="To-dos assigned to you, or created by you, appear here until they're ticked off."
             />
           ) : (
             <ul className="divide-y">
-              {dueReminders.map((r) => {
-                const overdue = isPast(r.due_at);
+              {dueTodos.map((r) => {
+                const dueAt = r.due_at as string;
+                const overdue = isPast(dueAt);
                 return (
                   <li key={r.id} className="flex items-center justify-between gap-3 py-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-foreground">
-                        {r.title}
+                        {r.subject ?? (r.body ? r.body.slice(0, 80) : "To-do")}
                       </p>
                       <p
                         className={cn(
@@ -370,15 +369,19 @@ export default async function MessagesPage({
                             : "text-muted-foreground",
                         )}
                       >
-                        Due <LocalDateTime iso={r.due_at} />
+                        Due <LocalDateTime iso={dueAt} />
                         {overdue ? " · overdue" : ""}
                       </p>
                     </div>
                     <Link
-                      href={`/deals/${r.deal_id}`}
+                      href={
+                        r.entity_type && r.entity_id
+                          ? `${fullRecordHref({ type: r.entity_type, id: r.entity_id })}`
+                          : "/tasks"
+                      }
                       className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
                     >
-                      Open deal
+                      Open
                     </Link>
                   </li>
                 );

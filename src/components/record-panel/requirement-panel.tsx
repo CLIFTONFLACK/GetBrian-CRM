@@ -12,7 +12,6 @@ import { PanelFrame, RecordNotFound } from "@/components/record-panel/panel-fram
 import { RequirementMatchmaker } from "@/components/record-panel/requirement-matchmaker";
 import { NotesActivityTab } from "@/components/record-panel/tabs/notes-tab";
 import { RequirementRatingSlot } from "@/components/record-panel/tabs/requirement-rating-slot";
-import { TodoTab } from "@/components/record-panel/tabs/todo-tab";
 import { RequirementDocuments } from "@/components/requirement-documents";
 import { SendHistoryCard } from "@/components/send-history-card";
 import { Badge } from "@/components/ui/badge";
@@ -64,7 +63,7 @@ export async function RequirementPanel({
       content = <ContactsTab agencyId={agencyId} r={r} base={base} />;
       break;
     case "notes":
-      content = <NotesActivityTab {...tabProps} notes={r.notes} />;
+      content = <NotesActivityTab {...tabProps} userId={userId} notes={r.notes} />;
       break;
     case "matchmaker":
       content = (
@@ -83,9 +82,6 @@ export async function RequirementPanel({
       break;
     case "send-history":
       content = <SendHistoryTab agencyId={agencyId} requirementId={r.id} />;
-      break;
-    case "todo":
-      content = <TodoTab {...tabProps} userId={userId} />;
       break;
     default:
       content = <OverviewTab agencyId={agencyId} r={r} statusText={s.label} />;

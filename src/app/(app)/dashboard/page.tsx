@@ -53,9 +53,9 @@ import {
   shapePriorityRow,
 } from "@/lib/priority-list";
 import { openRecordHref } from "@/lib/record-ref";
-import { listDealsForReports, listOpenDealReminders } from "@/lib/db/queries/deals";
+import { listDealsForReports } from "@/lib/db/queries/deals";
 import { listRecentActivitiesForAgency } from "@/lib/db/queries/dashboard";
-import { countOpenAssignedTasks, countOverdueAssignedTasks } from "@/lib/db/queries/tasks";
+import { countOpenAssignedTodos, countOverdueAssignedTodos } from "@/lib/db/queries/activities";
 import { countUnreadMessages } from "@/lib/db/queries/messages";
 import { getUserNames } from "@/lib/db/queries/disposals";
 import { getMapLayers } from "@/lib/db/queries/map-points";
@@ -130,7 +130,6 @@ export default async function DashboardPage({
     activities,
     myTasksCount,
     overdueTasksCount,
-    reminderRows,
     unreadCount,
     mapLayers,
     agencyName,
@@ -145,15 +144,14 @@ export default async function DashboardPage({
         countActiveRequirements(agencyId),
         listDealsForReports(agencyId),
         listRecentActivitiesForAgency(agencyId, 10),
-        countOpenAssignedTasks(agencyId, me),
-        countOverdueAssignedTasks(agencyId, me, nowIso),
-        listOpenDealReminders(agencyId, 200),
+        countOpenAssignedTodos(agencyId, me),
+        countOverdueAssignedTodos(agencyId, me, nowIso),
         countUnreadMessages(agencyId, me),
         getMapLayers(agencyId, { include: ["listing"] }),
         getAgencyName(agencyId),
         listPriorityRequirements(agencyId, { limit: PRIORITY_LIMIT }),
       ])
-    : [0, [], 0, [], [], 0, 0, [], 0, { listings: [], companies: [], contacts: [] }, null, []];
+    : [0, [], 0, [], [], 0, 0, 0, { listings: [], companies: [], contacts: [] }, null, []];
 
   const openDeals = allDeals.filter((d) => !CLOSED_STAGES.has(d.stage));
   const wonDeals = allDeals.filter((d) => d.stage === "completed");
@@ -183,17 +181,9 @@ export default async function DashboardPage({
 
   const activeListings = listingStatusRows.filter((l) => isListingMatchable(l.status)).length;
 
-  // Overdue = my open tasks past due + open reminders past due that are mine
-  // (set by me, or sitting on a deal I lead). listOpenDealReminders returns
-  // every not-done reminder sorted by due_at asc (agencies.ts's convention);
-  // the due-date filter is applied here rather than in SQL.
-  const myLeadDealIds = new Set(
-    allDeals.filter((d) => d.lead_agent_id === me).map((d) => d.id),
-  );
-  const myOverdueReminders = reminderRows.filter(
-    (r) => r.due_at < nowIso && (r.created_by === me || myLeadDealIds.has(r.deal_id)),
-  ).length;
-  const overdueCount = overdueTasksCount + myOverdueReminders;
+  // Overdue = my open to-dos past due. Deal reminders were folded into to-dos
+  // (db/migrations/0049), with the deal's lead agent as the assignee.
+  const overdueCount = overdueTasksCount;
 
   // Actor names for the activity feed (resolved through public.users — the
   // merged profiles+auth.users table, see db/migrations/0001_init.sql).
@@ -243,7 +233,7 @@ export default async function DashboardPage({
 
   const myWork = [
     {
-      label: "My open tasks",
+      label: "My open to-dos",
       value: myTasksCount,
       icon: ListTodo,
       href: "/tasks",
@@ -252,7 +242,7 @@ export default async function DashboardPage({
       label: "Overdue",
       value: overdueCount,
       icon: AlarmClock,
-      hint: "tasks & reminders past due",
+      hint: "to-dos past due",
       href: "/tasks",
     },
     {

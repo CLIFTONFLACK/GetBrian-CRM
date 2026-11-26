@@ -12,10 +12,13 @@ export type FieldKind =
   | "email"
   | "phone"
   | "select"
+  | "multi"
   | "tags"
+  | "number"
+  | "date"
   | "boolean";
 
-export type FieldValue = string | string[] | boolean | null;
+export type FieldValue = string | string[] | number | boolean | null;
 export type ParseResult = { ok: true; value: FieldValue } | { ok: false; error: string };
 
 export type FieldDef = {
@@ -28,6 +31,12 @@ export type FieldDef = {
   /** An empty value is an error. */
   required?: boolean;
   maxLength?: number;
+  /** For "select" and "multi": the values that are allowed. */
+  options?: readonly string[];
+  /** For "number": the smallest and largest value (default 0 and 1,000,000,000), and whole numbers only. */
+  min?: number;
+  max?: number;
+  integer?: boolean;
   /** Extra check after the default parse of the kind. */
   validate?: (value: FieldValue) => string | null;
 };
@@ -36,6 +45,7 @@ export type Registry = Record<string, FieldDef>;
 
 const DEFAULT_MAX = 500;
 const TEXTAREA_MAX = 10_000;
+const NUMBER_MAX = 1_000_000_000;
 
 /** Add "https://" when the value has no scheme, then accept http(s) only. */
 export function normaliseUrl(raw: string): string | null {
@@ -57,8 +67,29 @@ function finish(def: FieldDef, value: FieldValue): ParseResult {
   return problem ? { ok: false, error: problem } : { ok: true, value };
 }
 
-/** Parse one raw string for one field. Never throws. */
+/** True for a real calendar date written as yyyy-mm-dd. */
+export function isIsoDate(text: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const d = new Date(`${text}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === text;
+}
+
+/** Parse one raw value for one field. Never throws. A "multi" field takes a list. */
 export function parseField(def: FieldDef, raw: unknown): ParseResult {
+  if (def.kind === "multi") {
+    const list = Array.isArray(raw)
+      ? raw.map((v) => String(v))
+      : typeof raw === "string" && raw.trim()
+        ? raw.split(",")
+        : [];
+    const values = [...new Set(list.map((v) => v.trim()).filter(Boolean))];
+    if (def.options && values.some((v) => !def.options!.includes(v))) {
+      return { ok: false, error: `${def.label} has a value that is not in the list.` };
+    }
+    if (def.required && values.length === 0) return { ok: false, error: `${def.label} is required.` };
+    return finish(def, values);
+  }
+
   const text = typeof raw === "string" ? raw : raw == null ? "" : String(raw);
 
   if (def.kind === "boolean") {
@@ -91,6 +122,30 @@ export function parseField(def: FieldDef, raw: unknown): ParseResult {
     case "tags": {
       const tags = [...new Set(trimmed.split(/[;,]/).map((t) => t.trim()).filter(Boolean))];
       return finish(def, tags);
+    }
+    case "select": {
+      if (def.options && !def.options.includes(trimmed)) {
+        return { ok: false, error: `Pick one of the listed values for ${def.label}.` };
+      }
+      return finish(def, trimmed);
+    }
+    case "number": {
+      // Pound signs, commas and spaces are allowed as typed: "£95,000".
+      const n = Number(trimmed.replace(/[£,\s]/g, ""));
+      if (!Number.isFinite(n)) return { ok: false, error: `${def.label} must be a number.` };
+      const lo = def.min ?? 0;
+      const hi = def.max ?? NUMBER_MAX;
+      if (n < lo || n > hi) {
+        return { ok: false, error: `${def.label} must be between ${lo.toLocaleString("en-GB")} and ${hi.toLocaleString("en-GB")}.` };
+      }
+      if (def.integer && !Number.isInteger(n)) {
+        return { ok: false, error: `${def.label} must be a whole number.` };
+      }
+      return finish(def, n);
+    }
+    case "date": {
+      if (!isIsoDate(trimmed)) return { ok: false, error: `${def.label} must be a date, written year-month-day.` };
+      return finish(def, trimmed);
     }
     default:
       return finish(def, trimmed);

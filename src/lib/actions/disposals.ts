@@ -2,6 +2,7 @@
 
 import { del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
+import { revalidatePanelHosts } from "@/lib/revalidate-panels";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
@@ -245,6 +246,7 @@ export async function updateDisposal(
 
   revalidatePath("/listings");
   revalidatePath(`/listings/${id}`);
+  revalidatePanelHosts();
   redirect(`/listings/${id}`);
 }
 
@@ -294,6 +296,7 @@ export async function updateDisposalAssignment(
 
   revalidatePath("/listings");
   revalidatePath(`/listings/${id}`);
+  revalidatePanelHosts();
   return { message: "Assignment saved." };
 }
 
@@ -320,6 +323,7 @@ export async function updateDisposalStatus(formData: FormData): Promise<void> {
 
   revalidatePath("/listings");
   revalidatePath(`/listings/${id}`);
+  revalidatePanelHosts();
 }
 
 const cleanIds = (ids: unknown): string[] =>

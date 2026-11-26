@@ -15,12 +15,23 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { listCompanyOptionsForEditor } from "@/lib/actions/panel-edit";
+import { listContactOptionsForEditor } from "@/lib/actions/panel-edit-requirement";
 import type { FormState } from "@/lib/actions/types";
 import type { AgentOption } from "@/lib/db/queries/agencies";
 import { cn } from "@/lib/utils";
 
 type Action = (prev: FormState, fd: FormData) => Promise<FormState>;
-export type InlineKind = "text" | "textarea" | "url" | "email" | "phone" | "select" | "tags" | "boolean";
+export type InlineKind =
+  | "text"
+  | "textarea"
+  | "url"
+  | "email"
+  | "phone"
+  | "select"
+  | "tags"
+  | "number"
+  | "date"
+  | "boolean";
 
 const ICON_BUTTON =
   "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -187,7 +198,17 @@ export function EditableField({
   const common = { name: "value", "aria-label": label, autoFocus: true, onKeyDown };
 
   return (
-    <form action={formAction} className="flex w-full flex-col gap-1.5">
+    <form
+      action={formAction}
+      className="flex w-full flex-col gap-1.5"
+      onSubmit={(e) => {
+        // Nothing changed: close the editor without a write.
+        if (draft === value) {
+          e.preventDefault();
+          setEditing(false);
+        }
+      }}
+    >
       <input type="hidden" name="id" value={recordId} />
       <input type="hidden" name="field" value={field} />
       <div className="flex items-start gap-1.5">
@@ -200,6 +221,11 @@ export function EditableField({
           />
         ) : kind === "select" ? (
           <Select {...common} value={draft} onChange={(e) => setDraft(e.target.value)} className="h-8">
+            {/* The stored value stays selectable when it is not in the list (a scraped
+                status, or none): the box must not silently fall back to the first option. */}
+            {!(options ?? []).some((o) => o.value === draft) ? (
+              <option value={draft}>{draft || "— Not stated —"}</option>
+            ) : null}
             {(options ?? []).map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
@@ -209,7 +235,8 @@ export function EditableField({
         ) : (
           <Input
             {...common}
-            type={kind === "email" ? "email" : kind === "url" ? "text" : kind === "phone" ? "tel" : "text"}
+            type={kind === "email" ? "email" : kind === "phone" ? "tel" : kind === "date" ? "date" : "text"}
+            inputMode={kind === "number" ? "decimal" : undefined}
             value={draft}
             placeholder={kind === "tags" ? "Pub, Bar, Restaurant" : placeholder}
             onChange={(e) => setDraft(e.target.value)}
@@ -429,6 +456,224 @@ export function EditableContactCompany({
       </label>
       {/* Save stays off until the company list has loaded: without the select the form would send no company. */}
       <SaveCancel pending={pending || options == null} onCancel={() => setEditing(false)} />
+      {state.error ? <span className="text-xs text-destructive">{state.error}</span> : null}
+    </form>
+  );
+}
+
+/** A list of choices as a checkbox group (use classes, tenure). Saves the ticked values. */
+export function EditableMulti({
+  action,
+  recordId,
+  field,
+  label,
+  options,
+  values,
+  display,
+}: {
+  action: Action;
+  recordId: string;
+  /** The registry key the action looks up. */
+  field: string;
+  label: string;
+  options: { value: string; label: string }[];
+  values: string[];
+  /** The read view, for example a row of badges. */
+  display?: React.ReactNode;
+}) {
+  const [editing, setEditing] = React.useState(false);
+  const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
+  const onSubmit = useScriptSubmit(formAction);
+  useSavedResult(state, () => setEditing(false));
+
+  if (!editing) {
+    return (
+      <span className="group inline-flex max-w-full flex-wrap items-start gap-1.5">
+        <span className="min-w-0 break-words">{display ?? (values.length ? values.join(", ") : "—")}</span>
+        <PencilButton label={`Edit ${label}`} onClick={() => setEditing(true)} />
+      </span>
+    );
+  }
+  const picked = new Set(values);
+  return (
+    <form onSubmit={onSubmit} className="flex w-full flex-col gap-2">
+      <input type="hidden" name="id" value={recordId} />
+      <input type="hidden" name="field" value={field} />
+      <fieldset className="flex flex-wrap gap-x-4 gap-y-2">
+        <legend className="sr-only">{label}</legend>
+        {options.map((o) => (
+          <label key={o.value} className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="value"
+              value={o.value}
+              defaultChecked={picked.has(o.value)}
+              className="h-4 w-4 cursor-pointer rounded border-input accent-primary"
+            />
+            {o.label}
+          </label>
+        ))}
+      </fieldset>
+      <SaveCancel pending={pending} onCancel={() => setEditing(false)} />
+      {state.error ? <span className="text-xs text-destructive">{state.error}</span> : null}
+    </form>
+  );
+}
+
+/** "Near (place)" and "Within (miles)" on a requirement. A place that is not found is saved, with a warning. */
+export function EditableAnchor({
+  action,
+  recordId,
+  text,
+  miles,
+  display,
+}: {
+  action: Action;
+  recordId: string;
+  text: string | null;
+  miles: number | null;
+  display: React.ReactNode;
+}) {
+  const [editing, setEditing] = React.useState(false);
+  const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
+  const onSubmit = useScriptSubmit(formAction);
+  useSavedResult(state, () => setEditing(false));
+  const warning = state.message && state.message !== "Saved." ? state.message : null;
+
+  if (!editing) {
+    return (
+      <span className="flex flex-col gap-1">
+        <span className="group inline-flex max-w-full flex-wrap items-start gap-1.5">
+          <span className="min-w-0 break-words">{display}</span>
+          <PencilButton label="Edit radius" onClick={() => setEditing(true)} />
+        </span>
+        {warning ? <span className="text-xs text-amber-700 dark:text-amber-300">{warning}</span> : null}
+      </span>
+    );
+  }
+  const id = (n: string) => `anchor-${recordId}-${n}`;
+  return (
+    <form onSubmit={onSubmit} className="flex w-full flex-col gap-2">
+      <input type="hidden" name="id" value={recordId} />
+      <div className="grid gap-2 sm:grid-cols-[1fr_7rem]">
+        <div className="space-y-1">
+          <Label htmlFor={id("text")} className="text-xs text-muted-foreground">
+            Near (place)
+          </Label>
+          <Input id={id("text")} name="location_anchor_text" defaultValue={text ?? ""} className="h-8" />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={id("miles")} className="text-xs text-muted-foreground">
+            Within (miles)
+          </Label>
+          <Input
+            id={id("miles")}
+            name="location_radius_miles"
+            inputMode="decimal"
+            defaultValue={miles != null ? String(miles) : ""}
+            className="h-8"
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">Clear both boxes to remove the radius.</p>
+      <SaveCancel pending={pending} onCancel={() => setEditing(false)} />
+      {state.error ? <span className="text-xs text-destructive">{state.error}</span> : null}
+    </form>
+  );
+}
+
+/**
+ * A record's company and contact, as two lists that load when the editor opens.
+ * `needContact` only changes the hint: the server enforces the rule.
+ */
+export function EditableLinks({
+  action,
+  recordId,
+  companyId,
+  contactId,
+  display,
+  hint,
+}: {
+  action: Action;
+  recordId: string;
+  companyId: string | null;
+  contactId: string | null;
+  display: React.ReactNode;
+  hint?: string;
+}) {
+  const [editing, setEditing] = React.useState(false);
+  const [companies, setCompanies] = React.useState<{ id: string; name: string }[] | null>(null);
+  const [contacts, setContacts] = React.useState<{ id: string; name: string }[] | null>(null);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
+  const onSubmit = useScriptSubmit(formAction);
+  useSavedResult(state, () => setEditing(false));
+
+  function open() {
+    setEditing(true);
+    if (companies && contacts) return;
+    Promise.all([listCompanyOptionsForEditor(), listContactOptionsForEditor()])
+      .then(([c, k]) => {
+        if ("error" in c) setLoadError(c.error);
+        else if ("error" in k) setLoadError(k.error);
+        else {
+          setCompanies(c.options);
+          setContacts(k.options);
+        }
+      })
+      .catch(() => setLoadError("The lists could not be loaded."));
+  }
+
+  if (!editing) {
+    return (
+      <span className="group inline-flex max-w-full flex-wrap items-start gap-1.5">
+        <span className="min-w-0 break-words">{display}</span>
+        <PencilButton label="Edit company and contact" onClick={open} />
+      </span>
+    );
+  }
+  const id = (n: string) => `links-${recordId}-${n}`;
+  const ready = companies != null && contacts != null;
+  return (
+    <form onSubmit={onSubmit} className="flex w-full flex-col gap-2">
+      <input type="hidden" name="id" value={recordId} />
+      {loadError ? (
+        <span className="text-xs text-destructive">{loadError}</span>
+      ) : !ready ? (
+        <span className="text-xs text-muted-foreground">Loading…</span>
+      ) : (
+        <>
+          <div className="space-y-1">
+            <Label htmlFor={id("company")} className="text-xs text-muted-foreground">
+              Company
+            </Label>
+            <Select id={id("company")} name="company_id" defaultValue={companyId ?? ""} className="h-8">
+              <option value="">— No company —</option>
+              {companies.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor={id("contact")} className="text-xs text-muted-foreground">
+              Contact
+            </Label>
+            <Select id={id("contact")} name="contact_id" defaultValue={contactId ?? ""} className="h-8">
+              <option value="">— No contact —</option>
+              {contacts.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+        </>
+      )}
+      {/* Save stays off until both lists have loaded: without the selects the form would send no links. */}
+      <SaveCancel pending={pending || !ready} onCancel={() => setEditing(false)} />
       {state.error ? <span className="text-xs text-destructive">{state.error}</span> : null}
     </form>
   );

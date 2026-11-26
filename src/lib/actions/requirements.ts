@@ -24,7 +24,7 @@ import {
   updateRequirement as updateRequirementRow,
   type RequirementWriteInput,
 } from "@/lib/db/queries/requirements";
-import { createNotifications } from "@/lib/db/queries/messages";
+import { notifyRequirementAgents } from "@/lib/requirement-notify";
 import { Constants, type Database } from "@/lib/database.types";
 import { requirementLinkError } from "@/lib/requirement-rules";
 import { canEditRating, parseRatingInput, RATING_NOT_ALLOWED } from "@/lib/listing-rating";
@@ -189,35 +189,6 @@ async function requireCaller(): Promise<
   const agencyId = await currentAgencyId(session.user.id);
   if (!agencyId) return { error: "No agency is linked to your account." };
   return { userId: session.user.id, agencyId };
-}
-
-/**
- * Tell agents they've been put on a brief (same pattern as deal reminders:
- * in-app notification row per recipient, never to yourself).
- *
- * The `notifications` table isn't part of this migration batch (see
- * AGENTS.md) — kept on the Supabase client until its own batch lands, exactly
- * like the still-unmigrated-domain reads on src/app/(app)/companies/[id]/page.tsx.
- */
-async function notifyRequirementAgents(
-  agencyId: string,
-  requirementId: string,
-  title: string,
-  recipients: string[],
-  actorId: string | null,
-  role: "lead agent" | "agent",
-) {
-  const users = [...new Set(recipients.filter((id) => id && id !== actorId))];
-  if (users.length === 0) return;
-  try {
-    await createNotifications(agencyId, users, {
-      title: `You're now ${role === "lead agent" ? "the lead agent" : "an agent"} on “${title}”`,
-      body: "Open the requirement to see its criteria and current matches.",
-      link: `/requirements/${requirementId}`,
-    });
-  } catch (err) {
-    console.error(`requirement ${requirementId}: agent notification insert failed:`, err);
-  }
 }
 
 export async function createRequirement(

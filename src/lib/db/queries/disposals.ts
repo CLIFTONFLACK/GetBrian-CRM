@@ -506,7 +506,7 @@ export async function getDisposalForUpdate(
 } | null> {
   const rows = await sql`
     select address_line, city, postcode, lat, lng, updated_at::text as updated_at,
-           source, rent_pa, rent_period, premium
+           source, rent_pa::float8 as rent_pa, rent_period, premium::float8 as premium
     from public.disposals
     where id = ${id} and agency_id = ${agencyId}
     limit 1

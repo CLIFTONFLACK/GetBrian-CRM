@@ -12,17 +12,15 @@ import { contactRoleBadge } from "@/lib/badges";
 import { auth } from "@/lib/auth";
 import { getContactRoles, roleLabel } from "@/lib/contact-roles";
 import { deleteContact } from "@/lib/actions/contacts";
-import { ActivityTimeline } from "@/components/activity-timeline";
+import { NotesTodosSection } from "@/components/notes-todos/notes-todos-section";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { LocationMap } from "@/components/location-map";
-import { LogActivityForm } from "@/components/log-activity-form";
 import { QuickRequirementModal } from "@/components/quick-requirement-modal";
 import { SendToTeam } from "@/components/send-to-team";
 import { isDbConfigured } from "@/lib/db/client";
 import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
 import { getCompanyName } from "@/lib/db/queries/companies";
 import { getContactAgentIds, getContactById } from "@/lib/db/queries/contacts";
-import { listActivitiesForEntity } from "@/lib/db/queries/activities";
 import { listRequirementsForContact } from "@/lib/db/queries/requirements";
 import { requirementStatusBadge } from "@/lib/badges";
 import { formatDateUpdated } from "@/lib/format-date";
@@ -61,11 +59,10 @@ export default async function ContactDetailPage({
   const contact = await getContactById(agencyId, id);
   if (!contact) notFound();
 
-  const [companyName, agentRows, members, activities, requirements] = await Promise.all([
+  const [companyName, agentRows, members, requirements] = await Promise.all([
     contact.company_id ? getCompanyName(agencyId, contact.company_id) : Promise.resolve(null),
     getContactAgentIds(agencyId, id),
     getAgencyMembers(agencyId),
-    listActivitiesForEntity(agencyId, "contact", id, 20),
     listRequirementsForContact(agencyId, id),
   ]);
 
@@ -245,13 +242,15 @@ export default async function ContactDetailPage({
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>Activity</CardTitle>
+          <CardTitle>Notes &amp; to-dos</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <LogActivityForm entityType="contact" entityId={contact.id} />
-          <ActivityTimeline
-            activities={activities}
-            actorNames={Object.fromEntries(nameOf)}
+        <CardContent>
+          <NotesTodosSection
+            entityType="contact"
+            entityId={contact.id}
+            agencyId={agencyId}
+            userId={userId}
+            idPrefix="contact-nt"
           />
         </CardContent>
       </Card>

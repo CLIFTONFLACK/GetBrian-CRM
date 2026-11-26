@@ -24,9 +24,8 @@ import {
 import { auth } from "@/lib/auth";
 import { deleteCompany } from "@/lib/actions/companies";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
-import { ActivityTimeline } from "@/components/activity-timeline";
+import { NotesTodosSection } from "@/components/notes-todos/notes-todos-section";
 import { LocationMap } from "@/components/location-map";
-import { LogActivityForm } from "@/components/log-activity-form";
 import { SendToTeam } from "@/components/send-to-team";
 import { DeepDiveView } from "@/components/deep-dive-view";
 import { DeepDiveChat } from "@/components/deep-dive-chat";
@@ -40,7 +39,6 @@ import { getCompanyAgentIds, getCompanyById } from "@/lib/db/queries/companies";
 import { listContactsByCompany } from "@/lib/db/queries/contacts";
 import { listRequirementsForCompany } from "@/lib/db/queries/requirements";
 import { listDisposalsForCompany } from "@/lib/db/queries/disposals";
-import { listActivitiesForEntity } from "@/lib/db/queries/activities";
 import { getLatestKycSummary } from "@/lib/db/queries/kyc";
 import { getLatestCompleteDeepDive } from "@/lib/db/queries/deep-dive";
 import { formatDateUpdated } from "@/lib/format-date";
@@ -85,13 +83,12 @@ export default async function CompanyDetailPage({
   if (!company) notFound();
 
   const contactRoles = await getContactRoles();
-  const [contacts, agentRows, members, requirements, listings, activities] = await Promise.all([
+  const [contacts, agentRows, members, requirements, listings] = await Promise.all([
     listContactsByCompany(agencyId, id),
     getCompanyAgentIds(agencyId, id),
     getAgencyMembers(agencyId),
     listRequirementsForCompany(agencyId, id),
     listDisposalsForCompany(agencyId, id),
-    listActivitiesForEntity(agencyId, "company", id, 20),
   ]);
 
   const [kycReport, deepDive, deepDiveMessages] = await Promise.all([
@@ -409,13 +406,15 @@ export default async function CompanyDetailPage({
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>Activity</CardTitle>
+          <CardTitle>Notes &amp; to-dos</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <LogActivityForm entityType="company" entityId={company.id} />
-          <ActivityTimeline
-            activities={activities}
-            actorNames={Object.fromEntries(nameOf)}
+        <CardContent>
+          <NotesTodosSection
+            entityType="company"
+            entityId={company.id}
+            agencyId={agencyId}
+            userId={userId}
+            idPrefix="company-nt"
           />
         </CardContent>
       </Card>

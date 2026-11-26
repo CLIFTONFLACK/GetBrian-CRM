@@ -1,7 +1,7 @@
 import { sql } from "@/lib/db/client";
 import type { Database } from "@/lib/database.types";
 
-// DAO for public.deals (+ deal_agents, deal_stage_events, deal_reminders, and
+// DAO for public.deals (+ deal_agents, deal_stage_events, and
 // the write side of external_sends — the "Send Deal → External" audit log).
 // Every function takes the caller's agencyId as a mandatory first parameter
 // and filters on it explicitly — see the same note in companies.ts.
@@ -380,98 +380,6 @@ export async function recordDealStageEvent(
   `;
 }
 
-// ── deal_reminders ───────────────────────────────────────────────────────────
-
-export type DealReminder = {
-  id: string;
-  title: string;
-  due_at: string;
-  done: boolean;
-  created_by: string | null;
-};
-
-export async function listDealReminders(agencyId: string, dealId: string): Promise<DealReminder[]> {
-  return (await sql`
-    select id, title, due_at::text as due_at, done, created_by
-    from public.deal_reminders
-    where agency_id = ${agencyId} and deal_id = ${dealId}
-    order by due_at
-  `) as DealReminder[];
-}
-
-/** Every not-done reminder in the agency, for the "My reminders" panel on
- *  /messages (filtered client-side there to "mine" — set by me or on a deal
- *  I lead). */
-export async function listOpenDealReminders(
-  agencyId: string,
-  limit = 100,
-): Promise<
-  { id: string; title: string; due_at: string; deal_id: string; created_by: string | null }[]
-> {
-  return (await sql`
-    select id, title, due_at::text as due_at, deal_id, created_by
-    from public.deal_reminders
-    where agency_id = ${agencyId} and done = false
-    order by due_at asc
-    limit ${limit}
-  `) as { id: string; title: string; due_at: string; deal_id: string; created_by: string | null }[];
-}
-
-/** deals a user leads — used to decide which reminders are "theirs" on
- *  /messages (set by me, or on a deal I lead). */
-export async function listDealIdsLedBy(agencyId: string, userId: string): Promise<string[]> {
-  const rows = await sql`
-    select id from public.deals where agency_id = ${agencyId} and lead_agent_id = ${userId}
-  `;
-  return (rows as { id: string }[]).map((r) => r.id);
-}
-
-export async function createDealReminder(
-  agencyId: string,
-  createdBy: string,
-  dealId: string,
-  input: { title: string; dueAt: string },
-): Promise<{ id: string }> {
-  const rows = await sql`
-    insert into public.deal_reminders (agency_id, deal_id, title, due_at, created_by)
-    values (${agencyId}, ${dealId}, ${input.title}, ${input.dueAt}, ${createdBy})
-    returning id
-  `;
-  return rows[0] as { id: string };
-}
-
-/** The deal's title + owner (lead agent, falling back to creator) — feeds the
- *  "notify the deal owner a reminder was set" step. */
-export async function getDealOwnerInfo(
-  agencyId: string,
-  dealId: string,
-): Promise<{ title: string; created_by: string | null; lead_agent_id: string | null } | null> {
-  const rows = await sql`
-    select title, created_by, lead_agent_id from public.deals
-    where id = ${dealId} and agency_id = ${agencyId}
-    limit 1
-  `;
-  return (
-    (rows[0] as { title: string; created_by: string | null; lead_agent_id: string | null } | undefined) ??
-    null
-  );
-}
-
-export async function setDealReminderDone(
-  agencyId: string,
-  id: string,
-  done: boolean,
-): Promise<void> {
-  await sql`
-    update public.deal_reminders set done = ${done}
-    where id = ${id} and agency_id = ${agencyId}
-  `;
-}
-
-export async function deleteDealReminder(agencyId: string, id: string): Promise<void> {
-  await sql`delete from public.deal_reminders where id = ${id} and agency_id = ${agencyId}`;
-}
-
 // ── Requirement / listing side-effects of a stage change ───────────────────
 
 /** Flips a requirement's status when its deal closes/reopens — a plain,
@@ -842,75 +750,4 @@ export async function updateExternalSendTrackingByProviderId(
           returning id
         `;
   return rows.length > 0;
-}
-
-// ── Cron job (system-wide, no caller agency) — deal reminders ─────────────
-
-export type DueDealReminder = {
-  id: string;
-  agency_id: string;
-  deal_id: string;
-  title: string;
-  due_at: string;
-  created_by: string | null;
-};
-
-/**
- * Deal reminders past due, not yet notified, across every agency — the cron
- * job's due-reminders feed (src/app/api/cron/due/route.ts). Deliberately
- * unscoped by agencyId (a system-wide scheduled job, not a single caller);
- * each row's own agency_id is used by the caller to scope every downstream
- * read/write back to that reminder's agency — see the route's header note.
- */
-export async function listDueDealReminders(
-  limit = 100,
-  scope: { agencyId?: string; notBefore?: string } = {},
-): Promise<DueDealReminder[]> {
-  const nowIso = new Date().toISOString();
-  // Optional filters: one agency, and only reminders due at or after notBefore
-  // (the cron passes the agency's enabled_since). Null parameters skip a filter.
-  const agencyId = scope.agencyId ?? null;
-  const notBefore = scope.notBefore ?? null;
-  return (await sql`
-    select id, agency_id, deal_id, title, due_at::text as due_at, created_by
-    from public.deal_reminders
-    where done = false and notified_at is null and due_at <= ${nowIso}
-      and (${agencyId}::uuid is null or agency_id = ${agencyId}::uuid)
-      and (${notBefore}::timestamptz is null or due_at >= ${notBefore}::timestamptz)
-    order by due_at
-    limit ${limit}
-  `) as DueDealReminder[];
-}
-
-/**
- * Deal title + owner for a set of deal ids spanning potentially several
- * agencies (the cron job's reminders can belong to any agency) — each
- * returned row carries its own agency_id so the caller can verify it
- * matches the reminder's agency_id before using it, rather than trusting
- * the deal_id alone.
- */
-export async function getDealsByIdsAcrossAgencies(
-  dealIds: string[],
-): Promise<{ id: string; agency_id: string; title: string; lead_agent_id: string | null; created_by: string | null }[]> {
-  if (dealIds.length === 0) return [];
-  return (await sql`
-    select id, agency_id, title, lead_agent_id, created_by
-    from public.deals
-    where id = ANY(${dealIds}::uuid[])
-  `) as { id: string; agency_id: string; title: string; lead_agent_id: string | null; created_by: string | null }[];
-}
-
-/** Stamps a deal reminder's notified_at so the cron job fires exactly once
- *  per due reminder. Scoped by agencyId — the id alone comes from a
- *  cross-agency cron read (listDueDealReminders), so this re-asserts the
- *  row's own agency on write. */
-export async function markDealReminderNotified(
-  agencyId: string,
-  id: string,
-  notifiedAt: string,
-): Promise<void> {
-  await sql`
-    update public.deal_reminders set notified_at = ${notifiedAt}
-    where id = ${id} and agency_id = ${agencyId}
-  `;
 }

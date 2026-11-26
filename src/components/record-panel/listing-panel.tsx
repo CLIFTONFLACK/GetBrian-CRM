@@ -12,7 +12,7 @@ import {
 } from "@/components/record-panel/fields";
 import { PanelFrame, RecordNotFound } from "@/components/record-panel/panel-frame";
 import { MapTab } from "@/components/record-panel/tabs/map-tab";
-import { TodoTab } from "@/components/record-panel/tabs/todo-tab";
+import { NotesActivityTab } from "@/components/record-panel/tabs/notes-tab";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -103,8 +103,8 @@ export async function ListingPanel({
     case "deals":
       content = <DealsTab agencyId={agencyId} listingId={d.id} base={base} />;
       break;
-    case "todo":
-      content = <TodoTab {...tabProps} userId={userId} />;
+    case "notes":
+      content = <NotesActivityTab {...tabProps} userId={userId} />;
       break;
     default:
       content = <OverviewTab agencyId={agencyId} d={d} base={base} />;

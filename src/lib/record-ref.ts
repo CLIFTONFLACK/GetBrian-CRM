@@ -42,31 +42,28 @@ export const RECORD_TABS: Record<RecordType, readonly TabDef[]> = {
   company: [
     { slug: "overview", label: "Overview" },
     { slug: "contacts", label: "Contacts" },
-    { slug: "notes", label: "Notes" },
+    { slug: "notes", label: "Notes & to-dos" },
     { slug: "requirements", label: "Requirements" },
     { slug: "listings", label: "Listings" },
     { slug: "map", label: "Map" },
-    { slug: "todo", label: "To-do" },
     { slug: "matchmaker", label: "Matchmaker" },
     { slug: "uploads", label: "Uploads" },
   ],
   contact: [
     { slug: "overview", label: "Overview" },
-    { slug: "notes", label: "Notes" },
+    { slug: "notes", label: "Notes & to-dos" },
     { slug: "requirements", label: "Requirements" },
     { slug: "map", label: "Map" },
-    { slug: "todo", label: "To-do" },
     { slug: "matchmaker", label: "Matchmaker" },
     { slug: "uploads", label: "Uploads" },
   ],
   requirement: [
     { slug: "overview", label: "Overview" },
     { slug: "contacts", label: "Contacts" },
-    { slug: "notes", label: "Notes" },
+    { slug: "notes", label: "Notes & to-dos" },
     { slug: "matchmaker", label: "Matchmaker" },
     { slug: "uploads", label: "Uploads" },
     { slug: "send-history", label: "Send history" },
-    { slug: "todo", label: "To-do" },
   ],
   listing: [
     { slug: "overview", label: "Overview" },
@@ -74,20 +71,25 @@ export const RECORD_TABS: Record<RecordType, readonly TabDef[]> = {
     { slug: "map", label: "Map" },
     { slug: "matchmaker", label: "Matchmaker" },
     { slug: "deals", label: "Deals" },
-    { slug: "todo", label: "To-do" },
+    { slug: "notes", label: "Notes & to-dos" },
   ],
   deal: [
     { slug: "overview", label: "Overview" },
-    { slug: "reminders", label: "Reminders" },
-    { slug: "updates", label: "Updates" },
-    { slug: "todo", label: "To-do" },
+    { slug: "notes", label: "Notes & to-dos" },
   ],
 };
+
+/**
+ * Tabs that were merged into "Notes & to-dos". A saved link or a notification
+ * that still says ?tab=todo, reminders or updates opens the merged tab.
+ */
+const MERGED_TABS: Record<string, string> = { todo: "notes", reminders: "notes", updates: "notes" };
 
 /** Resolve a raw `tab` param against the tabs of `type`. Unknown gives the default. */
 export function parseTab(type: RecordType, raw: unknown): string {
   if (typeof raw !== "string") return DEFAULT_TAB;
-  return RECORD_TABS[type].some((t) => t.slug === raw) ? raw : DEFAULT_TAB;
+  const slug = MERGED_TABS[raw] ?? raw;
+  return RECORD_TABS[type].some((t) => t.slug === slug) ? slug : DEFAULT_TAB;
 }
 
 function build(

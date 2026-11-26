@@ -9,23 +9,23 @@ import { PageHeader } from "@/components/page-header";
 import { RecordPanelHost } from "@/components/record-panel/record-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
-import { deleteTask, toggleTaskStatus } from "@/lib/actions/tasks";
+import { deleteActivity, toggleTodo } from "@/lib/actions/activities";
 import { auth } from "@/lib/auth";
 import { currentAgencyId, getAgencyMembers } from "@/lib/db/queries/agencies";
-import { listMyTasks } from "@/lib/db/queries/tasks";
+import { listMyTodos } from "@/lib/db/queries/activities";
 import { openRecordHref, RECORD_TYPES, type RecordType } from "@/lib/record-ref";
 import { LocalDateTime } from "@/components/local-date-time";
 import { isPast } from "@/lib/time";
 import { isUuid } from "@/lib/uuid";
 import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Tasks" };
+export const metadata: Metadata = { title: "To-dos" };
 
 /** The record panel a task opens, or null when the task has no (known) record. */
 function taskRecordHref(t: { entity_type: string | null; entity_id: string | null }) {
   if (!t.entity_type || !t.entity_id || !isUuid(t.entity_id)) return null;
   if (!(RECORD_TYPES as readonly string[]).includes(t.entity_type)) return null;
-  return openRecordHref({}, { type: t.entity_type as RecordType, id: t.entity_id.toLowerCase() });
+  return openRecordHref({}, { type: t.entity_type as RecordType, id: t.entity_id.toLowerCase() }, "notes");
 }
 
 type TaskRow = {
@@ -61,7 +61,7 @@ function TaskList({
             className="flex items-start justify-between gap-3 rounded-md border p-2.5"
           >
             <div className="flex min-w-0 items-start gap-2.5">
-              <form action={toggleTaskStatus}>
+              <form action={toggleTodo}>
                 <input type="hidden" name="id" value={t.id} />
                 <input
                   type="hidden"
@@ -131,7 +131,7 @@ function TaskList({
                   Open
                 </Link>
               ) : null}
-              <form action={deleteTask}>
+              <form action={deleteActivity}>
                 <input type="hidden" name="id" value={t.id} />
                 <ConfirmSubmitButton
                   confirmMessage={`Delete the task "${t.title}"?`}
@@ -166,15 +166,28 @@ export default async function TasksPage({
 
   // "My tasks" — assigned to me, or created by me and not yet assigned
   // (filtered server-side in listMyTasks).
-  const tasks: TaskRow[] = agencyId ? await listMyTasks(agencyId, me) : [];
+  const tasks: TaskRow[] = agencyId
+    ? (await listMyTodos(agencyId, me)).map((a) => ({
+        id: a.id,
+        // A to-do's subject is its title. One logged with only a note uses the start of the note.
+        title: a.subject ?? (a.body ? a.body.slice(0, 80) : "To-do"),
+        details: a.subject ? a.body : null,
+        due_at: a.due_at,
+        assignee_id: a.assignee_id,
+        entity_type: a.entity_type,
+        entity_id: a.entity_id,
+        status: a.status ?? "open",
+        created_by: a.created_by,
+      }))
+    : [];
   const openTasks = tasks.filter((t) => t.status === "open");
   const doneTasks = tasks.filter((t) => t.status === "done");
 
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
-        title="Tasks"
-        description="Your to-dos — assigned to you, or created by you and unassigned."
+        title="To-dos"
+        description="Your to-dos: assigned to you, or created by you and unassigned. Add one to a record from its Notes & to-dos tab."
       />
 
       <div className="space-y-4">

@@ -1,25 +1,19 @@
-import { ActivityTimeline } from "@/components/activity-timeline";
 import { DealForm } from "@/components/deal-form";
-import { DealReminders } from "@/components/deal-reminders";
-import { LogActivityForm } from "@/components/log-activity-form";
 import { Field, money, PanelLink, PanelSection } from "@/components/record-panel/fields";
 import { PanelFrame, RecordNotFound } from "@/components/record-panel/panel-frame";
-import { TodoTab } from "@/components/record-panel/tabs/todo-tab";
+import { NotesActivityTab } from "@/components/record-panel/tabs/notes-tab";
 import { Badge } from "@/components/ui/badge";
 import { dealStageBadge } from "@/lib/badges";
-import { listActivitiesForEntity } from "@/lib/db/queries/activities";
 import { getAgencyMembers } from "@/lib/db/queries/agencies";
 import { getCompanyName } from "@/lib/db/queries/companies";
 import {
   getDealAgentIds,
   getDealById,
   getDealListingSummary,
-  listDealReminders,
 } from "@/lib/db/queries/deals";
 import { getRequirementTitle } from "@/lib/db/queries/requirements";
 import { formatDateUpdated } from "@/lib/format-date";
 import { openRecordHref, type RecordRef, type SearchParamsLike } from "@/lib/record-ref";
-import { isPast } from "@/lib/time";
 
 type Deal = NonNullable<Awaited<ReturnType<typeof getDealById>>>;
 
@@ -44,14 +38,8 @@ export async function DealPanel({
 
   let content: React.ReactNode;
   switch (tab) {
-    case "reminders":
-      content = <RemindersTab agencyId={agencyId} dealId={deal.id} />;
-      break;
-    case "updates":
-      content = <UpdatesTab agencyId={agencyId} dealId={deal.id} />;
-      break;
-    case "todo":
-      content = <TodoTab {...tabProps} userId={userId} />;
+    case "notes":
+      content = <NotesActivityTab {...tabProps} userId={userId} />;
       break;
     default:
       content = <OverviewTab agencyId={agencyId} deal={deal} base={base} />;
@@ -162,29 +150,5 @@ async function OverviewTab({
         />
       </PanelSection>
     </>
-  );
-}
-
-async function RemindersTab({ agencyId, dealId }: { agencyId: string; dealId: string }) {
-  const rows = await listDealReminders(agencyId, dealId);
-  const reminders = rows.map((r) => ({ ...r, overdue: isPast(r.due_at) }));
-  return (
-    <PanelSection title="Reminders & deadlines">
-      <DealReminders dealId={dealId} reminders={reminders} />
-    </PanelSection>
-  );
-}
-
-async function UpdatesTab({ agencyId, dealId }: { agencyId: string; dealId: string }) {
-  const [activities, members] = await Promise.all([
-    listActivitiesForEntity(agencyId, "deal", dealId, 30),
-    getAgencyMembers(agencyId),
-  ]);
-  const actorNames = Object.fromEntries(members.map((m) => [m.id, m.name]));
-  return (
-    <PanelSection title="Updates & notes">
-      <LogActivityForm entityType="deal" entityId={dealId} />
-      <ActivityTimeline activities={activities} actorNames={actorNames} />
-    </PanelSection>
   );
 }

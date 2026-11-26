@@ -1,60 +1,62 @@
-import { ActivityTimeline } from "@/components/activity-timeline";
 import { EmptyNote, PanelSection } from "@/components/record-panel/fields";
 import { EditableField } from "@/components/record-panel/inline-edit";
-import { LogActivityForm } from "@/components/log-activity-form";
+import { NotesTodosSection } from "@/components/notes-todos/notes-todos-section";
 import type { FormState } from "@/lib/actions/types";
-import { listActivitiesForEntity } from "@/lib/db/queries/activities";
-import { getAgencyMembers } from "@/lib/db/queries/agencies";
 
 import type { RecordTabProps } from "./placeholder";
 
 /**
- * Summary note, the log-activity form and the timeline. Shared by the company,
- * contact and requirement panels. Pass `summaryEdit` to make the summary note
- * editable in place; without it the note is read-only.
+ * The "Notes & to-dos" tab, shared by every record panel. A note belongs to the
+ * record. Give it an assignee or a due date and it is a to-do. The summary note
+ * (the old free-text notes column) sits above the list. Pass `summaryEdit` to
+ * make it editable in place, or leave `notes` out of the props to hide it (a
+ * listing or a deal has no such column).
  */
 export async function NotesActivityTab({
   entityType,
   entityId,
   agencyId,
+  userId,
   notes,
   summaryEdit,
 }: RecordTabProps & {
-  notes: string | null;
+  userId: string;
+  notes?: string | null;
   summaryEdit?: { action: (prev: FormState, fd: FormData) => Promise<FormState> };
 }) {
-  const [activities, members] = await Promise.all([
-    listActivitiesForEntity(agencyId, entityType, entityId, 20),
-    getAgencyMembers(agencyId),
-  ]);
-  const actorNames = Object.fromEntries(members.map((m) => [m.id, m.name]));
-
+  const showSummary = notes !== undefined;
   return (
     <>
-      <PanelSection title="Summary note">
-        {summaryEdit ? (
-          <EditableField
-            action={summaryEdit.action}
-            recordId={entityId}
-            field="notes"
-            label="Summary note"
-            kind="textarea"
-            value={notes ?? ""}
-            display={
-              notes ? undefined : (
-                <span className="text-muted-foreground">No summary note yet. Use the pencil to add one.</span>
-              )
-            }
-          />
-        ) : notes ? (
-          <p className="whitespace-pre-wrap text-sm text-foreground">{notes}</p>
-        ) : (
-          <EmptyNote>No notes yet.</EmptyNote>
-        )}
-      </PanelSection>
-      <PanelSection title="Activity" className="border-t">
-        <LogActivityForm entityType={entityType} entityId={entityId} />
-        <ActivityTimeline activities={activities} actorNames={actorNames} />
+      {showSummary ? (
+        <PanelSection title="Summary note">
+          {summaryEdit ? (
+            <EditableField
+              action={summaryEdit.action}
+              recordId={entityId}
+              field="notes"
+              label="Summary note"
+              kind="textarea"
+              value={notes ?? ""}
+              display={
+                notes ? undefined : (
+                  <span className="text-muted-foreground">No summary note yet. Use the pencil to add one.</span>
+                )
+              }
+            />
+          ) : notes ? (
+            <p className="whitespace-pre-wrap text-sm text-foreground">{notes}</p>
+          ) : (
+            <EmptyNote>No notes yet.</EmptyNote>
+          )}
+        </PanelSection>
+      ) : null}
+      <PanelSection title="Notes & to-dos" className={showSummary ? "border-t" : undefined}>
+        <NotesTodosSection
+          entityType={entityType}
+          entityId={entityId}
+          agencyId={agencyId}
+          userId={userId}
+        />
       </PanelSection>
     </>
   );

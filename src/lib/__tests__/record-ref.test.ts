@@ -117,11 +117,11 @@ test("fullRecordHref points at the record page", () => {
 test("listing and deal have their own tabs and full pages", () => {
   assert.deepEqual(
     RECORD_TABS.listing.map((t) => t.slug),
-    ["overview", "media", "map", "matchmaker", "deals", "todo"],
+    ["overview", "media", "map", "matchmaker", "deals", "notes"],
   );
   assert.deepEqual(
     RECORD_TABS.deal.map((t) => t.slug),
-    ["overview", "reminders", "updates", "todo"],
+    ["overview", "notes"],
   );
   assert.equal(fullRecordHref({ type: "listing", id: ID }), `/listings/${ID}`);
   assert.equal(fullRecordHref({ type: "deal", id: ID }), `/deals/${ID}`);
@@ -131,10 +131,23 @@ test("listing and deal have their own tabs and full pages", () => {
   assert.equal(parseTab("listing", "send-history"), "overview");
 });
 
-test("every record type has a to-do tab", () => {
+test("every record type has the merged notes and to-dos tab, and none keeps the old ones", () => {
   for (const [type, tabs] of Object.entries(RECORD_TABS)) {
-    assert.ok(tabs.some((t) => t.slug === "todo"), type);
+    assert.ok(tabs.some((t) => t.slug === "notes"), type);
+    for (const old of ["todo", "reminders", "updates"]) {
+      assert.ok(!tabs.some((t) => t.slug === old), `${type} still has ${old}`);
+    }
   }
+});
+
+test("old todo, reminders and updates links open the notes tab", () => {
+  for (const old of ["todo", "reminders", "updates"]) {
+    assert.equal(parseTab("company", old), "notes", old);
+    assert.equal(parseTab("deal", old), "notes", old);
+    assert.equal(parseTab("listing", old), "notes", old);
+  }
+  // A tab the type does not have still falls back to the default.
+  assert.equal(parseTab("deal", "matchmaker"), "overview");
 });
 
 test("PANEL_HOST_PATHS covers every list page and tasks", () => {

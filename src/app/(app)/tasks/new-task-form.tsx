@@ -11,12 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { createTask } from "@/lib/actions/tasks";
+import { logActivity } from "@/lib/actions/activities";
 import type { FormState } from "@/lib/actions/types";
 import type { AgentOption } from "@/lib/db/queries/agencies";
 import { withIsoDueAt } from "@/lib/local-datetime";
 
-/** Inline "Add a task" form — title, details, due date and an assignee picker. */
+/** Inline "Add a to-do" form (no record): title, details, due date and an assignee picker. Posts the same action as the Notes & to-dos tab. */
 export function NewTaskForm({
   agents,
   meId,
@@ -26,7 +26,7 @@ export function NewTaskForm({
 }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState<FormState, FormData>(
-    createTask,
+    logActivity,
     {},
   );
   const formRef = React.useRef<HTMLFormElement>(null);
@@ -48,7 +48,7 @@ export function NewTaskForm({
         <Label htmlFor="task-title">Title *</Label>
         <Input
           id="task-title"
-          name="title"
+          name="subject"
           required
           placeholder="e.g. Chase heads of terms"
         />
@@ -58,7 +58,7 @@ export function NewTaskForm({
         <Label htmlFor="task-details">Details</Label>
         <Textarea
           id="task-details"
-          name="details"
+          name="body"
           placeholder="Optional context for the task…"
         />
       </div>
@@ -88,7 +88,7 @@ export function NewTaskForm({
       <div className="flex justify-end">
         <Button type="submit" disabled={pending}>
           <Plus />
-          {pending ? "Adding…" : "Add task"}
+          {pending ? "Adding…" : "Add to-do"}
         </Button>
       </div>
     </form>

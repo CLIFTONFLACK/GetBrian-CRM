@@ -15,7 +15,6 @@ import { PanelFrame, RecordNotFound } from "@/components/record-panel/panel-fram
 import { MapTab } from "@/components/record-panel/tabs/map-tab";
 import { MatchmakerTab } from "@/components/record-panel/tabs/matchmaker-tab";
 import { NotesActivityTab } from "@/components/record-panel/tabs/notes-tab";
-import { TodoTab } from "@/components/record-panel/tabs/todo-tab";
 import { UploadsTab } from "@/components/record-panel/tabs/uploads-tab";
 import { QuickRequirementModal } from "@/components/quick-requirement-modal";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +66,7 @@ export async function ContactPanel({
       content = (
         <NotesActivityTab
           {...tabProps}
+          userId={userId}
           notes={contact.notes}
           summaryEdit={{ action: patchContactField }}
         />
@@ -91,9 +91,6 @@ export async function ContactPanel({
           addressAction={patchContactAddress}
         />
       );
-      break;
-    case "todo":
-      content = <TodoTab {...tabProps} userId={userId} />;
       break;
     case "matchmaker":
       content = <MatchmakerTab {...tabProps} base={base} />;

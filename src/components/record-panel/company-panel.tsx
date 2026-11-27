@@ -69,9 +69,6 @@ export async function CompanyPanel({
 
   let content: React.ReactNode;
   switch (tab) {
-    case "contacts":
-      content = <ContactsTab agencyId={agencyId} companyId={company.id} base={base} />;
-      break;
     case "notes":
       content = (
         <NotesActivityTab
@@ -113,12 +110,15 @@ export async function CompanyPanel({
       break;
     default:
       content = (
-        <OverviewTab
-          agencyId={agencyId}
-          company={company}
-          typeText={t.label}
-          types={companyTypes}
-        />
+        <>
+          <OverviewTab
+            agencyId={agencyId}
+            company={company}
+            typeText={t.label}
+            types={companyTypes}
+          />
+          <ContactsSection agencyId={agencyId} companyId={company.id} base={base} />
+        </>
       );
   }
 
@@ -272,7 +272,7 @@ async function OverviewTab({
   );
 }
 
-async function ContactsTab({
+async function ContactsSection({
   agencyId,
   companyId,
   base,
@@ -288,6 +288,7 @@ async function ContactsTab({
   return (
     <PanelSection
       title="Contacts"
+      className="border-t"
       action={
         <Link
           href={`/contacts/new?company=${companyId}`}

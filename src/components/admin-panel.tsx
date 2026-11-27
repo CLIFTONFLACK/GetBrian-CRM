@@ -71,9 +71,35 @@ export type CompanyTypeItem = ContactRoleItem;
 
 const displayName = (m: Member) => m.fullName ?? m.email ?? "Unknown agent";
 
-export function AdminPanel({
+/** Admin, Team section: the roster, add agent, roles and passwords. */
+export function TeamSection({
   members,
   currentUserId,
+}: {
+  members: Member[];
+  currentUserId: string;
+}) {
+  return <TeamPanel members={members} currentUserId={currentUserId} />;
+}
+
+/** Admin, Lists section: the contact roles and company types the team picks from. */
+export function ListsEditors({
+  contactRoles,
+  companyTypes,
+}: {
+  contactRoles: ContactRoleItem[];
+  companyTypes: CompanyTypeItem[];
+}) {
+  return (
+    <div className="space-y-4">
+      <EditContactRolesCard roles={contactRoles} />
+      <EditCompanyTypesCard types={companyTypes} />
+    </div>
+  );
+}
+
+/** Admin, Integrations section: AI key, Didit identity checks, connectors. */
+export function IntegrationsSection({
   hasOpenRouterKey,
   openRouterModel,
   deepDivePrompt,
@@ -81,11 +107,7 @@ export function AdminPanel({
   diditWorkflowId,
   hasDiditWebhookSecret = false,
   agencyId = null,
-  contactRoles,
-  companyTypes,
 }: {
-  members: Member[];
-  currentUserId: string;
   hasOpenRouterKey: boolean;
   openRouterModel: string;
   /** Agency override for the Deep Dive brief; null = built-in default. */
@@ -97,17 +119,9 @@ export function AdminPanel({
   hasDiditWebhookSecret?: boolean;
   /** Builds the webhook URL that the admin copies into Didit. */
   agencyId?: string | null;
-  contactRoles: ContactRoleItem[];
-  companyTypes: CompanyTypeItem[];
 }) {
   return (
     <div className="space-y-4">
-      <TeamPanel members={members} currentUserId={currentUserId} />
-
-      <EditContactRolesCard roles={contactRoles} />
-
-      <EditCompanyTypesCard types={companyTypes} />
-
       <AgencySettingsCard
         hasKey={hasOpenRouterKey}
         model={openRouterModel}
@@ -139,7 +153,7 @@ function TeamPanel({
   members: Member[];
   currentUserId: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
 
   return (
@@ -561,6 +575,7 @@ function MemberRow({ member, isSelf }: { member: Member; isSelf: boolean }) {
 function EditContactRolesCard({ roles }: { roles: ContactRoleItem[] }) {
   return (
     <CollapsibleCard
+      defaultOpen
       title="Edit contact roles"
       description="Rename the roles you can assign to contacts, or add new ones. Shared across the whole team."
     >
@@ -579,6 +594,7 @@ function EditContactRolesCard({ roles }: { roles: ContactRoleItem[] }) {
 function EditCompanyTypesCard({ types }: { types: CompanyTypeItem[] }) {
   return (
     <CollapsibleCard
+      defaultOpen
       title="Edit company types"
       description="Rename the types you can assign to companies (operator, landlord, …), or add new ones. Shared across the whole team."
     >
@@ -689,6 +705,7 @@ const EXTERNAL_CONNECTORS: { label: string; href: string }[] = [
 function ConnectorsCard() {
   return (
     <CollapsibleCard
+      defaultOpen
       title="Connectors"
       description="Connect your team's email, calendar and data sources."
     >
@@ -829,6 +846,7 @@ function AgencySettingsCard({
 
   return (
     <CollapsibleCard
+      defaultOpen
       title="AI — Company Deep Dive"
       description="Add an OpenRouter API key to enable AI company research reports. Get a key at openrouter.ai/keys."
     >
@@ -995,6 +1013,7 @@ function DiditSettingsCard({
 
   return (
     <CollapsibleCard
+      defaultOpen
       title="KYC — Didit identity verification"
       description="Paid ID verification for a named person: document check, liveness and face match. Watchlist (AML) screening runs only if the workflow includes it. Get a key at didit.me."
     >

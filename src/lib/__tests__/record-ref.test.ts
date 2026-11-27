@@ -150,6 +150,13 @@ test("old todo, reminders and updates links open the notes tab", () => {
   assert.equal(parseTab("deal", "matchmaker"), "overview");
 });
 
+test("a company has no contacts tab; an old contacts link opens the overview", () => {
+  assert.ok(!RECORD_TABS.company.some((t) => t.slug === "contacts"));
+  assert.equal(parseTab("company", "contacts"), "overview");
+  // Requirements still have their own contacts tab.
+  assert.equal(parseTab("requirement", "contacts"), "contacts");
+});
+
 test("PANEL_HOST_PATHS covers every list page and tasks", () => {
   for (const p of ["/companies", "/contacts", "/requirements", "/listings", "/deals", "/matches", "/tasks", "/dashboard"]) {
     assert.ok((PANEL_HOST_PATHS as readonly string[]).includes(p), p);

@@ -82,6 +82,7 @@ export function TypeAllocationCard({
 
   return (
     <CollapsibleCard
+      defaultOpen
       title="Auto-allocate types"
       description="Set company types and contact roles from names, web addresses and e-mail domains."
     >

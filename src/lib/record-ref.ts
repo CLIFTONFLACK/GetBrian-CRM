@@ -41,7 +41,6 @@ export const DEFAULT_TAB = "overview";
 export const RECORD_TABS: Record<RecordType, readonly TabDef[]> = {
   company: [
     { slug: "overview", label: "Overview" },
-    { slug: "contacts", label: "Contacts" },
     { slug: "notes", label: "Notes & to-dos" },
     { slug: "requirements", label: "Requirements" },
     { slug: "listings", label: "Listings" },
@@ -88,7 +87,8 @@ const MERGED_TABS: Record<string, string> = { todo: "notes", reminders: "notes",
 /** Resolve a raw `tab` param against the tabs of `type`. Unknown gives the default. */
 export function parseTab(type: RecordType, raw: unknown): string {
   if (typeof raw !== "string") return DEFAULT_TAB;
-  const slug = MERGED_TABS[raw] ?? raw;
+  // A company's contacts now sit in its Overview; an old ?tab=contacts link lands there.
+  const slug = type === "company" && raw === "contacts" ? DEFAULT_TAB : (MERGED_TABS[raw] ?? raw);
   return RECORD_TABS[type].some((t) => t.slug === slug) ? slug : DEFAULT_TAB;
 }
 

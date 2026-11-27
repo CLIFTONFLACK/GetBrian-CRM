@@ -156,13 +156,15 @@ export async function listDealPairs(
 export async function getDealsForListing(
   agencyId: string,
   listingId: string,
-): Promise<{ id: string; title: string; stage: DealStage; value: number | null }[]> {
+): Promise<
+  { id: string; title: string; stage: DealStage; value: number | null; requirement_id: string | null }[]
+> {
   return (await sql`
-    select id, title, stage, value
+    select id, title, stage, value, requirement_id
     from public.deals
     where agency_id = ${agencyId} and listing_id = ${listingId}
     order by updated_at desc
-  `) as { id: string; title: string; stage: DealStage; value: number | null }[];
+  `) as { id: string; title: string; stage: DealStage; value: number | null; requirement_id: string | null }[];
 }
 
 /** Every deal_agents row in the agency — the board's "agent filter" needs the

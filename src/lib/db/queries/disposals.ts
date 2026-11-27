@@ -630,9 +630,74 @@ export async function deleteDisposal(agencyId: string, id: string): Promise<stri
     select url from docs where url is not null
     union
     select url from imgs where url is not null
+    union
+    select preview_url as url from public.disposal_brochure_previews
+    where disposal_id = ${id} and agency_id = ${agencyId} and preview_url is not null
   `) as { url: string }[];
   await sql`delete from public.disposals where id = ${id} and agency_id = ${agencyId}`;
   return urls.map((r) => r.url);
+}
+
+/** The stored brochure preview of a listing, with the link it was drawn from. */
+export type BrochurePreview = {
+  source_url: string;
+  /** Null records a failed try, so the same link is not retried at once. */
+  preview_url: string | null;
+  checked_at: string;
+};
+
+/**
+ * The preview row for a listing, or null. It is only valid while source_url
+ * equals the listing's current brochure_url: the caller compares, so a changed
+ * link needs no clean-up and no write to the listing row (which would also move
+ * its updated_at and make an open edit form look stale).
+ */
+export async function getBrochurePreview(agencyId: string, id: string): Promise<BrochurePreview | null> {
+  const rows = await sql`
+    select source_url, preview_url, checked_at::text as checked_at
+    from public.disposal_brochure_previews
+    where disposal_id = ${id} and agency_id = ${agencyId}
+    limit 1
+  `;
+  return (rows[0] as BrochurePreview | undefined) ?? null;
+}
+
+/** The listing's brochure link, agency-scoped; null when the listing is missing. */
+export async function getBrochureUrl(agencyId: string, id: string): Promise<{ brochure_url: string | null } | null> {
+  const rows = await sql`
+    select brochure_url from public.disposals where id = ${id} and agency_id = ${agencyId} limit 1
+  `;
+  return (rows[0] as { brochure_url: string | null } | undefined) ?? null;
+}
+
+/**
+ * Store the result of a preview try for one link. A null previewUrl records a
+ * failed try. Returns the preview url it replaced (to delete its blob) or null,
+ * and whether a row was written. The insert only happens while the listing
+ * still has exactly this link.
+ */
+export async function saveBrochurePreview(
+  agencyId: string,
+  id: string,
+  sourceUrl: string,
+  previewUrl: string | null,
+): Promise<{ saved: boolean; replaced: string | null }> {
+  const rows = await sql`
+    with old as (
+      select preview_url from public.disposal_brochure_previews where disposal_id = ${id} and agency_id = ${agencyId}
+    ), up as (
+      insert into public.disposal_brochure_previews (disposal_id, agency_id, source_url, preview_url, checked_at)
+      select d.id, d.agency_id, ${sourceUrl}, ${previewUrl}, now()
+      from public.disposals d
+      where d.id = ${id} and d.agency_id = ${agencyId} and d.brochure_url = ${sourceUrl}
+      on conflict (disposal_id) do update
+        set source_url = excluded.source_url, preview_url = excluded.preview_url, checked_at = excluded.checked_at
+      returning disposal_id
+    )
+    select (select preview_url from old) as replaced from up
+  `;
+  // No row back means the listing's link changed meanwhile and nothing was stored.
+  return { saved: rows.length > 0, replaced: (rows[0] as { replaced: string | null } | undefined)?.replaced ?? null };
 }
 
 export async function updateDisposalLeadAgent(

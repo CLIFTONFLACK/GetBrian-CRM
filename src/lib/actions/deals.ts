@@ -169,6 +169,29 @@ export async function createDealFromMatch(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
+  const made = await makeDealForPair(formData);
+  if ("error" in made) return { error: made.error };
+  redirect(`/deals/${made.id}${made.existing ? `?existing=1${made.renamed ? "&renamed=1" : ""}` : ""}`);
+}
+
+/**
+ * "Add deal" in the listing panel: the same creation as above, but it returns
+ * the new deal so the panel can open it in place instead of leaving the page.
+ */
+export async function addDealToListing(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  if (!str(formData, "requirement_id")) return { error: "Pick a requirement." };
+  const made = await makeDealForPair(formData);
+  if ("error" in made) return { error: made.error };
+  revalidatePanelHosts();
+  return { message: "Deal added.", created: { id: made.id, name: made.title } };
+}
+
+type MadeDeal = { id: string; title: string; existing: boolean; renamed: boolean } | { error: string };
+
+async function makeDealForPair(formData: FormData): Promise<MadeDeal> {
   const requirementId = str(formData, "requirement_id");
   const listingId = str(formData, "listing_id");
 
@@ -188,7 +211,7 @@ export async function createDealFromMatch(
       revalidatePath(`/deals/${existing.id}`);
       revalidatePath("/deals");
     }
-    redirect(`/deals/${existing.id}?existing=1${renamed ? "&renamed=1" : ""}`);
+    return { id: existing.id, title: renamed ? typed : existing.title, existing: true, renamed };
   }
 
   const [req, listing] = await Promise.all([
@@ -227,7 +250,7 @@ export async function createDealFromMatch(
   await notifyLeadAssignment(agencyId, row.id, title, lead, userId);
 
   revalidatePath("/deals");
-  redirect(`/deals/${row.id}`);
+  return { id: row.id, title, existing: false, renamed: false };
 }
 
 /**

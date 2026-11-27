@@ -1,3 +1,9 @@
+import {
+  AddDealButton,
+  DEAL_ID_TOKEN,
+  type DealRequirementOption,
+} from "@/components/add-deal-button";
+import { BrochurePreview } from "@/components/brochure-preview";
 import { CreateDealButton } from "@/components/create-deal-button";
 import { DisposalDocuments, type DisposalDoc } from "@/components/disposal-documents";
 import { DisposalImages, type DisposalImage } from "@/components/disposal-images";
@@ -47,7 +53,9 @@ import {
 } from "@/lib/panel-fields/listing";
 import { parseUseClasses, USE_CLASS_OPTIONS } from "@/lib/use-classes";
 import { getDealsForListing } from "@/lib/db/queries/deals";
+import { previewIsCurrent } from "@/lib/disposals/brochure-preview-state";
 import {
+  getBrochurePreview,
   getDisposalAgentIds,
   getDisposalById,
   getLinkedCompany,
@@ -134,7 +142,7 @@ export async function ListingPanel({
       );
       break;
     case "deals":
-      content = <DealsTab agencyId={agencyId} listingId={d.id} base={base} />;
+      content = <DealsTab agencyId={agencyId} d={d} base={base} />;
       break;
     case "notes":
       content = <NotesActivityTab {...tabProps} userId={userId} />;
@@ -175,12 +183,20 @@ async function OverviewTab({
   d: Disposal;
   base: SearchParamsLike;
 }) {
-  const [members, agentIds, company, contact] = await Promise.all([
+  const [members, agentIds, company, contact, storedPreview] = await Promise.all([
     getAgencyMembers(agencyId),
     getDisposalAgentIds(agencyId, d.id),
     d.company_id ? getLinkedCompany(agencyId, d.company_id) : Promise.resolve(null),
     d.contact_id ? getLinkedContact(agencyId, d.contact_id) : Promise.resolve(null),
+    d.brochure_url ? getBrochurePreview(agencyId, d.id) : Promise.resolve(null),
   ]);
+  // A stored image counts only for the link it was drawn from. Otherwise the
+  // panel asks the server to make one, unless a recent try already failed.
+  const previewState = previewIsCurrent(storedPreview, d.brochure_url);
+  const currentPreview = {
+    url: previewState === "ready" ? (storedPreview?.preview_url ?? null) : null,
+    tryOnMount: previewState === "needed",
+  };
   const nameOf = new Map(members.map((m) => [m.id, m.name]));
   const leadAgent = d.lead_agent_id ? (nameOf.get(d.lead_agent_id) ?? "Unknown agent") : null;
   const agents = agentIds.map((id) => ({ id, name: nameOf.get(id) ?? "Unknown agent" }));
@@ -402,6 +418,17 @@ async function OverviewTab({
         {row("Location", "location_description", "textarea", d.location_description)}
         {row("Licensing", "licensing_notes", "textarea", d.licensing_notes)}
         {row("Brochure", "brochure_url", "url", d.brochure_url)}
+        {d.brochure_url ? (
+          <Field label="Page 1">
+            <BrochurePreview
+              key={`${d.brochure_url}|${currentPreview.url ?? ""}|${currentPreview.tryOnMount}`}
+              disposalId={d.id}
+              brochureUrl={d.brochure_url}
+              previewUrl={currentPreview.url}
+              tryOnMount={currentPreview.tryOnMount}
+            />
+          </Field>
+        ) : null}
       </PanelSection>
     </>
   );
@@ -523,16 +550,38 @@ async function ListingMatchmaker({
 
 async function DealsTab({
   agencyId,
-  listingId,
+  d,
   base,
 }: {
   agencyId: string;
-  listingId: string;
+  d: Disposal;
   base: SearchParamsLike;
 }) {
-  const deals = await getDealsForListing(agencyId, listingId);
+  const [deals, reqs] = await Promise.all([
+    getDealsForListing(agencyId, d.id),
+    listActiveRequirementsForMatching(agencyId),
+  ]);
+  const hasDeal = new Set(deals.map((x) => x.requirement_id).filter(Boolean));
+  const requirements: DealRequirementOption[] = reqs
+    .map((rq) => ({
+      id: rq.id,
+      title: rq.title,
+      score: Math.round(scoreMatch(rq, d, { locationFlex: DEFAULT_LOCATION_FLEX }).score),
+      hasDeal: hasDeal.has(rq.id),
+    }))
+    // Best match first, then by name. Requirements with a deal sink to the bottom.
+    .sort((a, b) => Number(a.hasDeal) - Number(b.hasDeal) || b.score - a.score || a.title.localeCompare(b.title));
   return (
-    <PanelSection title="Deals">
+    <PanelSection
+      title="Deals"
+      action={
+        <AddDealButton
+          listingId={d.id}
+          requirements={requirements}
+          openHref={openRecordHref(base, { type: "deal", id: DEAL_ID_TOKEN })}
+        />
+      }
+    >
       {deals.length === 0 ? (
         <EmptyNote>No deals on this listing yet.</EmptyNote>
       ) : (
